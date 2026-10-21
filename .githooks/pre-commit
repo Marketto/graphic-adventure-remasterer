@@ -1,0 +1,3 @@
+#!/bin/sh
+# Public repository: refuse commits that contain game content or references to protected works.
+exec python3 "$(git rev-parse --show-toplevel)/tools/ip_guard.py" --staged

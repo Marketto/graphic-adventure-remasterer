@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+# progetti di remaster: sempre in un repository privato separato, mai qui
+/remaster.json
+/analysis/
+/remaster/
+/review/
+/text/
+/voice/
+*.ccd
+*.iso
+*.img

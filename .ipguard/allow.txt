@@ -1,0 +1,2 @@
+# Percorsi ammessi anche se binari o multimediali (uno per riga, "cartella/" per una cartella).
+# Mai dati o immagini di giochi: solo materiale originale del progetto.

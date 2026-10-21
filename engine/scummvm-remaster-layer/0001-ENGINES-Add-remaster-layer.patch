@@ -1,0 +1,2017 @@
+From 8c752d01a622c5e81c621afb1176ead263302db0 Mon Sep 17 00:00:00 2001
+From: Marketto <Marketto@users.noreply.github.com>
+Date: Wed, 21 Oct 2026 14:59:36 +0200
+Subject: [PATCH] ENGINES: Add Remaster Layer (HD, 16:9, smooth scrolling,
+ texts, voices)
+
+Engine independent helper for remastering 8-bit adventure engines:
+
+- AssetPack: remaster/ pack in the game folder: manifest,
+  HD backgrounds, 16:9 side extensions, sprite index (RSPR), font
+  atlases (RFNT), corrected/translated texts and recorded voices
+- Compositor: true colour frame at 2x/3x from the engine's 8-bit back
+  buffer; HD background where the original pixel is untouched, remastered
+  sprite frames through a per-pixel id buffer filled by the engine's own
+  blitters, Scale2x/Scale3x elsewhere; palette fades and gray views on HD
+  pixels; widescreen viewport with invented sides or bands; sub-pixel
+  scrolling; HD text; classic mode (original frame, sharp pixels)
+- Layer: one object per game with the hooks for the engine, F8 (or
+  remaster_toggle_key) to switch original/remastered while playing,
+  mouse remapping, frame pacing between logic ticks, developer dump
+  (remaster_dump) of backgrounds, sprite frames and texts
+- Keys (frameKey, textKey) compatible with the graphic-adventure-remasterer tools
+- Unit tests in test/graphics/remaster.h
+
+Assisted-by: Claude:claude-opus-5-5
+---
+ engines/module.mk               |   4 +
+ engines/remaster/assetpack.cpp  | 261 +++++++++++++
+ engines/remaster/assetpack.h    | 109 ++++++
+ engines/remaster/compositor.cpp | 635 ++++++++++++++++++++++++++++++++
+ engines/remaster/compositor.h   | 171 +++++++++
+ engines/remaster/keys.cpp       |  77 ++++
+ engines/remaster/keys.h         |  45 +++
+ engines/remaster/layer.cpp      | 337 +++++++++++++++++
+ engines/remaster/layer.h        | 148 ++++++++
+ test/graphics/remaster.h        | 103 ++++++
+ test/module.mk                  |   5 +-
+ 11 files changed, 1893 insertions(+), 2 deletions(-)
+ create mode 100644 engines/remaster/assetpack.cpp
+ create mode 100644 engines/remaster/assetpack.h
+ create mode 100644 engines/remaster/compositor.cpp
+ create mode 100644 engines/remaster/compositor.h
+ create mode 100644 engines/remaster/keys.cpp
+ create mode 100644 engines/remaster/keys.h
+ create mode 100644 engines/remaster/layer.cpp
+ create mode 100644 engines/remaster/layer.h
+ create mode 100644 test/graphics/remaster.h
+
+diff --git a/engines/module.mk b/engines/module.mk
+index d79c5a7d..86ec4b4b 100644
+--- a/engines/module.mk
++++ b/engines/module.mk
+@@ -10,2 +10,6 @@ MODULE_OBJS := \
+ 	obsolete.o \
++	remaster/assetpack.o \
++	remaster/compositor.o \
++	remaster/keys.o \
++	remaster/layer.o \
+ 	savestate.o
+diff --git a/engines/remaster/assetpack.cpp b/engines/remaster/assetpack.cpp
+new file mode 100644
+index 00000000..d184bdbe
+--- /dev/null
++++ b/engines/remaster/assetpack.cpp
+@@ -0,0 +1,261 @@
++/* ScummVM - Graphic Adventure Engine
++ *
++ * ScummVM is the legal property of its developers, whose names
++ * are too numerous to list here. Please refer to the COPYRIGHT
++ * file distributed with this source distribution.
++ *
++ * This program is free software: you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation, either version 3 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
++ *
++ */
++
++#include "common/archive.h"
++#include "common/config-manager.h"
++#include "common/debug.h"
++#include "common/endian.h"
++#include "common/formats/json.h"
++#include "common/textconsole.h"
++#include "image/jpeg.h"
++#include "image/png.h"
++
++#include "engines/remaster/assetpack.h"
++
++namespace Remaster {
++
++static const Graphics::PixelFormat kARGB(4, 8, 8, 8, 8, 16, 8, 0, 24);
++
++AssetPack::AssetPack() : _open(false), _scale(3), _spriteScale(0) {
++}
++
++AssetPack::~AssetPack() {
++	if (_open && SearchMan.hasArchive("remaster-pack"))
++		SearchMan.remove("remaster-pack");
++}
++
++bool AssetPack::open() {
++	_open = false;
++	Common::FSNode gameDir(ConfMan.getPath("path"));
++	if (!gameDir.exists())
++		return false;
++	Common::FSNode r = gameDir.getChild("remaster");
++	if (!r.exists() || !r.isDirectory())
++		return false;
++	_root = r;
++	_open = true;
++	// low priority: the game's own files always win
++	if (!SearchMan.hasArchive("remaster-pack"))
++		SearchMan.addDirectory("remaster-pack", _root, -10, 4);
++	loadManifest();
++	loadSpriteIndex();
++	debug(1, "Remaster: pack found, scale %d, %d sprites", _scale, _sprites.size());
++	return true;
++}
++
++Common::FSNode AssetPack::node(const Common::String &relPath) const {
++	Common::FSNode n = _root;
++	Common::String rest = relPath;
++	while (true) {
++		int slash = rest.findFirstOf('/');
++		if (slash < 0)
++			break;
++		n = n.getChild(rest.substr(0, slash));
++		rest = rest.substr(slash + 1);
++	}
++	return n.getChild(rest);
++}
++
++bool AssetPack::exists(const Common::String &relPath) const {
++	if (!_open)
++		return false;
++	Common::FSNode n = node(relPath);
++	return n.exists() && !n.isDirectory();
++}
++
++Common::SeekableReadStream *AssetPack::openFile(const Common::String &relPath) const {
++	if (!_open)
++		return nullptr;
++	Common::FSNode n = node(relPath);
++	if (!n.exists() || n.isDirectory())
++		return nullptr;
++	return n.createReadStream();
++}
++
++void AssetPack::loadManifest() {
++	Common::SeekableReadStream *s = openFile("manifest.json");
++	if (!s)
++		return;
++	Common::String text = s->readString(0, s->size());
++	delete s;
++	Common::JSONValue *v = Common::JSON::parse(text);
++	if (!v)
++		return;
++	if (v->isObject()) {
++		const Common::JSONObject &o = v->asObject();
++		if (o.contains("scale") && o["scale"]->isIntegerNumber())
++			_scale = CLIP<int>((int)o["scale"]->asIntegerNumber(), 1, 6);
++		if (o.contains("game") && o["game"]->isString())
++			_gameId = o["game"]->asString();
++	}
++	delete v;
++}
++
++Graphics::Surface *AssetPack::loadImage(const Common::String &relPathNoExt) const {
++	Image::PNGDecoder png;
++	Image::JPEGDecoder jpeg;
++	jpeg.setOutputPixelFormat(Graphics::PixelFormat(4, 8, 8, 8, 8, 24, 16, 8, 0));
++	Image::ImageDecoder *dec = &png;
++	Common::SeekableReadStream *s = openFile(relPathNoExt + ".png");
++	if (!s) {
++		s = openFile(relPathNoExt + ".jpg");
++		dec = &jpeg;
++	}
++	if (!s)
++		return nullptr;
++	bool ok = dec->loadStream(*s);
++	delete s;
++	if (!ok || !dec->getSurface()) {
++		warning("Remaster: can't decode %s", relPathNoExt.c_str());
++		return nullptr;
++	}
++	const Graphics::Surface *src = dec->getSurface();
++	return src->convertTo(kARGB, dec->getPalette().data(), dec->getPalette().size());
++}
++
++// scene keys may contain '/' (e.g. "part1/bg/room"): files are flat, '/' becomes '_'
++static Common::String sceneFile(const Common::String &scene) {
++	Common::String s = scene;
++	for (uint i = 0; i < s.size(); i++)
++		if (s[i] == '/' || s[i] == '\\')
++			s.setChar('_', i);
++	return "gfx/bg/" + s;
++}
++
++Graphics::Surface *AssetPack::loadBackground(const Common::String &scene, int origW, int origH, int &scale) const {
++	Common::String base = sceneFile(scene);
++	Graphics::Surface *s = loadImage(base);
++	if (!s)
++		return nullptr;
++	if (origW <= 0 || origH <= 0 || s->w % origW || s->h % origH || s->w / origW != s->h / origH) {
++		warning("Remaster: %s is %dx%d, not an integer multiple of %dx%d", scene.c_str(), s->w, s->h, origW, origH);
++		s->free();
++		delete s;
++		return nullptr;
++	}
++	scale = s->w / origW;
++	return s;
++}
++
++WideInfo AssetPack::wideInfo(const Common::String &scene) const {
++	WideInfo wi;
++	Common::SeekableReadStream *s = openFile(sceneFile(scene) + ".wide.json");
++	if (!s)
++		return wi;
++	Common::String text = s->readString(0, s->size());
++	delete s;
++	Common::JSONValue *v = Common::JSON::parse(text);
++	if (v && v->isObject()) {
++		const Common::JSONObject &o = v->asObject();
++		if (o.contains("left") && o["left"]->isIntegerNumber())
++			wi.left = (int)o["left"]->asIntegerNumber();
++		if (o.contains("right") && o["right"]->isIntegerNumber())
++			wi.right = (int)o["right"]->asIntegerNumber();
++		if (o.contains("camera") && o["camera"]->isString())
++			wi.clampCamera = o["camera"]->asString() == "clamp";
++		if (o.contains("pillarbox"))
++			wi.pillarbox = true;
++	}
++	delete v;
++	wi.hasImage = exists(sceneFile(scene) + ".wide.png") || exists(sceneFile(scene) + ".wide.jpg");
++	return wi;
++}
++
++Graphics::Surface *AssetPack::loadWideBackground(const Common::String &scene) const {
++	return loadImage(sceneFile(scene) + ".wide");
++}
++
++void AssetPack::loadSpriteIndex() {
++	Common::SeekableReadStream *f = openFile("gfx/spr/index.dat");
++	if (!f)
++		return;
++	uint32 tag = f->readUint32BE();
++	if (tag != MKTAG('R', 'S', 'P', 'R')) {
++		warning("Remaster: bad sprite index");
++		delete f;
++		return;
++	}
++	f->readUint16LE();	// version
++	_spriteScale = f->readUint16LE();
++	uint16 numPal = f->readUint16LE();
++	_spritePalettes.resize(numPal * 768);
++	if (numPal)
++		f->read(&_spritePalettes[0], numPal * 768);
++	uint32 n = f->readUint32LE();
++	for (uint32 i = 0; i < n && !f->eos(); i++) {
++		uint32 key = f->readUint32LE();
++		SpriteEntry e;
++		e.palette = f->readUint16LE();
++		e.w = f->readUint16LE();
++		e.h = f->readUint16LE();
++		if (e.palette < numPal)
++			_sprites[key] = e;
++	}
++	delete f;
++}
++
++const SpriteEntry *AssetPack::sprite(uint32 key) const {
++	Common::HashMap<uint32, SpriteEntry>::const_iterator it = _sprites.find(key);
++	return it == _sprites.end() ? nullptr : &it->_value;
++}
++
++const byte *AssetPack::spritePalette(uint16 index) const {
++	if ((uint)(index + 1) * 768 > _spritePalettes.size())
++		return nullptr;
++	return &_spritePalettes[index * 768];
++}
++
++bool AssetPack::loadTexts(const Common::String &lang) {
++	_texts.clear();
++	Common::SeekableReadStream *f = openFile("text/" + lang + ".tsv");
++	if (!f)
++		return false;
++	while (!f->eos() && !f->err()) {
++		Common::String line = f->readLine();
++		if (line.empty() || line[0] == '#' || line.size() < 10 || line[8] != '\t')
++			continue;
++		uint32 key = (uint32)strtoul(line.substr(0, 8).c_str(), nullptr, 16);
++		_texts[key] = line.substr(9);
++	}
++	delete f;
++	debug(1, "Remaster: %d texts for '%s'", _texts.size(), lang.c_str());
++	return true;
++}
++
++bool AssetPack::text(uint32 key, Common::String &utf8) const {
++	Common::HashMap<uint32, Common::String>::const_iterator it = _texts.find(key);
++	if (it == _texts.end())
++		return false;
++	utf8 = it->_value;
++	return true;
++}
++
++Common::String AssetPack::voicePath(uint32 key, const Common::String &lang) const {
++	static const char *const exts[] = { ".ogg", ".flac", ".mp3", ".wav" };
++	Common::String base = Common::String::format("voice/%s/%08x", lang.c_str(), key);
++	for (int i = 0; i < ARRAYSIZE(exts); i++) {
++		if (exists(base + exts[i]))
++			return base;
++	}
++	return Common::String();
++}
++
++} // End of namespace Remaster
+diff --git a/engines/remaster/assetpack.h b/engines/remaster/assetpack.h
+new file mode 100644
+index 00000000..8895d7d3
+--- /dev/null
++++ b/engines/remaster/assetpack.h
+@@ -0,0 +1,109 @@
++/* ScummVM - Graphic Adventure Engine
++ *
++ * ScummVM is the legal property of its developers, whose names
++ * are too numerous to list here. Please refer to the COPYRIGHT
++ * file distributed with this source distribution.
++ *
++ * This program is free software: you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation, either version 3 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
++ *
++ */
++
++#ifndef ENGINES_REMASTER_ASSETPACK_H
++#define ENGINES_REMASTER_ASSETPACK_H
++
++#include "common/array.h"
++#include "common/fs.h"
++#include "common/hashmap.h"
++#include "common/hash-str.h"
++#include "common/str.h"
++#include "common/stream.h"
++#include "graphics/surface.h"
++
++namespace Remaster {
++
++/** 16:9 data of a scene (remaster/gfx/bg/<scene>.wide.json) */
++struct WideInfo {
++	int left = 0, right = 0;		///< pixels added on each side, at the original scale
++	bool clampCamera = false;		///< scrolling scene: show more of the existing background
++	bool pillarbox = false;			///< keep 4:3, black bars
++	bool hasImage = false;			///< <scene>.wide.png exists
++};
++
++struct SpriteEntry {
++	uint16 palette;
++	uint16 w, h;
++};
++
++/**
++ * Read-only access to the remaster pack of the running game:
++ * <game path>/remaster/.
++ * See references/asset-contract.md of Remaster Studio.
++ */
++class AssetPack {
++public:
++	AssetPack();
++	~AssetPack();
++
++	/** Look for the pack in the game folder (ConfMan "path"). */
++	bool open();
++	bool isOpen() const { return _open; }
++	int scale() const { return _scale; }
++	const Common::String &gameId() const { return _gameId; }
++
++	/** Stream of a file inside the pack, relative path with '/' */
++	Common::SeekableReadStream *openFile(const Common::String &relPath) const;
++	bool exists(const Common::String &relPath) const;
++
++	/**
++	 * Image without extension (tries .png then .jpg), converted to ARGB8888 (A in the high byte).
++	 * Caller owns the surface. nullptr when missing or unreadable.
++	 */
++	Graphics::Surface *loadImage(const Common::String &relPathNoExt) const;
++
++	/** HD background of a scene; 'scale' receives the integer factor of the picture. */
++	Graphics::Surface *loadBackground(const Common::String &scene, int origW, int origH, int &scale) const;
++	WideInfo wideInfo(const Common::String &scene) const;
++	Graphics::Surface *loadWideBackground(const Common::String &scene) const;
++
++	/** Sprite index (RSPR) */
++	bool hasSprite(uint32 key) const { return _sprites.contains(key); }
++	const SpriteEntry *sprite(uint32 key) const;
++	const byte *spritePalette(uint16 index) const;
++	int spriteScale() const { return _spriteScale; }
++
++	/** Corrected / translated text for a language ("it", "en"...), UTF-8 */
++	bool loadTexts(const Common::String &lang);
++	bool text(uint32 key, Common::String &utf8) const;
++
++	/** Recorded voice for a text key: path relative to the pack, empty if none */
++	Common::String voicePath(uint32 key, const Common::String &lang) const;
++
++private:
++	bool _open;
++	int _scale;
++	int _spriteScale;
++	Common::String _gameId;
++	Common::FSNode _root;
++	Common::HashMap<uint32, SpriteEntry> _sprites;
++	Common::Array<byte> _spritePalettes;
++	Common::HashMap<uint32, Common::String> _texts;
++
++	Common::FSNode node(const Common::String &relPath) const;
++	void loadManifest();
++	void loadSpriteIndex();
++};
++
++} // End of namespace Remaster
++
++#endif
+diff --git a/engines/remaster/compositor.cpp b/engines/remaster/compositor.cpp
+new file mode 100644
+index 00000000..8a6d206a
+--- /dev/null
++++ b/engines/remaster/compositor.cpp
+@@ -0,0 +1,635 @@
++/* ScummVM - Graphic Adventure Engine
++ *
++ * ScummVM is the legal property of its developers, whose names
++ * are too numerous to list here. Please refer to the COPYRIGHT
++ * file distributed with this source distribution.
++ *
++ * This program is free software: you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation, either version 3 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
++ *
++ */
++
++#include "common/debug.h"
++#include "common/endian.h"
++#include "common/textconsole.h"
++#include "common/util.h"
++
++#include "engines/remaster/compositor.h"
++#include "engines/remaster/keys.h"
++
++namespace Remaster {
++
++static const Graphics::PixelFormat kARGB(4, 8, 8, 8, 8, 16, 8, 0, 24);
++
++// ---------------------------------------------------------------------------
++// Fonts
++// ---------------------------------------------------------------------------
++
++bool FontAtlas::load(const AssetPack &pack, const Common::String &name) {
++	ok = false;
++	Common::SeekableReadStream *dat = pack.openFile("fonts/" + name + ".dat");
++	if (!dat)
++		return false;
++	uint32 tag = dat->readUint32BE();
++	if (tag != MKTAG('R', 'F', 'N', 'T')) {
++		delete dat;
++		return false;
++	}
++	dat->readUint16LE();	// version
++	scale = MAX<int>(1, dat->readUint16LE());
++	line = dat->readUint16LE();
++	ascent = dat->readUint16LE();
++	outline = dat->readUint16LE();
++	for (int i = 0; i < 256; i++) {
++		g[i].ax = dat->readUint16LE();
++		g[i].ay = dat->readUint16LE();
++		g[i].w = dat->readUint16LE();
++		g[i].h = dat->readUint16LE();
++		g[i].bx = dat->readSint16LE();
++		g[i].by = dat->readSint16LE();
++		g[i].adv = dat->readUint16LE();
++	}
++	bool err = dat->err();
++	delete dat;
++	if (err)
++		return false;
++	Graphics::Surface *img = pack.loadImage("fonts/" + name);
++	if (!img)
++		return false;
++	aw = img->w;
++	ah = img->h;
++	fill.resize(aw * ah);
++	stroke.resize(aw * ah);
++	for (int y = 0; y < ah; y++) {
++		const uint32 *p = (const uint32 *)img->getBasePtr(0, y);
++		for (int x = 0; x < aw; x++) {
++			fill[y * aw + x] = (p[x] >> 16) & 0xff;
++			stroke[y * aw + x] = (p[x] >> 8) & 0xff;
++		}
++	}
++	img->free();
++	delete img;
++	ok = true;
++	return true;
++}
++
++int FontAtlas::width(const Common::String &s) const {
++	int w = 0;
++	for (uint i = 0; i < s.size(); i++)
++		w += g[(byte)s[i]].adv;
++	return (w + scale - 1) / scale;
++}
++
++// ---------------------------------------------------------------------------
++
++Compositor::Compositor(const AssetPack &pack, int scale, int screenW, int screenH, const Graphics::PixelFormat &fmt) :
++	_pack(pack), _scale(scale), _screenW(screenW), _screenH(screenH), _fmt(fmt) {
++	memset(_bgPal, 0, sizeof(_bgPal));
++	memset(_curPal, 0, sizeof(_curPal));
++	memset(_palPixel, 0, sizeof(_palPixel));
++	memset(_mode, kLowRes, sizeof(_mode));
++	memset(_factor, 0, sizeof(_factor));
++	_slots.resize(1);
++}
++
++Compositor::~Compositor() {
++	_out.free();
++	_hdBg.free();
++	_origBg.free();
++	_wideBg.free();
++	delete[] _ids;
++	for (Common::HashMap<uint32, Sprite *>::iterator it = _sprCache.begin(); it != _sprCache.end(); ++it)
++		delete it->_value;
++}
++
++void Compositor::setPalette(const byte *rgb, uint start, uint num) {
++	for (uint i = start; i < start + num && i < 256; i++) {
++		_curPal[i * 3] = rgb[(i - start) * 3];
++		_curPal[i * 3 + 1] = rgb[(i - start) * 3 + 1];
++		_curPal[i * 3 + 2] = rgb[(i - start) * 3 + 2];
++		_palPixel[i] = _fmt.RGBToColor(_curPal[i * 3], _curPal[i * 3 + 1], _curPal[i * 3 + 2]);
++	}
++	_modesDirty = true;
++}
++
++void Compositor::computeModes(const byte *ref, byte *mode, uint16 *factor) const {
++	for (int i = 0; i < 256; i++) {
++		int r0 = ref[i * 3], g0 = ref[i * 3 + 1], b0 = ref[i * 3 + 2];
++		int r1 = _curPal[i * 3], g1 = _curPal[i * 3 + 1], b1 = _curPal[i * 3 + 2];
++		if (r0 == r1 && g0 == g1 && b0 == b1) {
++			mode[i] = kSame;
++			continue;
++		}
++		int m0 = MAX(r0, MAX(g0, b0));
++		if (m0 > 0) {
++			int f = (MAX(r1, MAX(g1, b1)) * 256 + m0 / 2) / m0;
++			if (f <= 256 && ABS(r0 * f / 256 - r1) <= 4 && ABS(g0 * f / 256 - g1) <= 4 && ABS(b0 * f / 256 - b1) <= 4) {
++				mode[i] = kFade;	// palette fade: every component scaled alike
++				factor[i] = f;
++				continue;
++			}
++			if (r1 == g1 && g1 == b1) {
++				mode[i] = kGray;	// grayscale view
++				factor[i] = (r1 * 256 + m0 / 2) / m0;
++				continue;
++			}
++		} else if (r1 == 0 && g1 == 0 && b1 == 0) {
++			mode[i] = kSame;
++			continue;
++		}
++		mode[i] = kLowRes;
++	}
++}
++
++void Compositor::resampleTo(const Graphics::Surface &src, int srcScale, Graphics::Surface &dst) const {
++	// area average (alpha weighted) from srcScale x to _scale x; src and dst are ARGB
++	const int S = _scale;
++	for (int y = 0; y < dst.h; y++) {
++		int sy0 = y * srcScale, sy1 = (y + 1) * srcScale;
++		uint32 *d = (uint32 *)dst.getBasePtr(0, y);
++		for (int x = 0; x < dst.w; x++) {
++			int sx0 = x * srcScale, sx1 = (x + 1) * srcScale;
++			uint32 aa = 0, ar = 0, ag = 0, ab = 0, aw = 0;
++			for (int yy = sy0 / S; yy * S < sy1 && yy < src.h; yy++) {
++				int wy = MIN(sy1, (yy + 1) * S) - MAX(sy0, yy * S);
++				const uint32 *sp = (const uint32 *)src.getBasePtr(0, yy);
++				for (int xx = sx0 / S; xx * S < sx1 && xx < src.w; xx++) {
++					int wx = MIN(sx1, (xx + 1) * S) - MAX(sx0, xx * S);
++					uint32 c = sp[xx], a = c >> 24, wgt = wx * wy;
++					aa += a * wgt;
++					ar += ((c >> 16) & 0xff) * a * wgt;
++					ag += ((c >> 8) & 0xff) * a * wgt;
++					ab += (c & 0xff) * a * wgt;
++					aw += wgt;
++				}
++			}
++			d[x] = aa ? (((aa / aw) << 24) | ((ar / aa) << 16) | ((ag / aa) << 8) | (ab / aa)) : 0;
++		}
++	}
++}
++
++void Compositor::setBackground(const Common::String &scene, const Graphics::Surface &bg8, const byte *rgb, int bgX, int bgY, bool widescreen) {
++	_hdBg.free();
++	_origBg.free();
++	_wideBg.free();
++	_wide = WideInfo();
++	_bgX = bgX;
++	_bgY = bgY;
++	memcpy(_bgPal, rgb, 768);
++	_modesDirty = true;
++	if (scene.empty() || !bg8.getPixels())
++		return;
++
++	int k = 0;
++	Graphics::Surface *hd = _pack.loadBackground(scene, bg8.w, bg8.h, k);
++	if (hd) {
++		_origBg.copyFrom(bg8);
++		_hdBg.create(bg8.w * _scale, bg8.h * _scale, kARGB);
++		if (k == _scale)
++			_hdBg.copyFrom(*hd);
++		else
++			resampleTo(*hd, k, _hdBg);
++		hd->free();
++		delete hd;
++	}
++	if (widescreen) {
++		_wide = _pack.wideInfo(scene);
++		if (_wide.hasImage) {
++			Graphics::Surface *w = _pack.loadWideBackground(scene);
++			int ww = bg8.w + _wide.left + _wide.right;
++			if (w && w->h % bg8.h == 0 && w->w == ww * (w->h / bg8.h)) {
++				int kw = w->h / bg8.h;
++				_wideBg.create(ww * _scale, bg8.h * _scale, kARGB);
++				if (kw == _scale)
++					_wideBg.copyFrom(*w);
++				else
++					resampleTo(*w, kw, _wideBg);
++			} else if (w) {
++				warning("Remaster: %s.wide has an unexpected size", scene.c_str());
++			}
++			if (w) {
++				w->free();
++				delete w;
++			}
++		}
++	}
++}
++
++// ---------------------------------------------------------------------------
++// Sprites
++// ---------------------------------------------------------------------------
++
++void Compositor::beginScene(int bbW, int bbH) {
++	_slots.resize(1);
++	_slotOfKey.clear();
++	_texts.clear();
++	if (_idW != bbW || _idH != bbH) {
++		delete[] _ids;
++		_ids = new uint32[bbW * bbH];
++		_idW = bbW;
++		_idH = bbH;
++	}
++	memset(_ids, 0, bbW * bbH * sizeof(uint32));
++}
++
++void Compositor::clearIds(const Common::Rect &r) {
++	if (!_ids)
++		return;
++	Common::Rect c(r);
++	c.clip(Common::Rect(_idW, _idH));
++	for (int y = c.top; y < c.bottom; y++)
++		memset(_ids + y * _idW + c.left, 0, c.width() * sizeof(uint32));
++}
++
++Compositor::Sprite *Compositor::loadSprite(uint32 key, const SpriteEntry &e) {
++	Common::String base = Common::String::format("gfx/spr/%08x", key);
++	Graphics::Surface *img = _pack.loadImage(base);
++	if (!img)
++		return nullptr;
++	Sprite *spr = nullptr;
++	if (img->w % e.w == 0 && img->h % e.h == 0 && img->w / e.w == img->h / e.h) {
++		int k = img->w / e.w;
++		spr = new Sprite;
++		spr->w = e.w;
++		spr->h = e.h;
++		spr->pal = e.palette;
++		memset(spr->used, 0, sizeof(spr->used));
++		Graphics::Surface dst;
++		dst.create(e.w * _scale, e.h * _scale, kARGB);
++		if (k == _scale)
++			dst.copyFrom(*img);
++		else
++			resampleTo(*img, k, dst);
++		spr->px.resize(dst.w * dst.h);
++		for (int y = 0; y < dst.h; y++)
++			memcpy(&spr->px[y * dst.w], dst.getBasePtr(0, y), dst.w * 4);
++		dst.free();
++	} else {
++		warning("Remaster: sprite %08x is %dx%d, original %dx%d", key, img->w, img->h, e.w, e.h);
++	}
++	img->free();
++	delete img;
++	return spr;
++}
++
++uint32 Compositor::spriteSlot(const byte *pixels, int w, int h, int pitch, byte transparent) {
++	if (!_ids || w <= 0 || h <= 0 || w >= 1024 || h >= 1024)
++		return 0;
++	uint32 key = frameKey(pixels, w, h, pitch);
++	Common::HashMap<uint32, uint32>::iterator is = _slotOfKey.find(key);
++	if (is != _slotOfKey.end())
++		return is->_value;
++	uint32 slot = 0;
++	const SpriteEntry *e = _pack.sprite(key);
++	if (e && e->w == w && e->h == h && _slots.size() < 4095) {
++		Sprite *spr;
++		Common::HashMap<uint32, Sprite *>::iterator ic = _sprCache.find(key);
++		if (ic != _sprCache.end()) {
++			spr = ic->_value;
++		} else {
++			spr = loadSprite(key, *e);
++			_sprCache[key] = spr;	// failures are cached too
++			if (spr) {
++				for (int y = 0; y < h; y++)
++					for (int x = 0; x < w; x++) {
++						byte c = pixels[y * pitch + x];
++						if (c != transparent)
++							spr->used[c >> 5] |= 1u << (c & 31);
++					}
++			}
++		}
++		const byte *ref = spr ? _pack.spritePalette(spr->pal) : nullptr;
++		if (spr && ref) {
++			Slot sl;
++			sl.spr = spr;
++			computeModes(ref, sl.mode, sl.factor);
++			bool ok = true;
++			for (int i = 0; i < 256 && ok; i++)
++				if ((spr->used[i >> 5] & (1u << (i & 31))) && sl.mode[i] == kLowRes)
++					ok = false;	// a colour can't be mapped: keep the original frame
++			if (ok) {
++				_slots.push_back(sl);
++				slot = _slots.size() - 1;
++			}
++		}
++	}
++	_slotOfKey[key] = slot;
++	return slot;
++}
++
++// ---------------------------------------------------------------------------
++// Text
++// ---------------------------------------------------------------------------
++
++int Compositor::loadFont(const Common::String &name) {
++	FontAtlas f;
++	if (!f.load(_pack, name))
++		return -1;
++	_fonts.push_back(f);
++	return _fonts.size() - 1;
++}
++
++void Compositor::addText(int font, int x, int y, const Common::String &s, byte colorIndex, byte outlineIndex, int boxW) {
++	if (!hasFont(font))
++		return;
++	Text t;
++	t.font = font;
++	t.x = x;
++	t.y = y;
++	t.s = s;
++	t.color = colorIndex;
++	t.outline = outlineIndex;
++	t.boxW = boxW;
++	_texts.push_back(t);
++}
++
++static inline uint32 blend(const Graphics::PixelFormat &fmt, uint32 dst, byte r, byte g, byte b, int a) {
++	if (a <= 0)
++		return dst;
++	if (a >= 255)
++		return fmt.RGBToColor(r, g, b);
++	byte r0, g0, b0;
++	fmt.colorToRGB(dst, r0, g0, b0);
++	return fmt.RGBToColor((r * a + r0 * (255 - a)) / 255, (g * a + g0 * (255 - a)) / 255, (b * a + b0 * (255 - a)) / 255);
++}
++
++void Compositor::drawText(const Text &t, int originX) {
++	const FontAtlas &f = _fonts[t.font];
++	const int S = _scale;
++	int textW = 0;
++	for (uint i = 0; i < t.s.size(); i++)
++		textW += f.g[(byte)t.s[i]].adv;
++	int textWOut = textW * S / f.scale;
++	int x0 = originX + t.x * S + (t.boxW > 0 ? (t.boxW * S - textWOut) / 2 : 0);
++	int y0 = t.y * S;
++	const byte *fc = &_curPal[t.color * 3];
++	const byte *oc = &_curPal[t.outline * 3];
++	int pen = 0;	// atlas units
++	for (uint i = 0; i < t.s.size(); i++) {
++		const FontAtlas::Glyph &g = f.g[(byte)t.s[i]];
++		if (g.w && g.h) {
++			int gx = x0 + (pen + g.bx) * S / f.scale;
++			int gy = y0 + g.by * S / f.scale;
++			int gw = g.w * S / f.scale, gh = g.h * S / f.scale;
++			for (int yy = 0; yy < gh; yy++) {
++				int oy = gy + yy;
++				if (oy < 0 || oy >= _out.h)
++					continue;
++				int ay = g.ay + yy * f.scale / S;
++				for (int xx = 0; xx < gw; xx++) {
++					int ox = gx + xx;
++					if (ox < 0 || ox >= _out.w)
++						continue;
++					int ax = g.ax + xx * f.scale / S;
++					int cf = f.fill[ay * f.aw + ax], cs = f.stroke[ay * f.aw + ax];
++					if (!cf && !cs)
++						continue;
++					if (_fmt.bytesPerPixel == 4) {
++						uint32 *d = (uint32 *)_out.getBasePtr(ox, oy);
++						if (cs)
++							*d = blend(_fmt, *d, oc[0], oc[1], oc[2], cs);
++						*d = blend(_fmt, *d, fc[0], fc[1], fc[2], cf);
++					} else {
++						uint16 *d = (uint16 *)_out.getBasePtr(ox, oy);
++						uint32 v = *d;
++						if (cs)
++							v = blend(_fmt, v, oc[0], oc[1], oc[2], cs);
++						*d = (uint16)blend(_fmt, v, fc[0], fc[1], fc[2], cf);
++					}
++				}
++			}
++		}
++		pen += g.adv;
++	}
++}
++
++void Compositor::drawTexts(int originX) {
++	for (uint i = 0; i < _texts.size(); i++)
++		drawText(_texts[i], originX);
++}
++
++// ---------------------------------------------------------------------------
++// Composition
++// ---------------------------------------------------------------------------
++
++void Compositor::scaleIndices(const Graphics::Surface &bb, int x0, int y0, int w, int h) {
++	const int S = _scale;
++	_scaledW = w * S;
++	_scaled.resize(_scaledW * h * S);
++	for (int y = 0; y < h; y++) {
++		int sy = y0 + y;
++		const byte *row = (const byte *)bb.getBasePtr(0, sy);
++		const byte *up = (const byte *)bb.getBasePtr(0, MAX(0, sy - 1));
++		const byte *dn = (const byte *)bb.getBasePtr(0, MIN(bb.h - 1, sy + 1));
++		byte *d0 = &_scaled[(y * S) * _scaledW];
++		for (int x = 0; x < w; x++) {
++			int sx = x0 + x;
++			int xl = MAX(0, sx - 1), xr = MIN(bb.w - 1, sx + 1);
++			byte E = row[sx], B = up[sx], D = row[xl], F = row[xr], H = dn[sx];
++			byte *p = d0 + x * S;
++			if (S == 2) {
++				bool c = (B != H && D != F);
++				p[0] = (c && D == B) ? D : E;
++				p[1] = (c && B == F) ? F : E;
++				p[_scaledW] = (c && D == H) ? D : E;
++				p[_scaledW + 1] = (c && H == F) ? F : E;
++			} else if (S == 3) {
++				byte A = up[xl], C = up[xr], G = dn[xl], I = dn[xr];
++				if (B != H && D != F) {
++					p[0] = (D == B) ? D : E;
++					p[1] = ((D == B && E != C) || (B == F && E != A)) ? B : E;
++					p[2] = (B == F) ? F : E;
++					p[_scaledW] = ((D == B && E != G) || (D == H && E != A)) ? D : E;
++					p[_scaledW + 1] = E;
++					p[_scaledW + 2] = ((B == F && E != I) || (H == F && E != C)) ? F : E;
++					p[2 * _scaledW] = (D == H) ? D : E;
++					p[2 * _scaledW + 1] = ((D == H && E != I) || (H == F && E != G)) ? H : E;
++					p[2 * _scaledW + 2] = (H == F) ? F : E;
++				} else {
++					for (int j = 0; j < 3; j++)
++						memset(p + j * _scaledW, E, 3);
++				}
++			} else {
++				for (int j = 0; j < S; j++)
++					memset(p + j * _scaledW, E, S);
++			}
++		}
++	}
++}
++
++uint32 Compositor::hdPixel(uint32 argb, byte mode, uint16 factor) const {
++	int r = (argb >> 16) & 0xff, g = (argb >> 8) & 0xff, b = argb & 0xff;
++	if (mode == kFade) {
++		r = (r * factor) >> 8;
++		g = (g * factor) >> 8;
++		b = (b * factor) >> 8;
++	} else if (mode == kGray) {
++		int v = MIN(255, (MAX(r, MAX(g, b)) * factor) >> 8);
++		r = g = b = v;
++	}
++	return _fmt.RGBToColor(r, g, b);
++}
++
++const Graphics::Surface &Compositor::compose(const Graphics::Surface &bb, int scrollX256, int scrollY) {
++	const int S = _scale;
++	const int L = _maxExtL, R = _maxExtR;
++	const int viewW = _screenW + L + R;
++	if (_out.w != viewW * S || _out.h != _screenH * S) {
++		_out.free();
++		_out.create(viewW * S, _screenH * S, _fmt);
++	}
++	_out.fillRect(Common::Rect(_out.w, _out.h), _fmt.RGBToColor(0, 0, 0));
++	const int sx = scrollX256 >> 8;
++
++	if (_classic) {
++		// the original frame, sharp pixels, centred in 4:3
++		for (int y = 0; y < _screenH && scrollY + y < bb.h; y++) {
++			const byte *src = (const byte *)bb.getBasePtr(0, scrollY + y);
++			for (int j = 0; j < S; j++) {
++				for (int x = 0; x < _screenW && sx + x < bb.w; x++) {
++					uint32 c = _palPixel[src[sx + x]];
++					for (int i = 0; i < S; i++) {
++						int ox = (L + x) * S + i;
++						if (_fmt.bytesPerPixel == 4)
++							*(uint32 *)_out.getBasePtr(ox, y * S + j) = c;
++						else
++							*(uint16 *)_out.getBasePtr(ox, y * S + j) = (uint16)c;
++					}
++				}
++			}
++		}
++		return _out;
++	}
++
++	if (_modesDirty) {
++		computeModes(_bgPal, _mode, _factor);
++		_modesDirty = false;
++		// the side areas have no palette: follow what most background colours do
++		int n[4] = { 0, 0, 0, 0 };
++		uint32 sum[4] = { 0, 0, 0, 0 };
++		for (int i = 0; i < 256; i++) {
++			n[_mode[i]]++;
++			sum[_mode[i]] += _factor[i];
++		}
++		_wideMode = kSame;
++		_wideFactor = 256;
++		if (n[kFade] > n[kSame] && n[kFade] >= n[kGray]) {
++			_wideMode = kFade;
++			_wideFactor = sum[kFade] / n[kFade];
++		} else if (n[kGray] > n[kSame]) {
++			_wideMode = kGray;
++			_wideFactor = sum[kGray] / n[kGray];
++		}
++		for (uint i = 1; i < _slots.size(); i++)
++			computeModes(_pack.spritePalette(_slots[i].spr->pal), _slots[i].mode, _slots[i].factor);
++	}
++
++	// which back buffer column feeds each output column (-1: outside, use the wide picture)
++	const int sub = ((scrollX256 & 255) * S) >> 8;
++	int viewLeft;
++	if (_wide.clampCamera)
++		viewLeft = CLIP(sx - L, 0, MAX(0, bb.w - viewW));
++	else
++		viewLeft = sx - L;
++	_lastViewLeft = viewLeft;
++	_lastSx = sx;
++	int colMin = bb.w, colMax = -1;
++	for (int c = 0; c <= viewW; c++) {
++		int col = viewLeft + c;
++		if (col >= 0 && col < bb.w) {
++			colMin = MIN(colMin, col);
++			colMax = MAX(colMax, col);
++		}
++	}
++	int rows = MIN(_screenH, bb.h - scrollY);
++	if (colMax >= colMin && rows > 0)
++		scaleIndices(bb, colMin, scrollY, colMax - colMin + 1, rows);
++
++	const bool hasHD = _hdBg.getPixels() != nullptr;
++	const bool hasWide = _wideBg.getPixels() != nullptr;
++	const int hdW = hasHD ? _origBg.w : 0;
++
++	for (int Y = 0; Y < rows * S; Y++) {
++		const int y = Y / S, jy = Y % S;
++		const int by = scrollY + y;
++		const byte *bbRow = (const byte *)bb.getBasePtr(0, by);
++		const int bgy = by - _bgY;
++		const byte *ob = (hasHD && bgy >= 0 && bgy < _origBg.h) ? (const byte *)_origBg.getBasePtr(0, bgy) : nullptr;
++		const uint32 *hdRow = ob ? (const uint32 *)_hdBg.getBasePtr(0, bgy * S + jy) : nullptr;
++		const uint32 *idRow = (_ids && by < _idH) ? _ids + by * _idW : nullptr;
++		for (int X = 0; X < _out.w; X++) {
++			const int hx = X + sub;
++			const int c = hx / S, j = hx % S;
++			const int col = viewLeft + c;
++			uint32 out;
++			if (col < 0 || col >= bb.w) {
++				if (!hasWide)
++					continue;	// black band
++				int wx = (col - _bgX + _wide.left) * S + j;
++				int wy = bgy * S + jy;
++				if (wx < 0 || wx >= _wideBg.w || wy < 0 || wy >= _wideBg.h)
++					continue;
++				uint32 p = *(const uint32 *)_wideBg.getBasePtr(wx, wy);
++				out = hdPixel(p, _wideMode, _wideFactor);
++			} else {
++				const byte idx = bbRow[col];
++				const int bgx = col - _bgX;
++				// 2. HD background / 3. upscaled frame
++				if (ob && bgx >= 0 && bgx < hdW && ob[bgx] == idx && _mode[idx] != kLowRes)
++					out = hdPixel(hdRow[bgx * S + j], _mode[idx], _factor[idx]);
++				else
++					out = _palPixel[_scaled[(y * S + jy) * _scaledW + (col - colMin) * S + j]];
++				// 1. remastered sprite on top
++				uint32 id = idRow ? idRow[col] : 0;
++				if (id) {
++					const Slot &sl = _slots[id >> 20];
++					byte m = sl.mode[idx];
++					if (m != kLowRes) {
++						int ssx = (id >> 10) & 1023, ssy = id & 1023;
++						uint32 p = sl.spr->px[(ssy * S + jy) * (sl.spr->w * S) + ssx * S + j];
++						int a = p >> 24;
++						if (a) {
++							uint32 hp = hdPixel(p, m, sl.factor[idx]);
++							if (a >= 255) {
++								out = hp;
++							} else {
++								byte r, g, b;
++								_fmt.colorToRGB(hp, r, g, b);
++								out = blend(_fmt, out, r, g, b, a);
++							}
++						}
++					}
++				}
++			}
++			if (_fmt.bytesPerPixel == 4)
++				*(uint32 *)_out.getBasePtr(X, Y) = out;
++			else
++				*(uint16 *)_out.getBasePtr(X, Y) = (uint16)out;
++		}
++	}
++	drawTexts((sx - viewLeft) * S - sub);
++	return _out;
++}
++
++Common::Point Compositor::toGame(const Common::Point &p, int scrollX) const {
++	(void)scrollX;
++	const int S = _scale;
++	int x = p.x / S, y = p.y / S;
++	if (_classic)
++		x -= _maxExtL;
++	else
++		x = _lastViewLeft + x - _lastSx;
++	return Common::Point(CLIP(x, 0, _screenW - 1), CLIP(y, 0, _screenH - 1));
++}
++
++} // End of namespace Remaster
+diff --git a/engines/remaster/compositor.h b/engines/remaster/compositor.h
+new file mode 100644
+index 00000000..23511f0f
+--- /dev/null
++++ b/engines/remaster/compositor.h
+@@ -0,0 +1,171 @@
++/* ScummVM - Graphic Adventure Engine
++ *
++ * ScummVM is the legal property of its developers, whose names
++ * are too numerous to list here. Please refer to the COPYRIGHT
++ * file distributed with this source distribution.
++ *
++ * This program is free software: you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation, either version 3 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
++ *
++ */
++
++#ifndef ENGINES_REMASTER_COMPOSITOR_H
++#define ENGINES_REMASTER_COMPOSITOR_H
++
++#include "common/array.h"
++#include "common/hashmap.h"
++#include "common/rect.h"
++#include "common/str.h"
++#include "graphics/pixelformat.h"
++#include "graphics/surface.h"
++
++#include "engines/remaster/assetpack.h"
++
++namespace Remaster {
++
++/** HD font atlas (RFNT) */
++struct FontAtlas {
++	struct Glyph {
++		uint16 ax, ay, w, h;
++		int16 bx, by;
++		uint16 adv;
++	};
++	bool ok = false;
++	int scale = 3, line = 0, ascent = 0, outline = 0;
++	Glyph g[256];
++	Common::Array<byte> fill, stroke;	// coverage planes
++	int aw = 0, ah = 0;
++
++	bool load(const AssetPack &pack, const Common::String &name);
++	/** width in original pixels of a string in the game code page */
++	int width(const Common::String &s) const;
++};
++
++/**
++ * Composes the true colour frame from the 8-bit back buffer of the engine.
++ *
++ * The game keeps running at its own resolution and palette. For every output
++ * pixel the compositor takes, in order of preference:
++ *  1. the remastered sprite frame that drew the pixel (id buffer filled by the
++ *     engine's own blitters, so masks, clipping and scaling stay the engine's);
++ *  2. the HD background, when the 8-bit pixel still is the background's;
++ *  3. the frame upscaled with Scale2x/Scale3x on palette indices.
++ * Palette fades and grayscale views are applied to HD pixels; other palette
++ * effects fall back to (3) for the colours involved.
++ * In classic mode it shows the original frame with sharp pixels.
++ */
++class Compositor {
++public:
++	Compositor(const AssetPack &pack, int scale, int screenW, int screenH, const Graphics::PixelFormat &fmt);
++	~Compositor();
++
++	int scale() const { return _scale; }
++	int outputWidth() const { return (_screenW + _maxExtL + _maxExtR) * _scale; }
++	int outputHeight() const { return _screenH * _scale; }
++	void setMaxExtension(int left, int right) { _maxExtL = left; _maxExtR = right; }
++	int extLeft() const { return _maxExtL; }
++
++	void setClassic(bool c) { _classic = c; }
++	bool classic() const { return _classic; }
++
++	void setPalette(const byte *rgb, uint start, uint num);
++	void setBackground(const Common::String &scene, const Graphics::Surface &bg8, const byte *rgb, int bgX, int bgY, bool widescreen);
++	const WideInfo &wide() const { return _wide; }
++
++	// sprites
++	void beginScene(int bbW, int bbH);
++	uint32 spriteSlot(const byte *pixels, int w, int h, int pitch, byte transparent);
++	uint32 *ids() { return _ids; }
++	int idPitch() const { return _idW; }
++	void clearIds(const Common::Rect &r);
++
++	// text drawn with HD fonts on top of the frame (cleared by beginScene)
++	bool hasFont(int id) const { return id >= 0 && id < (int)_fonts.size() && _fonts[id].ok; }
++	int loadFont(const Common::String &name);
++	void addText(int font, int x, int y, const Common::String &s, byte colorIndex, byte outlineIndex, int boxW);
++
++	/**
++	 * Compose the frame. scrollX256 / scrollY are the camera position in the back buffer
++	 * (X in 1/256 pixel for smooth scrolling). Returns the composed surface.
++	 */
++	const Graphics::Surface &compose(const Graphics::Surface &bb8, int scrollX256, int scrollY);
++
++	/** Output (HD) coordinates -> engine screen coordinates. */
++	Common::Point toGame(const Common::Point &p, int scrollX) const;
++
++private:
++	enum Mode { kSame = 0, kFade = 1, kGray = 2, kLowRes = 3 };
++	struct Sprite {
++		Common::Array<uint32> px;	// ARGB at _scale
++		int w = 0, h = 0;
++		uint16 pal = 0;
++		uint32 used[8];
++	};
++	struct Slot {
++		const Sprite *spr;
++		byte mode[256];
++		uint16 factor[256];
++	};
++	struct Text {
++		int font, x, y, boxW;
++		Common::String s;
++		byte color, outline;
++	};
++
++	const AssetPack &_pack;
++	int _scale, _screenW, _screenH;
++	int _maxExtL = 0, _maxExtR = 0;
++	Graphics::PixelFormat _fmt;
++	bool _classic = false;
++
++	Graphics::Surface _out;
++	Graphics::Surface _hdBg;	// ARGB at _scale
++	Graphics::Surface _origBg;	// 8-bit copy of the original background
++	Graphics::Surface _wideBg;	// ARGB at _scale, scene + extensions
++	WideInfo _wide;
++	int _bgX = 0, _bgY = 0;
++
++	byte _bgPal[768];
++	byte _curPal[768];
++	uint32 _palPixel[256];
++	byte _mode[256];
++	uint16 _factor[256];
++	bool _modesDirty = true;
++	byte _wideMode = 0;			// palette effect applied to the invented side areas
++	uint16 _wideFactor = 256;
++	int _lastViewLeft = 0, _lastSx = 0;
++
++	Common::Array<byte> _scaled;	// scaled indices of the composed area
++	int _scaledW = 0;
++
++	uint32 *_ids = nullptr;
++	int _idW = 0, _idH = 0;
++	Common::Array<Slot> _slots;
++	Common::HashMap<uint32, uint32> _slotOfKey;
++	Common::HashMap<uint32, Sprite *> _sprCache;
++
++	Common::Array<FontAtlas> _fonts;
++	Common::Array<Text> _texts;
++
++	void computeModes(const byte *ref, byte *mode, uint16 *factor) const;
++	Sprite *loadSprite(uint32 key, const SpriteEntry &e);
++	void scaleIndices(const Graphics::Surface &bb8, int x0, int y0, int w, int h);
++	uint32 hdPixel(uint32 argb, byte mode, uint16 factor) const;
++	void drawTexts(int originX);
++	void drawText(const Text &t, int originX);
++	void resampleTo(const Graphics::Surface &src, int srcScale, Graphics::Surface &dst) const;
++};
++
++} // End of namespace Remaster
++
++#endif
+diff --git a/engines/remaster/keys.cpp b/engines/remaster/keys.cpp
+new file mode 100644
+index 00000000..63e320c2
+--- /dev/null
++++ b/engines/remaster/keys.cpp
+@@ -0,0 +1,77 @@
++/* ScummVM - Graphic Adventure Engine
++ *
++ * ScummVM is the legal property of its developers, whose names
++ * are too numerous to list here. Please refer to the COPYRIGHT
++ * file distributed with this source distribution.
++ *
++ * This program is free software: you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation, either version 3 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
++ *
++ */
++
++#include "engines/remaster/keys.h"
++
++namespace Remaster {
++
++static const uint32 *crcTable() {
++	static uint32 table[256];
++	static bool init = false;
++	if (!init) {
++		for (uint32 i = 0; i < 256; i++) {
++			uint32 c = i;
++			for (int k = 0; k < 8; k++)
++				c = (c >> 1) ^ (0xedb88320 & (0 - (c & 1)));
++			table[i] = c;
++		}
++		init = true;
++	}
++	return table;
++}
++
++static inline uint32 crcByte(const uint32 *t, uint32 crc, byte b) {
++	return t[(crc ^ b) & 0xff] ^ (crc >> 8);
++}
++
++uint32 frameKey(const byte *pixels, int w, int h, int pitch) {
++	const uint32 *t = crcTable();
++	if (pitch < 0)
++		pitch = w;
++	uint32 crc = 0xffffffff;
++	const byte hdr[4] = { (byte)(w & 0xff), (byte)((w >> 8) & 0xff), (byte)(h & 0xff), (byte)((h >> 8) & 0xff) };
++	for (int i = 0; i < 4; i++)
++		crc = crcByte(t, crc, hdr[i]);
++	for (int y = 0; y < h; y++) {
++		const byte *row = pixels + y * pitch;
++		for (int x = 0; x < w; x++)
++			crc = crcByte(t, crc, row[x]);
++	}
++	return crc ^ 0xffffffff;
++}
++
++uint32 textKey(const Common::String &text) {
++	const uint32 *t = crcTable();
++	uint32 crc = 0xffffffff;
++	for (uint i = 0; i < text.size(); i++) {
++		byte c = (byte)text[i];
++		if (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\\' || c == '\v' || c == '\f')
++			continue;
++		crc = crcByte(t, crc, c);
++	}
++	return crc ^ 0xffffffff;
++}
++
++Common::String keyToString(uint32 key) {
++	return Common::String::format("%08x", key);
++}
++
++} // End of namespace Remaster
+diff --git a/engines/remaster/keys.h b/engines/remaster/keys.h
+new file mode 100644
+index 00000000..abc295b3
+--- /dev/null
++++ b/engines/remaster/keys.h
+@@ -0,0 +1,45 @@
++/* ScummVM - Graphic Adventure Engine
++ *
++ * ScummVM is the legal property of its developers, whose names
++ * are too numerous to list here. Please refer to the COPYRIGHT
++ * file distributed with this source distribution.
++ *
++ * This program is free software: you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation, either version 3 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
++ *
++ */
++
++#ifndef ENGINES_REMASTER_KEYS_H
++#define ENGINES_REMASTER_KEYS_H
++
++#include "common/scummsys.h"
++#include "common/str.h"
++
++namespace Remaster {
++
++/**
++ * Keys of the Remaster Asset Contract (RAC v1). Both are zlib CRC32 values,
++ * printed as 8 lowercase hex digits.
++ */
++
++/** CRC32 of LE16 w, LE16 h and the w*h indexed pixels of a sprite frame. */
++uint32 frameKey(const byte *pixels, int w, int h, int pitch = -1);
++
++/** CRC32 of a game string without whitespace (space, \t \n \r \v \f) and backslashes. */
++uint32 textKey(const Common::String &text);
++
++Common::String keyToString(uint32 key);
++
++} // End of namespace Remaster
++
++#endif
+diff --git a/engines/remaster/layer.cpp b/engines/remaster/layer.cpp
+new file mode 100644
+index 00000000..aa8a6d02
+--- /dev/null
++++ b/engines/remaster/layer.cpp
+@@ -0,0 +1,337 @@
++/* ScummVM - Graphic Adventure Engine
++ *
++ * ScummVM is the legal property of its developers, whose names
++ * are too numerous to list here. Please refer to the COPYRIGHT
++ * file distributed with this source distribution.
++ *
++ * This program is free software: you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation, either version 3 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
++ *
++ */
++
++#include "audio/audiostream.h"
++#include "common/config-manager.h"
++#include "common/debug.h"
++#include "common/file.h"
++#include "common/fs.h"
++#include "common/language.h"
++#include "common/system.h"
++#include "common/textconsole.h"
++#include "common/translation.h"
++#include "common/ustr.h"
++#include "engines/util.h"
++#include "graphics/cursorman.h"
++
++#include "engines/remaster/layer.h"
++
++namespace Remaster {
++
++static bool confBool(const char *key, bool def) {
++	return ConfMan.hasKey(key) ? ConfMan.getBool(key) : def;
++}
++
++Layer *Layer::create(const Desc &desc) {
++	if (!confBool("remaster", true))
++		return nullptr;
++	AssetPack *pack = new AssetPack();
++	if (!pack->open()) {
++		delete pack;
++		return nullptr;
++	}
++	int scale = ConfMan.hasKey("remaster_scale") ? ConfMan.getInt("remaster_scale") : pack->scale();
++	scale = CLIP(scale, 2, 4);
++
++	Graphics::PixelFormat fmt(4, 8, 8, 8, 8, 24, 16, 8, 0);
++	Common::List<Graphics::PixelFormat> formats = g_system->getSupportedFormats();
++	for (Common::List<Graphics::PixelFormat>::iterator it = formats.begin(); it != formats.end(); ++it) {
++		if (it->bytesPerPixel == 4) {
++			fmt = *it;
++			break;
++		}
++	}
++	Layer *l = new Layer(desc, pack, scale, fmt);
++	initGraphics(l->_comp->outputWidth(), l->_comp->outputHeight(), &fmt);
++	if (g_system->getScreenFormat() != fmt) {
++		warning("Remaster: true colour not available, using the original graphics");
++		delete l;
++		return nullptr;
++	}
++	return l;
++}
++
++Layer::Layer(const Desc &desc, AssetPack *pack, int scale, const Graphics::PixelFormat &fmt) :
++	_desc(desc), _pack(pack), _fmt(fmt) {
++	_comp = new Compositor(*pack, scale, desc.screenW, desc.screenH, fmt);
++	_widescreen = confBool("remaster_widescreen", true);
++	_smooth = confBool("remaster_smooth", true);
++	_voices = confBool("remaster_voices", true);
++	_toggleKey = ConfMan.hasKey("remaster_toggle_key") ? CLIP(ConfMan.getInt("remaster_toggle_key"), 1, 12) : 8;
++	memset(_pal, 0, sizeof(_pal));
++
++	if (_widescreen) {
++		// same number of pixels on each side, as in the pipeline tools (rstool widescreen geometry)
++		float target = desc.screenH * desc.pixelAspect * 16.0f / 9.0f;
++		float half = (target - desc.screenW) / 2.0f - 1e-4f;
++		int side = (int)half;
++		if (half > side)
++			side++;
++		side = MAX(0, side);
++		_comp->setMaxExtension(side, side);
++	}
++
++	_lang = desc.language;
++	if (_lang.empty() && ConfMan.hasKey("language"))
++		_lang = Common::getLanguageCode(Common::parseLanguage(ConfMan.get("language")));
++	if (ConfMan.hasKey("remaster_language"))
++		_lang = ConfMan.get("remaster_language");
++	if (!_lang.empty())
++		_pack->loadTexts(_lang);
++
++	if (ConfMan.hasKey("remaster_dump"))
++		_dumpDir = ConfMan.get("remaster_dump");
++
++	_comp->setClassic(confBool("remaster_classic", false));
++	debug(1, "Remaster: %dx%d -> %dx%d (scale %d, widescreen %d, language %s)", desc.screenW, desc.screenH,
++		_comp->outputWidth(), _comp->outputHeight(), scale, _widescreen, _lang.c_str());
++}
++
++Layer::~Layer() {
++	stopVoice();
++	if (_textDump) {
++		_textDump->finalize();
++		delete _textDump;
++	}
++	delete _comp;
++	delete _pack;
++}
++
++void Layer::setClassic(bool c) {
++	_comp->setClassic(c);
++	ConfMan.setBool("remaster_classic", c, ConfMan.getActiveDomainName());
++	if (_bb)
++		show(_scrollTo << 8);
++	if (c)
++		stopVoice();
++}
++
++void Layer::toggle() {
++	bool c = !classic();
++	setClassic(c);
++	ConfMan.flushToDisk();
++	g_system->displayMessageOnOSD(c ? _("Original version") : _("Remastered version"));
++}
++
++// ---------------------------------------------------------------------------
++
++void Layer::setPalette(const byte *rgb, uint start, uint num) {
++	for (uint i = start; i < start + num && i < 256; i++)
++		memcpy(&_pal[i * 3], &rgb[(i - start) * 3], 3);
++	_comp->setPalette(rgb, start, num);
++	// CLUT8 cursors keep following the game palette in true colour mode
++	CursorMan.replaceCursorPalette(rgb, start, num);
++}
++
++void Layer::setBackground(const Common::String &scene, const Graphics::Surface &bg8, const byte *rgb, int bgX, int bgY) {
++	_comp->setBackground(scene, bg8, rgb, bgX, bgY, _widescreen);
++	if (!_dumpDir.empty() && bg8.getPixels() && !scene.empty()) {
++		Common::String name = scene;
++		for (uint i = 0; i < name.size(); i++)
++			if (name[i] == '/' || name[i] == '\\')
++				name.setChar('_', i);
++		dumpRaw("bg/" + name + ".raw", (const byte *)bg8.getPixels(), bg8.w, bg8.h, bg8.pitch, 255, rgb);
++	}
++}
++
++void Layer::beginScene(int bbW, int bbH) {
++	_comp->beginScene(bbW, bbH);
++	_ids = _comp->ids();
++	_idW = _comp->idPitch();
++	_idH = bbH;
++	_slot = 0;
++}
++
++uint32 Layer::beginSprite(const byte *pixels, int w, int h, int pitch, byte transparent) {
++	if (!_dumpDir.empty() && w > 0 && h > 0 && w < 1024 && h < 1024) {
++		uint32 key = frameKey(pixels, w, h, pitch);
++		if (!_dumped.contains(key)) {
++			_dumped[key] = true;
++			dumpRaw("spr/" + keyToString(key) + ".raw", pixels, w, h, pitch, transparent, _pal);
++		}
++	}
++	_slot = _comp->spriteSlot(pixels, w, h, pitch, transparent);
++	return _slot;
++}
++
++void Layer::clearArea(int x, int y, int w, int h) {
++	_comp->clearIds(Common::Rect(x, y, x + w, y + h));
++}
++
++int Layer::font(const Common::String &name) {
++	return _comp->loadFont(name);
++}
++
++bool Layer::addText(int f, int x, int y, const Common::String &s, byte color, byte outline, int boxW) {
++	if (classic() || !_comp->hasFont(f))
++		return false;
++	_comp->addText(f, x, y, s, color, outline, boxW);
++	return true;
++}
++
++// ---------------------------------------------------------------------------
++
++void Layer::show(int scrollX256) {
++	if (!_bb)
++		return;
++	const Graphics::Surface &out = _comp->compose(*_bb, scrollX256, _scrollY);
++	g_system->copyRectToScreen(out.getPixels(), out.pitch, 0, 0, out.w, out.h);
++	g_system->updateScreen();
++}
++
++void Layer::present(const Graphics::Surface &bb8, int scrollX, int scrollY) {
++	_bb = &bb8;
++	_scrollFrom = _scrollTo;
++	_scrollTo = scrollX;
++	_scrollY = scrollY;
++	_tickStart = g_system->getMillis();
++	// cuts (location change, big jumps) are never interpolated
++	if (!_smooth || !_paced || classic() || ABS(_scrollTo - _scrollFrom) > _desc.screenW / 4)
++		_scrollFrom = _scrollTo;
++	show(_scrollFrom << 8);
++}
++
++void Layer::pace(uint32 tickMs) {
++	_paced = true;
++	const uint32 frameMs = 16;
++	while (true) {
++		uint32 now = g_system->getMillis();
++		uint32 elapsed = now - _tickStart;
++		if (elapsed + 2 >= tickMs)
++			break;
++		g_system->delayMillis(MIN<uint32>(frameMs, tickMs - elapsed - 1));
++		if (_scrollFrom != _scrollTo && _bb) {
++			uint32 e = MIN<uint32>(g_system->getMillis() - _tickStart, tickMs);
++			int x256 = (_scrollFrom << 8) + (int)(((int64)(_scrollTo - _scrollFrom) * 256 * e) / tickMs);
++			show(x256);
++		}
++	}
++	if (_scrollFrom != _scrollTo && _bb) {
++		_scrollFrom = _scrollTo;
++		show(_scrollTo << 8);
++	}
++}
++
++// ---------------------------------------------------------------------------
++
++bool Layer::handleEvent(Common::Event &ev) {
++	switch (ev.type) {
++	case Common::EVENT_KEYDOWN:
++		if (ev.kbd.keycode == (Common::KeyCode)(Common::KEYCODE_F1 + _toggleKey - 1)) {
++			if (!ev.kbdRepeat)
++				toggle();
++			return true;
++		}
++		return false;
++	case Common::EVENT_KEYUP:
++		return ev.kbd.keycode == (Common::KeyCode)(Common::KEYCODE_F1 + _toggleKey - 1);
++	case Common::EVENT_MOUSEMOVE:
++	case Common::EVENT_LBUTTONDOWN:
++	case Common::EVENT_LBUTTONUP:
++	case Common::EVENT_RBUTTONDOWN:
++	case Common::EVENT_RBUTTONUP:
++	case Common::EVENT_MBUTTONDOWN:
++	case Common::EVENT_MBUTTONUP:
++	case Common::EVENT_WHEELUP:
++	case Common::EVENT_WHEELDOWN:
++		ev.mouse = _comp->toGame(ev.mouse, _scrollTo);
++		return false;
++	default:
++		return false;
++	}
++}
++
++// ---------------------------------------------------------------------------
++
++Common::String Layer::text(const Common::String &original, const char *kind, const char *location, const char *speaker, int boxW) {
++	if (!_dumpDir.empty())
++		dumpText(original, kind, location, speaker, boxW);
++	if (classic())
++		return original;
++	Common::String utf8;
++	if (!_pack->text(textKey(original), utf8))
++		return original;
++	Common::U32String u(utf8.c_str(), Common::kUtf8);
++	return u.encode(_desc.codePage);
++}
++
++bool Layer::playVoice(const Common::String &original) {
++	if (!_voices || classic() || _lang.empty() || original.empty())
++		return false;
++	Common::String base = _pack->voicePath(textKey(original), _lang);
++	if (base.empty())
++		return false;
++	Audio::SeekableAudioStream *stream = Audio::SeekableAudioStream::openStreamFile(Common::Path(base, '/'));
++	if (!stream)
++		return false;
++	g_system->getMixer()->stopHandle(_voice);
++	g_system->getMixer()->playStream(Audio::Mixer::kSpeechSoundType, &_voice, stream);
++	return true;
++}
++
++void Layer::stopVoice() {
++	g_system->getMixer()->stopHandle(_voice);
++}
++
++bool Layer::isVoicePlaying() const {
++	return g_system->getMixer()->isSoundHandleActive(_voice);
++}
++
++// ---------------------------------------------------------------------------
++
++void Layer::dumpRaw(const Common::String &file, const byte *pixels, int w, int h, int pitch, byte transparent, const byte *pal) {
++	Common::DumpFile out;
++	Common::Path path(_dumpDir + "/" + file, '/');
++	if (!out.open(path, true)) {
++		warning("Remaster: can't write %s", file.c_str());
++		return;
++	}
++	out.writeUint16LE(w);
++	out.writeUint16LE(h);
++	out.writeByte(transparent);
++	out.write(pal, 768);
++	for (int y = 0; y < h; y++)
++		out.write(pixels + y * pitch, w);
++	out.finalize();
++}
++
++void Layer::dumpText(const Common::String &original, const char *kind, const char *location, const char *speaker, int boxW) {
++	uint32 key = textKey(original) ^ 0x5bd1e995;
++	if (original.empty() || _dumped.contains(key))
++		return;
++	_dumped[key] = true;
++	Common::String hex;
++	for (uint i = 0; i < original.size(); i++)
++		hex += Common::String::format("%02x", (byte)original[i]);
++	if (!_textDump) {
++		_textDump = new Common::DumpFile();
++		if (!_textDump->open(Common::Path(_dumpDir + "/text.jsonl", '/'), true)) {
++			delete _textDump;
++			_textDump = nullptr;
++			return;
++		}
++	}
++	_textDump->writeString(Common::String::format("{\"hex\": \"%s\", \"kind\": \"%s\", \"location\": \"%s\", \"speaker\": \"%s\", \"box_w\": %d}\n",
++		hex.c_str(), kind, location, speaker, boxW));
++	_textDump->flush();
++}
++
++} // End of namespace Remaster
+diff --git a/engines/remaster/layer.h b/engines/remaster/layer.h
+new file mode 100644
+index 00000000..0e725a29
+--- /dev/null
++++ b/engines/remaster/layer.h
+@@ -0,0 +1,148 @@
++/* ScummVM - Graphic Adventure Engine
++ *
++ * ScummVM is the legal property of its developers, whose names
++ * are too numerous to list here. Please refer to the COPYRIGHT
++ * file distributed with this source distribution.
++ *
++ * This program is free software: you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation, either version 3 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
++ *
++ */
++
++#ifndef ENGINES_REMASTER_LAYER_H
++#define ENGINES_REMASTER_LAYER_H
++
++#include "audio/mixer.h"
++#include "common/events.h"
++#include "common/file.h"
++#include "common/hashmap.h"
++#include "common/str-enc.h"
++#include "common/str.h"
++#include "graphics/surface.h"
++
++#include "engines/remaster/assetpack.h"
++#include "engines/remaster/compositor.h"
++#include "engines/remaster/keys.h"
++
++namespace Remaster {
++
++/**
++ * Remaster Layer: HD graphics, 16:9, smooth scrolling, corrected/translated
++ * texts and recorded voices for 8-bit adventure engines, switchable to the
++ * original at any moment (F8 by default).
++ *
++ * Integration (see engine/scummvm-remaster-layer/INTEGRAZIONE.md):
++ *   init     Layer *l = Layer::create(desc); if (!l) initGraphics(w, h);
++ *   scene    l->setBackground(name, bg8, rgb, x, y);
++ *   palette  l->setPalette(rgb, start, n) instead of the PaletteManager
++ *   frame    l->beginScene(bbW, bbH); blitters: slot = l->beginSprite(...); l->mark(...)
++ *   texts    if (!l->addText(font, x, y, s, color, outline, boxW)) <draw as before>
++ *   show     l->present(bb8, scrollX, scrollY); l->pace(tickMs) instead of delayMillis
++ *   input    for every polled event: if (l->handleEvent(ev)) continue;
++ *   strings  s = l->text(original); l->playVoice(original)
++ */
++class Layer {
++public:
++	struct Desc {
++		Common::String gameId;
++		int screenW = 320, screenH = 200;
++		float pixelAspect = 1.0f;			///< 1.0: square pixels (640x400 -> 36 px per side); 1.2 with 4:3 aspect correction
++		Common::CodePage codePage = Common::kDos850;
++		Common::String language;			///< "it", "en"... (empty: from the ScummVM settings)
++	};
++
++	/**
++	 * Initializes the graphics mode when a remaster pack is installed and the
++	 * remaster is enabled; returns nullptr otherwise (the engine then calls
++	 * initGraphics() as usual).
++	 */
++	static Layer *create(const Desc &desc);
++	~Layer();
++
++	bool classic() const { return _comp->classic(); }
++	void setClassic(bool c);
++	void toggle();
++	int scale() const { return _comp->scale(); }
++
++	// --- graphics -------------------------------------------------------
++	void setPalette(const byte *rgb, uint start, uint num);
++	void setBackground(const Common::String &scene, const Graphics::Surface &bg8, const byte *rgb, int bgX = 0, int bgY = 0);
++	void beginScene(int bbW, int bbH);
++	/** call before blitting a sprite frame; returns its slot (0: drawn as original) */
++	uint32 beginSprite(const byte *pixels, int w, int h, int pitch, byte transparent);
++	/** call for every pixel the blitter writes: (x, y) in the back buffer, (sx, sy) in the frame */
++	inline void mark(int x, int y, int sx, int sy) {
++		if (_ids && x >= 0 && y >= 0 && x < _idW && y < _idH)
++			_ids[y * _idW + x] = (_slot && sx < 1024 && sy < 1024) ? ((_slot << 20) | (sx << 10) | sy) : 0;
++	}
++	void endSprite() { _slot = 0; }
++	/** the engine copied plain pixels over an area (no sprite): forget the sprite ids there */
++	void clearArea(int x, int y, int w, int h);
++
++	int font(const Common::String &name);
++	/** true if drawn in HD (the engine must then skip its own rasterization) */
++	bool addText(int font, int x, int y, const Common::String &s, byte color, byte outline = 0, int boxW = 0);
++
++	void present(const Graphics::Surface &bb8, int scrollX, int scrollY);
++	/** wait for the next logic tick, presenting interpolated frames meanwhile */
++	void pace(uint32 tickMs);
++
++	// --- input ----------------------------------------------------------
++	/** toggle key and mouse remapping; true when the event was consumed */
++	bool handleEvent(Common::Event &ev);
++
++	// --- texts and voices -------------------------------------------------
++	/** corrected or translated string in the game code page (original in classic mode) */
++	Common::String text(const Common::String &original, const char *kind = "", const char *location = "", const char *speaker = "", int boxW = 0);
++	bool playVoice(const Common::String &original);
++	void stopVoice();
++	bool isVoicePlaying() const;
++
++private:
++	Layer(const Desc &desc, AssetPack *pack, int scale, const Graphics::PixelFormat &fmt);
++
++	Desc _desc;
++	AssetPack *_pack;
++	Compositor *_comp;
++	Graphics::PixelFormat _fmt;
++	bool _widescreen;
++	bool _smooth;
++	bool _voices;
++	int _toggleKey;
++	Common::String _lang;
++
++	uint32 *_ids = nullptr;
++	int _idW = 0, _idH = 0;
++	uint32 _slot = 0;
++
++	// smooth scrolling
++	const Graphics::Surface *_bb = nullptr;
++	int _scrollFrom = 0, _scrollTo = 0, _scrollY = 0;
++	uint32 _tickStart = 0;
++	bool _paced = false;
++	void show(int scrollX256);
++
++	Audio::SoundHandle _voice;
++
++	// developer dump (remaster_dump=<folder>)
++	Common::String _dumpDir;
++	Common::HashMap<uint32, bool> _dumped;
++	Common::DumpFile *_textDump = nullptr;
++	byte _pal[768];
++	void dumpRaw(const Common::String &file, const byte *pixels, int w, int h, int pitch, byte transparent, const byte *pal);
++	void dumpText(const Common::String &original, const char *kind, const char *location, const char *speaker, int boxW);
++};
++
++} // End of namespace Remaster
++
++#endif
+diff --git a/test/graphics/remaster.h b/test/graphics/remaster.h
+new file mode 100644
+index 00000000..96e74b56
+--- /dev/null
++++ b/test/graphics/remaster.h
+@@ -0,0 +1,103 @@
++#include <cxxtest/TestSuite.h>
++
++#include "engines/remaster/compositor.h"
++#include "engines/remaster/keys.h"
++
++// Remaster Layer: keys must match the pipeline tools (Python zlib.crc32),
++// the compositor must reproduce the original frame and map the mouse back.
++class RemasterTestSuite : public CxxTest::TestSuite {
++	static const Graphics::PixelFormat argb() { return Graphics::PixelFormat(4, 8, 8, 8, 8, 16, 8, 0, 24); }
++
++	static uint32 px(const Graphics::Surface &s, int x, int y) { return *(const uint32 *)s.getBasePtr(x, y); }
++
++	void makePalette(byte *pal) {
++		for (int i = 0; i < 256; i++) {
++			pal[i * 3] = (byte)i;
++			pal[i * 3 + 1] = (byte)(255 - i);
++			pal[i * 3 + 2] = (byte)(i / 2);
++		}
++	}
++
++public:
++	void test_keys() {
++		byte frame[13 * 5];
++		for (int i = 0; i < 13 * 5; i++)
++			frame[i] = (byte)((i * 7) % 256);
++		TS_ASSERT_EQUALS(Remaster::keyToString(Remaster::frameKey(frame, 13, 5)), Common::String("530a0dc6"));
++		TS_ASSERT_EQUALS(Remaster::keyToString(Remaster::textKey("Ciao,\\mondo! E' tardi\n")), Common::String("dd24cc89"));
++	}
++
++	void test_compose_and_classic() {
++		Remaster::AssetPack pack;	// not opened: no HD assets, upscaling only
++		Remaster::Compositor comp(pack, 3, 4, 2, argb());
++		byte pal[768];
++		makePalette(pal);
++		comp.setPalette(pal, 0, 256);
++		Graphics::Surface bb;
++		bb.create(4, 2, Graphics::PixelFormat::createFormatCLUT8());
++		byte *p = (byte *)bb.getPixels();
++		for (int i = 0; i < 8; i++)
++			p[i] = (byte)(10 + i);
++		comp.beginScene(4, 2);
++		const Graphics::Surface &out = comp.compose(bb, 0, 0);
++		TS_ASSERT_EQUALS(out.w, 12);
++		TS_ASSERT_EQUALS(out.h, 6);
++		Graphics::PixelFormat f = argb();
++		// a uniform 3x3 block where the neighbours don't form a diagonal edge
++		TS_ASSERT_EQUALS(px(out, 4, 1), f.RGBToColor(11, 244, 5));
++		comp.setClassic(true);
++		const Graphics::Surface &cl = comp.compose(bb, 0, 0);
++		for (int y = 0; y < 6; y++)
++			for (int x = 0; x < 12; x++) {
++				byte i = p[(y / 3) * 4 + x / 3];
++				TS_ASSERT_EQUALS(px(cl, x, y), f.RGBToColor(pal[i * 3], pal[i * 3 + 1], pal[i * 3 + 2]));
++			}
++		bb.free();
++	}
++
++	void test_widescreen_bands_and_mouse() {
++		Remaster::AssetPack pack;
++		Remaster::Compositor comp(pack, 3, 4, 2, argb());
++		comp.setMaxExtension(1, 1);
++		byte pal[768];
++		makePalette(pal);
++		comp.setPalette(pal, 0, 256);
++		Graphics::Surface bb;
++		bb.create(4, 2, Graphics::PixelFormat::createFormatCLUT8());
++		memset(bb.getPixels(), 200, 8);
++		comp.beginScene(4, 2);
++		const Graphics::Surface &out = comp.compose(bb, 0, 0);
++		TS_ASSERT_EQUALS(out.w, 18);
++		Graphics::PixelFormat f = argb();
++		TS_ASSERT_EQUALS(px(out, 0, 0), f.RGBToColor(0, 0, 0));		// side band (no wide picture)
++		TS_ASSERT_EQUALS(px(out, 17, 5), f.RGBToColor(0, 0, 0));
++		TS_ASSERT_EQUALS(px(out, 3, 0), f.RGBToColor(200, 55, 100));	// first game column
++		// output pixel 10 is game column (10 / 3) - 1 = 2
++		Common::Point g = comp.toGame(Common::Point(10, 4), 0);
++		TS_ASSERT_EQUALS(g.x, 2);
++		TS_ASSERT_EQUALS(g.y, 1);
++		// clicks in the bands are clamped to the game area
++		TS_ASSERT_EQUALS(comp.toGame(Common::Point(0, 0), 0).x, 0);
++		TS_ASSERT_EQUALS(comp.toGame(Common::Point(17, 0), 0).x, 3);
++		bb.free();
++	}
++
++	void test_smooth_scroll_subpixel() {
++		Remaster::AssetPack pack;
++		Remaster::Compositor comp(pack, 3, 2, 1, argb());
++		byte pal[768];
++		makePalette(pal);
++		comp.setPalette(pal, 0, 256);
++		Graphics::Surface bb;
++		bb.create(4, 1, Graphics::PixelFormat::createFormatCLUT8());
++		byte *p = (byte *)bb.getPixels();
++		p[0] = 1; p[1] = 2; p[2] = 3; p[3] = 4;
++		comp.beginScene(4, 1);
++		Graphics::PixelFormat f = argb();
++		// scroll 1 + 1/3 pixel: the output starts one HD pixel into game column 1
++		const Graphics::Surface &out = comp.compose(bb, 256 + 86, 0);
++		TS_ASSERT_EQUALS(px(out, 0, 0), f.RGBToColor(2, 253, 1));
++		TS_ASSERT_EQUALS(px(out, 2, 0), f.RGBToColor(3, 252, 1));
++		bb.free();
++	}
++};
+diff --git a/test/module.mk b/test/module.mk
+index 171ac91a..1ff9c460 100644
+--- a/test/module.mk
++++ b/test/module.mk
+@@ -12,3 +12,4 @@ TESTS        := $(srcdir)/test/common/*.h \
+ 	$(srcdir)/test/math/*.h \
+-	$(srcdir)/test/image/*.h
++	$(srcdir)/test/image/*.h \
++	$(srcdir)/test/graphics/remaster.h
+ TEST_LIBS    :=
+@@ -40,3 +41,3 @@ endif
+ # libcommon needs libformats and libformats needs libcommon: so libcommon is put twice
+-TEST_LIBS +=	audio/libaudio.a math/libmath.a common/libcommon.a common/formats/libformats.a common/compression/libcompression.a common/libcommon.a image/libimage.a graphics/libgraphics.a
++TEST_LIBS +=	engines/libengines.a audio/libaudio.a math/libmath.a common/libcommon.a common/formats/libformats.a common/compression/libcompression.a common/libcommon.a image/libimage.a graphics/libgraphics.a
+ 
+-- 
+2.43.0
+

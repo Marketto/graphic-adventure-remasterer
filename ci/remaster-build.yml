@@ -1,0 +1,131 @@
+# Remaster Studio — build of the remastered ScummVM fork for every platform.
+# Copy to .github/workflows/ of the fork. Set ENGINE (ScummVM engine id) and GAME_ID below.
+# Artifacts: one per platform, ready for `rstool.py release package --engines <dir>`.
+name: remaster-build
+
+on:
+  push:
+    branches: ["remaster/**"]
+  workflow_dispatch:
+
+env:
+  ENGINE: CHANGE-ME             # ScummVM engine id of the game (engines/<id>)
+  GAME_ID: CHANGE-ME            # short id used in artifact names
+  CONFIG: --disable-all-engines --enable-release --disable-detection-full
+
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsdl2-dev libpng-dev libjpeg-turbo8-dev libogg-dev libvorbis-dev \
+            libflac-dev libfreetype6-dev libfluidsynth-dev zlib1g-dev
+      - name: Build and test
+        run: |
+          ./configure $CONFIG --enable-engine=$ENGINE
+          make -j$(nproc)
+          make test
+          strip scummvm
+      - name: Package
+        run: |
+          mkdir -p dist && cp scummvm dist/scummvm-remaster && cp COPYING dist/GPL-3.0.txt
+          tar czf scummvm-remaster-$GAME_ID-linux-x86_64.tar.gz -C dist .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-x86_64
+          path: scummvm-remaster-*-linux-x86_64.tar.gz
+
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          install: >-
+            make mingw-w64-x86_64-gcc mingw-w64-x86_64-SDL2 mingw-w64-x86_64-libpng
+            mingw-w64-x86_64-libjpeg-turbo mingw-w64-x86_64-libvorbis mingw-w64-x86_64-libogg
+            mingw-w64-x86_64-flac mingw-w64-x86_64-freetype mingw-w64-x86_64-zlib
+      - name: Build
+        run: |
+          ./configure $CONFIG --enable-engine=$ENGINE
+          make -j$(nproc)
+          make win32dist-mingw WIN32PATH=dist-win
+      - name: Package
+        run: |
+          cp COPYING dist-win/GPL-3.0.txt
+          cd dist-win && zip -qr ../scummvm-remaster-$GAME_ID-win64.zip .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: win64
+          path: scummvm-remaster-*-win64.zip
+
+  macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Packages
+        run: brew install sdl2 libpng jpeg-turbo libogg libvorbis flac freetype
+      - name: Build
+        run: |
+          ./configure $CONFIG --enable-engine=$ENGINE
+          make -j$(sysctl -n hw.ncpu)
+          make bundle || (echo "static bundle failed, packaging the dynamic build" && mkdir -p ScummVM.app/Contents/MacOS && cp scummvm ScummVM.app/Contents/MacOS/)
+      - name: Package
+        run: |
+          cp COPYING GPL-3.0.txt
+          zip -qry scummvm-remaster-$GAME_ID-macos.zip ScummVM.app GPL-3.0.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: scummvm-remaster-*-macos.zip
+
+  web:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build (Emscripten, via ScummVM's own script)
+        run: dists/emscripten/build.sh build $CONFIG --enable-engine=$ENGINE
+      - name: Package
+        run: |
+          cp COPYING build-emscripten/GPL-3.0.txt
+          cd build-emscripten && zip -qr ../scummvm-remaster-$GAME_ID-web.zip .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web
+          path: scummvm-remaster-*-web.zip
+
+  android:
+    runs-on: ubuntu-24.04
+    env:
+      NDK_VERSION: 23.2.8568313   # must match ndkVersion in dists/android/build.gradle
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: NDK
+        run: |
+          yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager "ndk;$NDK_VERSION" > /dev/null
+          echo "ANDROID_NDK_ROOT=$ANDROID_SDK_ROOT/ndk/$NDK_VERSION" >> $GITHUB_ENV
+      - name: Third-party libraries (png, jpeg, ogg, vorbis)
+        run: bash .github/remaster/android-libs.sh "$PWD/android-libs"
+      - name: Build APK
+        run: |
+          P=$PWD/android-libs
+          ./configure --host=android-arm64-v8a $CONFIG --enable-engine=$ENGINE \
+            --with-png-prefix=$P --with-jpeg-prefix=$P --with-ogg-prefix=$P --with-vorbis-prefix=$P
+          make -j$(nproc)
+          make androiddistdebug
+          find . -name "*.apk" -newer configure -exec cp {} scummvm-remaster-$GAME_ID-android.apk \;
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: scummvm-remaster-*-android.apk
