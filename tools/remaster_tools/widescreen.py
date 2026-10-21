@@ -158,6 +158,7 @@ def extend_inpaint(orig: Image.Image, hd: Image.Image, left: int, right: int, sc
     model (LaMa works best at the scale the art was drawn), then upscaled with the same
     upscaler as the HD background, with `context` original pixels and a `ramp` blend into
     the HD centre. Black border columns of the original are repainted too. Sharp, not blurred.
+    `upscale(img, k)` defaults to scalers.upscale_rgb (model from REMASTER_MODEL_BG).
     `fill(img, mask)` paints the bands (LaMa, a recipe, or the optional paid outpainting);
     `refine(wide, band_mask, (x0, x1))` reworks them at 1x before upscaling (image quilting).
     left/right are in original pixels; the result is (w + left + right) * scale wide."""
@@ -235,7 +236,7 @@ def check_variant(img, left_px, right_px):
 
 
 def make_extensions(plan_path, hd_dir, out_dir, scale, recipe=None, seeds=(11, 22, 33), lama=None,
-                    quilting=True, sharpen=True, paid_fill=None, recipes=None, only=None):
+                    quilting=True, sharpen=True, paid_fill=None, recipes=None, only=None, model=None):
     """Variants per scene, with the local methods of the reference project first:
       v-lama     LaMa at 1x + upscaler                     (if `lama`)
       v-quilt    LaMa + image quilting from the original   (if `lama` and quilting)
@@ -243,8 +244,12 @@ def make_extensions(plan_path, hd_dir, out_dir, scale, recipe=None, seeds=(11, 2
       v-fal<n>   OPTIONAL paid masked outpainting           (only with `paid_fill`, already approved)
       ai         generative outpainting with ComfyUI        (if a recipe and ComfyUI)
       borders    pillarbox in keeping with the picture
-    Every inventive variant gets band_check + sharpness index; blurred bands are sharpened."""
+    Every inventive variant gets band_check + sharpness index; blurred bands are sharpened.
+    `model` is the upscaler of the bands: the same as the HD backgrounds (default REMASTER_MODEL_BG),
+    so bands and centre share the same texture."""
+    from . import scalers
     fill = load_lama(lama) if isinstance(lama, str) else lama
+    up = (lambda im, k: scalers.upscale_rgb(im, k, model=model, kind="bg"))
     with open(plan_path, encoding="utf-8") as f:
         plan = json.load(f)
     geo = plan["geometry"]
@@ -283,19 +288,20 @@ def make_extensions(plan_path, hd_dir, out_dir, scale, recipe=None, seeds=(11, 2
                 v["unsharp"] = info
             s["variants"].append(v)
         if inventable and fill is not None:
-            save("v-lama", extend_inpaint(orig, img, lw, rw, scale, fill), "inpaint")
+            save("v-lama", extend_inpaint(orig, img, lw, rw, scale, fill, upscale=up), "inpaint")
             if quilting:
-                save("v-quilt", extend_inpaint(orig, img, lw, rw, scale, fill,
+                save("v-quilt", extend_inpaint(orig, img, lw, rw, scale, fill, upscale=up,
                                                refine=lambda w_, m_, b_: bands.quilt(w_, m_, b_)), "quilt")
         if inventable and s["scene"] in recipes:
             r = dict(recipes[s["scene"]])
             kind = r.pop("kind")
-            save(f"v-{kind}", extend_inpaint(orig, img, lw, rw, scale, _recipe_fill(kind, **r)), f"recipe-{kind}")
+            save(f"v-{kind}", extend_inpaint(orig, img, lw, rw, scale, _recipe_fill(kind, **r), upscale=up),
+                 f"recipe-{kind}")
         if inventable and paid_fill is not None:
             k = 1  # every paid attempt kept under its own name: v-fal1, v-fal2
             while os.path.exists(os.path.join(out_dir, f"{s['scene']}.v-fal{k}.png")):
                 k += 1
-            save(f"v-fal{k}", extend_inpaint(orig, img, lw, rw, scale, paid_fill), "fal")
+            save(f"v-fal{k}", extend_inpaint(orig, img, lw, rw, scale, paid_fill, upscale=up), "fal")
         n = 0
         for kind, seed, im in extend(img, left_px, right_px, use_recipe, seeds):
             if kind == "ai":

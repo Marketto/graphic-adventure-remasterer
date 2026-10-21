@@ -33,6 +33,9 @@ remaster/
                            ne mette una copia anche accanto all'eseguibile
   hint/<lang>.txt          aiuti in gioco (tasto H), formato in tools/remaster_tools/hints.py [hook per motore]
   theme/<gioco>.zip        tema GUI di ScummVM nello stile del gioco (stesso commit del fork)
+  video/<nome>.mkv         filmato rimasterizzato (H.264, fps e durata originali, audio originale);
+                           <nome> = file originale in minuscolo senza estensione; `.ogv` (Theora)
+                           se il fork usa il decoder Theora di ScummVM; senza file: originale [hook per motore]
   gfx/inbetween/<key>.png  frame intermedi delle animazioni                       [riservato]
   fonts/<font>.<lang>.dat  atlante per lingue oltre la codepage del gioco          [riservato]
 ```
@@ -90,7 +93,7 @@ Per alfabeti oltre i 256 codici è previsto `fonts/<font>.<lang>.dat` con la cod
 {
   "rac": 1, "game": "<id>-dos-cd", "pack": "1.0.0", "scale": 3,
   "aspect": "16:9", "languages": ["it", "en"],
-  "contents": ["bg", "spr", "fonts", "text", "music", "sfx", "voice"],
+  "contents": ["bg", "spr", "fonts", "text", "music", "sfx", "voice", "video"],
   "recipe": {"file": "recipe.json", "hash": "sha256:..."}
 }
 ```

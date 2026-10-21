@@ -1,0 +1,45 @@
+{
+  "_note": "Esempio inventato. La skill style-bible scrive la versione vera in analysis/style-recipes.json. Le sezioni le legge gfx.load_recipe: 'background' (gfx bg --recipe), 'background_extension' (widescreen extend --recipe), 'sprite' (gfx sprites --recipe --ai, sconsigliato sulle animazioni); 'default' vale per le sezioni mancanti. Le chiavi sono quelle di comfy.py (nodi standard di ComfyUI); i nomi dei file come appaiono nelle cartelle models/ di ComfyUI. Il seme si passa con --seed. L'upscaler NON sta nella ricetta: si sceglie con --model o REMASTER_MODEL_BG / REMASTER_MODEL_SPR. Le chiavi che iniziano con '_' sono commenti.",
+  "background": {
+    "checkpoint": "sdxl_base_1.0.safetensors",
+    "lora": "game_style_lora.safetensors",
+    "lora_strength": 0.8,
+    "controlnet": "controlnet_sdxl_tile.safetensors",
+    "controlnet_strength": 0.75,
+    "prompt": "hand-painted 1990s point-and-click adventure background, same composition, crisp painted details, original color palette, soft gouache texture, game_style",
+    "negative": "photorealistic, 3d render, text, watermark, signature, extra people, modern objects, bloom, lens flare, oversharpened",
+    "denoise": 0.28,
+    "steps": 28,
+    "cfg": 5.5,
+    "sampler": "dpmpp_2m",
+    "scheduler": "karras",
+    "color_lock_radius": 2.0
+  },
+  "background_extension": {
+    "checkpoint": "sdxl_inpainting_0.1.safetensors",
+    "lora": "game_style_lora.safetensors",
+    "lora_strength": 0.85,
+    "prompt": "continuation of the same hand-painted 1990s adventure game scene, matching perspective, horizon and lighting, finished painting in full color, not a sketch, no characters, no doors, no readable text, game_style",
+    "negative": "photorealistic, sketch, line art, white paper, people, characters, signs with text, signature, logo, doors, seams, frame, border",
+    "steps": 32,
+    "cfg": 6.0,
+    "sampler": "dpmpp_2m",
+    "scheduler": "karras",
+    "feathering": 24
+  },
+  "sprite": {
+    "_avviso": "Solo per pochi fotogrammi statici approvati: sulle animazioni l'img2img per fotogramma sfarfalla.",
+    "checkpoint": "sdxl_base_1.0.safetensors",
+    "lora": "game_style_lora.safetensors",
+    "lora_strength": 0.7,
+    "controlnet": "controlnet_sdxl_tile.safetensors",
+    "controlnet_strength": 0.9,
+    "prompt": "clean hand-drawn cartoon character from a 1990s adventure game, identical pose and silhouette, flat cel shading, game_style",
+    "negative": "different pose, extra limbs, realistic face, real person likeness, background",
+    "denoise": 0.18,
+    "steps": 24,
+    "cfg": 5.0,
+    "sampler": "dpmpp_2m",
+    "scheduler": "karras"
+  }
+}

@@ -169,7 +169,7 @@ Subagente `build-engineer` con skill `engine-integration`:
    originale, 2-3 varianti da far scegliere.
 
 ## Fase 3 — Asset (in parallelo dove possibile)
-- `graphics-artist` → skill `hd-graphics` (fondali, sprite, UI, font HD);
+- `graphics-artist` → skill `hd-graphics` (fondali, sprite, UI, font HD, filmati);
 - `widescreen-planner` → skill `widescreen` (estensioni; **cancello**: galleria di conferma);
 - `localizer` → skill `localization` (testi corretti, traduzioni, font con glifi);
 - `audio-engineer` → skill `audio-remaster` (fase 1: normalizzazione per gruppo; fase 2: mix);

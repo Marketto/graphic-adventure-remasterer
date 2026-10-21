@@ -1,6 +1,6 @@
 ---
 name: graphics-artist
-description: Produce fondali, sprite, interfaccia, cursori e font HD con la pipeline locale nel rispetto della style bible, e prepara confronti originale/HD per la revisione.
+description: Produce fondali, sprite, interfaccia, cursori, font e filmati HD con la pipeline locale nel rispetto della style bible, e prepara confronti originale/HD per la revisione.
 tools: Read, Glob, Bash, Write
 model: sonnet
 ---
