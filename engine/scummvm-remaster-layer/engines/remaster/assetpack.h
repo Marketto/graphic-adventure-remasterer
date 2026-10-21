@@ -37,7 +37,7 @@ struct WideInfo {
 	int left = 0, right = 0;		///< pixels added on each side, at the original scale
 	bool clampCamera = false;		///< scrolling scene: show more of the existing background
 	bool pillarbox = false;			///< keep 4:3, black bars
-	bool hasImage = false;			///< <scene>.wide.png exists
+	bool hasImage = false;			///< <scene>.wide.png (or its localized version) exists
 };
 
 struct SpriteEntry {
@@ -71,6 +71,14 @@ public:
 	 */
 	Graphics::Surface *loadImage(const Common::String &relPathNoExt) const;
 
+	/** Language of the localized backgrounds (painted texts translated), empty for none */
+	void setLanguage(const Common::String &lang) { _lang = lang; }
+	/**
+	 * Background picture of a scene without extension: gfx/bg/<scene>.<lang>[.wide]
+	 * when present, else gfx/bg/<scene>[.wide]; empty when there is none.
+	 */
+	Common::String backgroundPath(const Common::String &scene, bool wide = false) const;
+
 	/** HD background of a scene; 'scale' receives the integer factor of the picture. */
 	Graphics::Surface *loadBackground(const Common::String &scene, int origW, int origH, int &scale) const;
 	WideInfo wideInfo(const Common::String &scene) const;
@@ -94,12 +102,14 @@ private:
 	int _scale;
 	int _spriteScale;
 	Common::String _gameId;
+	Common::String _lang;
 	Common::FSNode _root;
 	Common::HashMap<uint32, SpriteEntry> _sprites;
 	Common::Array<byte> _spritePalettes;
 	Common::HashMap<uint32, Common::String> _texts;
 
 	Common::FSNode node(const Common::String &relPath) const;
+	bool hasImage(const Common::String &relPathNoExt) const;
 	void loadManifest();
 	void loadSpriteIndex();
 };

@@ -96,6 +96,7 @@ Layer::Layer(const Desc &desc, AssetPack *pack, int scale, const Graphics::Pixel
 		_lang = ConfMan.get("remaster_language");
 	if (!_lang.empty())
 		_pack->loadTexts(_lang);
+	_pack->setLanguage(_lang);
 
 	if (ConfMan.hasKey("remaster_dump"))
 		_dumpDir = ConfMan.get("remaster_dump");

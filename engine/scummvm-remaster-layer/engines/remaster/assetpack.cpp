@@ -140,9 +140,26 @@ static Common::String sceneFile(const Common::String &scene) {
 	return "gfx/bg/" + s;
 }
 
-Graphics::Surface *AssetPack::loadBackground(const Common::String &scene, int origW, int origH, int &scale) const {
+bool AssetPack::hasImage(const Common::String &relPathNoExt) const {
+	return exists(relPathNoExt + ".png") || exists(relPathNoExt + ".jpg");
+}
+
+Common::String AssetPack::backgroundPath(const Common::String &scene, bool wide) const {
 	Common::String base = sceneFile(scene);
-	Graphics::Surface *s = loadImage(base);
+	Common::String suffix = wide ? ".wide" : "";
+	// localized background (painted texts translated) first
+	if (!_lang.empty() && hasImage(base + "." + _lang + suffix))
+		return base + "." + _lang + suffix;
+	if (hasImage(base + suffix))
+		return base + suffix;
+	return Common::String();
+}
+
+Graphics::Surface *AssetPack::loadBackground(const Common::String &scene, int origW, int origH, int &scale) const {
+	Common::String path = backgroundPath(scene);
+	if (path.empty())
+		return nullptr;
+	Graphics::Surface *s = loadImage(path);
 	if (!s)
 		return nullptr;
 	if (origW <= 0 || origH <= 0 || s->w % origW || s->h % origH || s->w / origW != s->h / origH) {
@@ -175,12 +192,13 @@ WideInfo AssetPack::wideInfo(const Common::String &scene) const {
 			wi.pillarbox = true;
 	}
 	delete v;
-	wi.hasImage = exists(sceneFile(scene) + ".wide.png") || exists(sceneFile(scene) + ".wide.jpg");
+	wi.hasImage = !backgroundPath(scene, true).empty();
 	return wi;
 }
 
 Graphics::Surface *AssetPack::loadWideBackground(const Common::String &scene) const {
-	return loadImage(sceneFile(scene) + ".wide");
+	Common::String path = backgroundPath(scene, true);
+	return path.empty() ? nullptr : loadImage(path);
 }
 
 void AssetPack::loadSpriteIndex() {

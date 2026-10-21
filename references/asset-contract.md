@@ -16,6 +16,10 @@ remaster/
   gfx/bg/<scene>.png|jpg   fondali HD (multiplo intero dell'originale)
   gfx/bg/<scene>.wide.json 16:9: {"left","right" (px a scala originale), "camera": "clamp"|"center"}
   gfx/bg/<scene>.wide.png  fondale esteso (stessa scala del fondale HD); senza: bande nere
+  gfx/bg/<scene>.<lang>.png|jpg       fondale localizzato (testi dipinti tradotti): per la
+                           lingua del Layer vince su <scene>.png; se manca si usa quello normale
+  gfx/bg/<scene>.<lang>.wide.png|jpg  idem per il fondale esteso (la geometria resta in
+                           <scene>.wide.json, unica per tutte le lingue)
   gfx/spr/index.dat        indice sprite (formato RSPR, sotto)
   gfx/spr/<key>.png|jpg    frame HD, key = frameKey
   fonts/<font>.dat|png     atlante font HD (formato RFNT, sotto)
@@ -43,7 +47,9 @@ remaster/
   la chiave. Esadecimale minuscolo a 8 cifre.
 - **scene** (fondali): definita dal motore, di solito `<parte>/<nome risorsa>`. Nei nomi
   dei file `/` e `\\` diventano `_` (`part1/bg/room` → `gfx/bg/part1_bg_room.png`): il dump
-  del Layer, gli strumenti e `AssetPack` usano la stessa regola.
+  del Layer, gli strumenti e `AssetPack` usano la stessa regola. Il fondale localizzato aggiunge
+  la lingua dopo il nome (`gfx/bg/part1_bg_room.it.png`, `gfx/bg/part1_bg_room.it.wide.png`);
+  la lingua è quella del Layer (`remaster_language`, altrimenti la lingua di ScummVM).
 - Le voci marcate `[hook per motore]` le legge il codice del singolo motore,
   non il Layer comune; quelle `[riservato]` non sono ancora implementate.
 

@@ -78,8 +78,8 @@ voci, DeepFilterNet per il restauro del parlato originale.
 ## Stato delle verifiche
 - `tools/`: test automatici su dati sintetici (`python -m pytest tools/tests`), tutti verdi; un
   test controlla anche che skill, agenti e documenti citino solo comandi, opzioni e file esistenti.
-- Remaster Layer: si applica su ScummVM `5d13ee16`, compila, collega, 410/410 test di `make test`
-  verdi (4 nuovi: chiavi, composizione, 16:9/mouse, scorrimento sub-pixel).
+- Remaster Layer: si applica su ScummVM `5d13ee16`, compila, collega, 411/411 test di `make test`
+  verdi (5 nuovi: chiavi, composizione, 16:9/mouse, scorrimento sub-pixel, fondali localizzati).
 - Build Linux in modalità release verificata; Windows, macOS, Web e Android da provare al primo
   giro di CI.
 - Non ancora provati con questo codice su un gioco vero: generazione grafica, ElevenLabs via API,

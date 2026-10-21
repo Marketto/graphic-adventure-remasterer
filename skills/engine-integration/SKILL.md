@@ -122,7 +122,7 @@ da un punto in cui la patch può sostituirlo, senza toccare i file originali:
 | testi (fumetti, risposte, etichette, menu, titoli) | `Layer::text()` prima del disegno | `text/<lang>.tsv` |
 | voci | `Layer::playVoice()` quando la battuta appare; attesa dello script legata alla voce | `voice/<lang>/<textKey>.ogg` |
 | fondali, sprite, cursori, interfaccia | `setBackground`, `beginSprite`/`mark`, copie con `clearArea` | `gfx/bg`, `gfx/spr` |
-| testi dentro le immagini | fondale localizzato (da aggiungere ad `AssetPack`: oggi non letto) | `gfx/bg/<scena>.<lang>.png` [riservato] |
+| testi dentro le immagini | fondale localizzato: `setBackground` lo sceglie da solo per la lingua del Layer, altrimenti il fondale normale | `gfx/bg/<scena>.<lang>.png`, `gfx/bg/<scena>.<lang>.wide.png` |
 | font | `addText` con atlante HD | `fonts/` |
 | musica ed effetti | hook nel driver audio del motore | `music/`, `sfx/` |
 | manuale e aiuti | lettori generici nel motore del gioco | `manual/`, `hint/` |
