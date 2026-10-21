@@ -98,8 +98,9 @@ def _tts(api_key, voice_id, text, model, settings, lang, previous_text=None, nex
         return r.read()
 
 
-def generate(script_path, cast_path, out_dir, lang, api_key=None, limit=None, dry_run=False):
-    """Generate missing lines only (never regenerates an existing file)."""
+def generate(script_path, cast_path, out_dir, lang, api_key=None, limit=None, dry_run=False, lufs=None):
+    """Generate missing lines only (never regenerates an existing file). lufs: level of the
+    `voice` group in the mix (default audio.MIX["voice"])."""
     api_key = api_key or os.environ.get("ELEVENLABS_API_KEY")
     with open(cast_path, encoding="utf-8") as f:
         cast = json.load(f)
@@ -137,9 +138,31 @@ def generate(script_path, cast_path, out_dir, lang, api_key=None, limit=None, dr
                 return {"generated": done, "stopped_at": r["key"], "error": str(e)[:300]}
             with open(mp3_path, "wb") as f:
                 f.write(mp3)
-        to_ogg(mp3_path, os.path.join(out_dir, r["key"] + ".ogg"), pad=pause_after(r["text"]), filt=c.get("filter") or c.get("filtro"))
+        to_ogg(mp3_path, os.path.join(out_dir, r["key"] + ".ogg"), lufs=lufs, pad=pause_after(r["text"]),
+               filt=c.get("filter") or c.get("filtro"))
         done += 1
     return {"generated": done}
+
+
+def reencode(script_path, cast_path, out_dir, lufs=None):
+    """Re-encode every line from the MP3 kept in <out_dir>/originali (no paid call), e.g. after
+    the speech level of the mix changed."""
+    with open(cast_path, encoding="utf-8") as f:
+        cast = json.load(f)
+    cast = cast.get("voci", cast)
+    with open(script_path, encoding="utf-8", newline="") as f:
+        rows = list(csv.DictReader(f, delimiter="\t"))
+    done, missing = 0, []
+    for r in rows:
+        mp3 = os.path.join(out_dir, "originali", r["key"] + ".mp3")
+        if not os.path.exists(mp3):
+            missing.append(r["key"])
+            continue
+        c = cast.get(r.get("speaker", ""), {})
+        to_ogg(mp3, os.path.join(out_dir, r["key"] + ".ogg"), lufs=lufs, pad=pause_after(r["text"]),
+               filt=c.get("filter") or c.get("filtro"))
+        done += 1
+    return {"reencoded": done, "without_mp3": len(missing)}
 
 
 DEFAULT_MODEL = "eleven_v4"

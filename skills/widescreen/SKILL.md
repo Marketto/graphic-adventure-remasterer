@@ -80,14 +80,17 @@ mai. Se sì, dopo il metodo locale e solo per le scene in cui le varianti locali
    (o `--scenes N`): immagini e dollari nel caso peggiore (2 tentativi a scena) e in quello
    probabile; verifica il prezzo attuale sul sito;
 2. **approvazione esplicita** dell'utente con quel numero, registrata nelle decisioni;
-3. `rstool.py widescreen extend ... --fal --approved-images N --only <scene>` (serve `FAL_KEY`):
+3. `rstool.py widescreen extend ... --fal --approved-images N --only <scene>` (servono `FAL_KEY` e
+   il progetto con `graphics.widescreen.fal_ai` vero; N è il totale approvato per il lotto,
+   contato su tutte le esecuzioni dal registro `fal-spesa.jsonl`; le varianti locali già fatte
+   restano nella galleria e ogni tentativo ha il suo nome, `v-fal1`, `v-fal2`):
    FLUX.1 Fill pro con maschera (il centro non viene ridipinto), tela a 1,5x dell'originale,
    `sync_mode`, prompt "fondale dipinto, finito, a colori; not a sketch, no people, no text, no
    signature, no logos" più una frase per le scene buie. Il conteggio si ferma al budget
    approvato e la spesa è registrata in `fal-spesa.jsonl`; mai ripetere da soli una chiamata;
    al massimo 2 tentativi per scena, poi si torna al metodo locale. Da evitare i modelli che
    modificano l'intera immagine (spostano l'inquadratura).
-La variante `v-fal` entra nella stessa galleria delle altre: decide l'utente.
+Le varianti `v-fal<n>` entrano nella stessa galleria delle altre: decide l'utente.
 
 **3. Ritocchi** (per qualunque metodo): correggi ciò che i modelli inventano: **lettere di
 insegne tagliate** (il testo giusto viene dai dati del gioco, mai dal modello), **firme negli
@@ -103,7 +106,7 @@ bordo); le zone cliccabili che toccano il bordo valgono anche nella banda.
 ## Cancello di conferma
 `rstool.py review gallery --widescreen analysis/widescreen-plan.json --out review/widescreen.html`
 genera una pagina con le scene **numerate** (originale e varianti affiancate), scelta per
-scena (`v-quilt`, `v-lama`, ricette, `v-fal`, "bordi", 4:3, "rifai") con l'esito dei controlli,
+scena (`v-quilt`, `v-lama`, ricette, `v-fal1`, "bordi", 4:3, "rifai") con l'esito dei controlli,
 ed esportazione delle decisioni in JSON. Dal telefono
 l'utente può anche rispondere solo con i numeri da scartare ("scarta 4, 17, 23"). Pubblicala come artifact o
 mandala come file; poi importa le scelte con `rstool.py widescreen apply decisions.json`.

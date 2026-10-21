@@ -123,6 +123,7 @@ def missing_answers(data):
         ("audio.enabled", "miglioramento audio"),
         ("voice.enabled", "doppiaggio"),
         ("extras.manual", "manuale e aiuti in gioco"),
+        ("extras.hints", "manuale e aiuti in gioco"),
         ("paths.game_files", "file di gioco"),
     ]
     out = []
@@ -134,7 +135,8 @@ def missing_answers(data):
         if v is None or v == []:
             if key == "languages.requested" and data["languages"].get("confirmed"):
                 continue
-            out.append(label)
+            if label not in out:
+                out.append(label)
     g = data.get("graphics", {})
     if g.get("enabled") and g.get("widescreen", {}).get("enabled") is None:
         out.insert(out.index("lingue") if "lingue" in out else len(out), "formato 16:9")

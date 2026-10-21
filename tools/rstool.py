@@ -88,8 +88,9 @@ def main(argv=None):
     x.add_argument("original"); x.add_argument("remaster"); x.add_argument("--tolerance", type=float, default=0.03)
     x.set_defaults(fn=lambda a: out(timing.compare(_json(a.original), _json(a.remaster), a.tolerance)))
     x = sg.add_parser("controls", help="fluidità di mouse e tasti dal log del driver (inputlog)")
-    x.add_argument("log")
-    x.set_defaults(fn=lambda a: out(controls.analyze(a.log)))
+    x.add_argument("log"); x.add_argument("--continuous", nargs="*", default=list(controls.CONTINUOUS),
+                                          help="azioni che possono ripetersi a tasto premuto (scorrimento, camminata)")
+    x.set_defaults(fn=lambda a: out(controls.analyze(a.log, tuple(a.continuous))))
 
     s = g.add_parser("key", help="chiavi RAC")
     sg = s.add_subparsers(dest="action", required=True)
@@ -220,18 +221,23 @@ def main(argv=None):
     x.add_argument("group"); x.add_argument("paths", nargs="+"); x.add_argument("--out", default="analysis/audio-norm.json")
     x.add_argument("--reference", type=float, default=audio.REFERENCE_LUFS); x.add_argument("--policy", choices=["file", "group"])
     x.add_argument("--root", help="cartella di partenza per i nomi (sottocartelle mantenute)")
+    x.add_argument("--declip", nargs="*", default=[], help="nomi (o parti di nomi) delle tracce già saturate nell'originale")
+    x.add_argument("--loops", help='JSON {nome: [inizio, lunghezza] in campioni}: punti di loop da conservare')
     x.set_defaults(fn=lambda a: out({k: v for k, v in audio.normalize_group(a.group, a.paths, a.out, a.reference, a.policy,
-                                                                          root=a.root).items() if k != "files"}))
+                                                                          root=a.root, declip=a.declip,
+                                                                          loops=_json(a.loops) if a.loops else None).items()
+                                     if k != "files"}))
     x = sg.add_parser("mix", help="fase 2: livelli tra i gruppi e codifica unica dei file")
     x.add_argument("plan", nargs="?", default="analysis/audio-norm.json"); x.add_argument("--mix", help="audio/mix.json")
     x.add_argument("--out", default="remaster"); x.add_argument("--groups", nargs="*"); x.add_argument("--dry-run", action="store_true")
-    x.set_defaults(fn=lambda a: out(audio.apply_mix(a.plan, a.out, a.mix, a.groups, a.dry_run)))
+    # without --mix: audio.mix of remaster.json, then the defaults
+    x.set_defaults(fn=lambda a: out(audio.apply_mix(a.plan, a.out, _mix_source(a), a.groups, a.dry_run)))
     x = sg.add_parser("mix-preview", help="prova d'ascolto: musica + effetto + battuta coi guadagni del mix")
     x.add_argument("--voice"); x.add_argument("--music"); x.add_argument("--sfx"); x.add_argument("--mix")
     x.add_argument("--plan", default="analysis/audio-norm.json"); x.add_argument("--out", default="review/mix.ogg")
     x.add_argument("--duration", type=float, default=12.0)
     x.add_argument("--music-offsets", type=float, nargs="+", default=[0.0], help="varianti della musica in dB, es. 0 -3 3")
-    x.set_defaults(fn=lambda a: out(audio.mix_preview(a.out, a.voice, a.music, a.sfx, a.mix, a.plan, a.duration,
+    x.set_defaults(fn=lambda a: out(audio.mix_preview(a.out, a.voice, a.music, a.sfx, _mix_source(a), a.plan, a.duration,
                                                       tuple(a.music_offsets))))
     x = sg.add_parser("loudness"); x.add_argument("files", nargs="+")
     x.set_defaults(fn=lambda a: out({f: audio.loudness(f) for f in a.files}))
@@ -247,7 +253,13 @@ def main(argv=None):
     x.set_defaults(fn=lambda a: out(voice.script(a.catalog, a.lang, a.out, a.protagonist)))
     x = sg.add_parser("generate"); x.add_argument("script"); x.add_argument("--cast", required=True); x.add_argument("--out", required=True)
     x.add_argument("--lang", required=True); x.add_argument("--limit", type=int); x.add_argument("--dry-run", action="store_true")
-    x.set_defaults(fn=lambda a: out(voice.generate(a.script, a.cast, a.out, a.lang, limit=a.limit, dry_run=a.dry_run)))
+    x.add_argument("--mix", help="audio/mix.json (default: audio.mix del progetto)")
+    x.set_defaults(fn=lambda a: out(voice.generate(a.script, a.cast, a.out, a.lang, limit=a.limit, dry_run=a.dry_run,
+                                                   lufs=audio.load_mix(_mix_source(a))[0]["voice"])))
+    x = sg.add_parser("reencode", help="ricodifica dalle MP3 conservate (nessuna spesa), es. dopo un cambio del mix")
+    x.add_argument("script"); x.add_argument("--cast", required=True); x.add_argument("--out", required=True)
+    x.add_argument("--mix", help="audio/mix.json (default: audio.mix del progetto)")
+    x.set_defaults(fn=lambda a: out(voice.reencode(a.script, a.cast, a.out, audio.load_mix(_mix_source(a))[0]["voice"])))
     x = sg.add_parser("check"); x.add_argument("script"); x.add_argument("dir")
     x.set_defaults(fn=lambda a: out(voice.check(a.script, a.dir)))
     x = sg.add_parser("transcripts", help="confronta le trascrizioni automatiche ({chiave: testo}) col copione")
@@ -258,8 +270,7 @@ def main(argv=None):
     sg = s.add_subparsers(dest="action", required=True)
     x = sg.add_parser("palette", help="ruoli di colore proposti da uno screenshot dell'interfaccia originale")
     x.add_argument("screenshot"); x.add_argument("--out", default="analysis/ui-palette.json")
-    x.set_defaults(fn=lambda a: out({"roles": theme.propose_palette(a.screenshot),
-                                     "file": theme.save_roles(theme.propose_palette(a.screenshot), a.out)}))
+    x.set_defaults(fn=cmd_ui_palette)
     x = sg.add_parser("theme", help="tema GUI di ScummVM ricolorato (stesso commit del fork)")
     x.add_argument("--base", required=True, help="<scummvm>/gui/themes/scummremastered")
     x.add_argument("--roles", required=True); x.add_argument("--name", required=True)
@@ -320,17 +331,34 @@ def _json(path):
         return json.load(f)
 
 
+def _mix_source(a):
+    """--mix file, else audio.mix of remaster.json, else the defaults of audio.MIX."""
+    if getattr(a, "mix", None):
+        return a.mix
+    data = project.load(a.workdir)
+    return (data or {}).get("audio", {}).get("mix") or None
+
+
+def cmd_ui_palette(a):
+    roles = theme.propose_palette(a.screenshot)
+    out({"roles": roles, "file": theme.save_roles(roles, a.out)})
+
+
 def cmd_ws_extend(a):
     rec = gfx.load_recipe(a.recipe, "background_extension") if a.recipe else None
     paid = None
     if a.fal:
         data = project.load(a.workdir)
+        if data is None:
+            sys.exit("fal.ai richiede il progetto (remaster.json, --workdir) con graphics.widescreen.fal_ai = true")
         try:
-            chosen = project.get_key(data, "graphics.widescreen.fal_ai") if data is not None else None
+            chosen = project.get_key(data, "graphics.widescreen.fal_ai")
         except KeyError:
             chosen = None
-        if data is not None and chosen is not True:
+        if chosen is not True:
             sys.exit("fal.ai non scelto nell'intervista (graphics.widescreen.fal_ai): chiedi all'utente prima")
+        if not os.environ.get("FAL_KEY"):
+            sys.exit("FAL_KEY non impostata (va nei segreti, mai in chat)")
         if a.approved_images <= 0:
             sys.exit("serve --approved-images N: il numero di immagini approvate dall'utente dopo il preventivo "
                      "(`widescreen fal-estimate`)")

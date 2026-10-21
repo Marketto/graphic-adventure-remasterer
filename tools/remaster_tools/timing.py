@@ -31,6 +31,7 @@ def read_frames(video, fps=None, size=(160, 100), crop=None, start=None, duratio
     vf = []
     if crop:
         vf.append("crop=%d:%d:%d:%d" % (crop[2], crop[3], crop[0], crop[1]))
+    vf.append("fps=%g" % fps)  # constant rate: frame index proportional to time even with dropped frames
     vf.append("scale=%d:%d:flags=area" % size)
     vf.append("format=gray")
     cmd = [exe, "-hide_banner", "-loglevel", "error"]
@@ -39,7 +40,7 @@ def read_frames(video, fps=None, size=(160, 100), crop=None, start=None, duratio
     cmd += ["-i", video]
     if duration is not None:
         cmd += ["-t", str(duration)]
-    cmd += ["-vf", ",".join(vf), "-vsync", "passthrough", "-f", "rawvideo", "-"]
+    cmd += ["-vf", ",".join(vf), "-f", "rawvideo", "-"]
     raw = subprocess.run(cmd, capture_output=True, check=True).stdout
     n = len(raw) // (size[0] * size[1])
     return np.frombuffer(raw[:n * size[0] * size[1]], np.uint8).reshape(n, size[1], size[0]), fps

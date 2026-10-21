@@ -85,9 +85,10 @@ def pixel_aspect(platform, width, height, year=None, art=None):
         if year < 1987 and plat == "dos":
             reasons.append("prima della VGA: CGA/EGA, controlla il modo grafico effettivo")
     if art == "digitized" and stretch != 1.0:
-        reasons.append("arte digitalizzata o renderizzata a pixel quadrati: sul monitor dell'epoca appariva "
-                       "già allungata, quindi la versione fedele all'autore è a pixel quadrati")
-        stretch, sure = 1.0, "media"
+        reasons.append("arte digitalizzata o renderizzata: se fu acquisita a pixel quadrati e mostrata così, "
+                       "la versione fedele è quadrata; se fu schiacciata apposta per il monitor 4:3, va "
+                       "allungata. Non si deduce dal tipo di arte: decide il foglio di confronto")
+        sure = "bassa"
     elif art == "pixel" and stretch != 1.0:
         reasons.append("disegnata a mano sul monitor dell'epoca: l'artista vedeva i pixel allungati")
     return {"platform": plat, "mode": [width, height], "stretch": stretch, "confidence": sure,

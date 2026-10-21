@@ -240,7 +240,7 @@ def make_extensions(plan_path, hd_dir, out_dir, scale, recipe=None, seeds=(11, 2
       v-lama     LaMa at 1x + upscaler                     (if `lama`)
       v-quilt    LaMa + image quilting from the original   (if `lama` and quilting)
       v-<recipe> local recipe for the scene (recipes={scene: {"kind": "rows"|"shift", ...}})
-      v-fal      OPTIONAL paid masked outpainting           (only with `paid_fill`, already approved)
+      v-fal<n>   OPTIONAL paid masked outpainting           (only with `paid_fill`, already approved)
       ai         generative outpainting with ComfyUI        (if a recipe and ComfyUI)
       borders    pillarbox in keeping with the picture
     Every inventive variant gets band_check + sharpness index; blurred bands are sharpened."""
@@ -266,6 +266,7 @@ def make_extensions(plan_path, hd_dir, out_dir, scale, recipe=None, seeds=(11, 2
         left_px, right_px = lw * scale, rw * scale
         inventable = s["class"] in ("open-static", "scroll-narrow")
         use_recipe = recipe if inventable else None
+        previous = [v for v in s.get("variants", []) if os.path.exists(os.path.join(out_dir, v["file"]))]
         s["variants"] = []
         orig = _load(s["source"]) if inventable else None
 
@@ -291,7 +292,10 @@ def make_extensions(plan_path, hd_dir, out_dir, scale, recipe=None, seeds=(11, 2
             kind = r.pop("kind")
             save(f"v-{kind}", extend_inpaint(orig, img, lw, rw, scale, _recipe_fill(kind, **r)), f"recipe-{kind}")
         if inventable and paid_fill is not None:
-            save("v-fal", extend_inpaint(orig, img, lw, rw, scale, paid_fill), "fal")
+            k = 1  # every paid attempt kept under its own name: v-fal1, v-fal2
+            while os.path.exists(os.path.join(out_dir, f"{s['scene']}.v-fal{k}.png")):
+                k += 1
+            save(f"v-fal{k}", extend_inpaint(orig, img, lw, rw, scale, paid_fill), "fal")
         n = 0
         for kind, seed, im in extend(img, left_px, right_px, use_recipe, seeds):
             if kind == "ai":
@@ -299,6 +303,11 @@ def make_extensions(plan_path, hd_dir, out_dir, scale, recipe=None, seeds=(11, 2
                 save(f"v{n}", im, "ai", seed)
             else:
                 save("borders", im, "borders")
+        # variants made by earlier runs (e.g. local ones before a fal.ai run) stay in the gallery
+        made = {v["file"] for v in s["variants"]}
+        kept = [v for v in previous if v["file"] not in made]
+        s["variants"] = [v for v in kept + s["variants"] if v["kind"] != "borders"] + \
+            [v for v in s["variants"] + kept if v["kind"] == "borders"][:1]
         s["extend"] = {"left": lw, "right": rw}
     with open(plan_path, "w", encoding="utf-8") as f:
         json.dump(plan, f, indent=2, ensure_ascii=False)
@@ -306,7 +315,7 @@ def make_extensions(plan_path, hd_dir, out_dir, scale, recipe=None, seeds=(11, 2
 
 
 def apply_decisions(plan_path, decisions_path, variants_dir, bg_out_dir):
-    """decisions: {scene: "v-lama"|"v-quilt"|"v-rows"|"v-fal"|"v1"|"borders"|"4:3"|"redo"}"""
+    """decisions: {scene: "v-lama"|"v-quilt"|"v-rows"|"v-fal1"|"v1"|"borders"|"4:3"|"redo"}"""
     with open(plan_path, encoding="utf-8") as f:
         plan = json.load(f)
     with open(decisions_path, encoding="utf-8") as f:

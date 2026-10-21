@@ -79,6 +79,32 @@ def contrast(a, b):
     return round((la + 0.05) / (lb + 0.05), 2)
 
 
+TAG_ATTRS = r"((?:\s+[\w]+\s*=\s*'[^']*')*)"  # attributes, quoted values may contain '>'
+
+
+def set_font(stx, fname, skip_ids=("console",)):
+    """Use `fname` for the Latin languages in every text style (not the monospaced console):
+    replaces the scalable file of the <language id = '*'> fallback, or adds scalable_file to a
+    <font> without one. Quoted attribute values may contain '>' (resolution = 'y>=H')."""
+    count = 0
+
+    def one(m):
+        nonlocal count
+        attrs, close, body = m.group(1), m.group(2), m.group(3) or ""
+        ident = re.search(r"\bid\s*=\s*'([^']*)'", attrs)
+        if ident and ident.group(1) in skip_ids:
+            return m.group(0)
+        new_body, k = re.subn(r"(<language\s+id\s*=\s*'\*'\s+scalable_file\s*=\s*')[^']*(')",
+                              lambda mm: f"{mm.group(1)}{fname}{mm.group(2)}", body)
+        if k == 0 and "scalable_file" not in attrs:
+            attrs += f" scalable_file = '{fname}'"
+            k = 1
+        count += 1 if k else 0
+        return f"<font{attrs}{close}{new_body}" + ("</font>" if close.strip() == ">" else "")
+    stx = re.sub(r"<font" + TAG_ATTRS + r"\s*(/>|>)((?<=>)(?<!/>).*?(?=</font>))?(?:</font>)?", one, stx, flags=re.S)
+    return stx, count
+
+
 def build(base_theme_dir, roles, out_zip, name, font_ttf=None, logo=None, colors=None):
     """base_theme_dir: e.g. <scummvm>/gui/themes/scummremastered (same commit as the fork).
     roles: {role: "#rrggbb"} (see ROLES); colors: {stx colour name: "#rrggbb"} for fine tuning.
@@ -125,11 +151,14 @@ def build(base_theme_dir, roles, out_zip, name, font_ttf=None, logo=None, colors
                     return mm.group(0)
                 stx = COLOR.sub(sub, stx)
                 if font_ttf:
-                    fname = os.path.basename(font_ttf)
-                    stx, k = re.subn(r"(<font\s[^>]*?file\s*=\s*'[^']+')(?![^>]*scalable_file)",
-                                     lambda mm: f"{mm.group(1)} scalable_file = '{fname}'", stx)
+                    stx, k = set_font(stx, os.path.basename(font_ttf))
                     report["fonts"] += k
+                if logo:
+                    # the bitmap must win over the bundled SVG logo
+                    stx = re.sub(r"(<bitmap\s+filename\s*=\s*'logo[^']*\.bmp')\s+scalable_file\s*=\s*'[^']*'", r"\1", stx)
                 z.writestr(fn, stx)
+            elif logo and fn.startswith("logo") and fn.endswith(".svg"):
+                continue
             elif logo and fn.startswith("logo") and fn.endswith(".bmp"):
                 with Image.open(p) as orig:
                     size = orig.size

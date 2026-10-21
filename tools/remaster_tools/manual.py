@@ -8,11 +8,12 @@ derived assets (see references/legal-distribution.md).
 
 Markdown subset understood here and by the engine's reader:
   # / ## / ### headings, paragraphs, blank line between blocks, "- " lists, **bold**, *italic*,
-  ![caption](images/file.png) on a line of its own, "| a | b |" tables, `> ` boxed notes.
+  ![caption](img/file.png) on a line of its own (path relative to the .md: manual/img/), "| a | b |" tables, `> ` boxed notes.
 """
 import html
 import os
 import re
+import shutil
 
 BLOCK_IMG = re.compile(r"^!\[([^\]]*)\]\(([^)]+)\)$")
 
@@ -151,7 +152,18 @@ nav ul{{columns:2;padding-left:1.2rem}} a{{color:var(--accent)}}
             f"<style>{css}</style></head><body><main>"
             + (f"<nav><ul>{''.join(toc)}</ul></nav>" if len(toc) > 2 else "")
             + "".join(body) + "</main></body></html>")
-    os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
+    out_dir = os.path.dirname(os.path.abspath(out_path))
+    os.makedirs(out_dir, exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(page)
-    return {"html": out_path, "sections": len(toc)}
+    # images next to the page, same relative paths
+    src_dir = os.path.dirname(os.path.abspath(md_path))
+    copied = 0
+    for k, v in bl:
+        if k == "img":
+            a, b = os.path.join(src_dir, v[1]), os.path.join(out_dir, v[1])
+            if os.path.exists(a) and os.path.abspath(a) != os.path.abspath(b):
+                os.makedirs(os.path.dirname(b), exist_ok=True)
+                shutil.copyfile(a, b)
+                copied += 1
+    return {"html": out_path, "sections": len(toc), "images": copied}

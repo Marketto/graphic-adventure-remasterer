@@ -49,8 +49,11 @@ Formato, condizioni ed esempi: `tools/remaster_tools/hints.py` e la nota
    aiuti si scrivono con parole tue.
 2. **Condizione `fatto`** per ogni obiettivo su flag globali, flag locali di una scena,
    oggetti, contatori, scene viste. Deve essere **monotona**: una volta vera resta vera; un
-   oggetto che poi si consuma va in OR con ciò che si ottiene dopo. Usa i nomi del dump del
-   motore (vocabolario `{flags, items, scenes, counters, local_flags}`).
+   oggetto che poi si consuma va in OR con ciò che si ottiene dopo. Usa i nomi degli script
+   del gioco e scrivili in `analysis/vocabolario.json` (`{flags, items, scenes, counters,
+   local_flags: {scena: [...]}}`): li ricavi dal parser degli script o dai comandi `flags`/`item`/
+   `zones` del driver di test (skill `engine-integration` §1); nessuno strumento della suite lo
+   genera da solo.
 3. **Testi**: `situazione` (dove sei, cosa vuoi), `indizio` (spinta senza spoiler, dice dove
    guardare), `soluzione` (passi precisi). Tono del gioco; i nomi come nel gioco tradotto.
 4. **Lingue**: un file per lingua (`hint/<lang>.txt`) con gli stessi obiettivi, nello stesso

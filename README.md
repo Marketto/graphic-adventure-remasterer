@@ -82,7 +82,9 @@ Xvfb + `xdotool` per le misure automatiche.
   giro di CI.
 - Non ancora provati con questo codice su un gioco vero: generazione grafica, ElevenLabs via API,
   fal.ai via API (il client è provato solo con un servizio finto), classificazione 16:9 (le
-  soglie vanno tarate sul primo gioco), tema GUI dentro ScummVM (provato sul formato dei file).
+  soglie vanno tarate sul primo gioco).
+- Tema GUI: generato dal tema di ScummVM dello stesso commit e caricato nel ScummVM compilato
+  sotto Xvfb, con colori, font e logo sostituiti (schermata verificata).
 - Da implementare nel Layer comune: la scala verticale per i giochi pensati per pixel non
   quadrati (oggi `pixelAspect` cambia solo la geometria 16:9) e i comandi `inputlog`,
   `mousepath`, `keyhold` del driver di test, che vanno scritti nel motore di ogni gioco. Le tecniche in

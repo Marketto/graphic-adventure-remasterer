@@ -77,7 +77,7 @@ def parse_condition(cond):
     expect_alt = False
     for tok in tokens:
         if tok == "|":
-            if not cur:
+            if not cur or expect_alt:
                 raise ValueError("«|» senza termine prima")
             expect_alt = True
             continue

@@ -57,6 +57,18 @@ def test_audio_groups_then_mix(tmp_path):
         json.dump({"music": -28}, f)
     gains = audio.mix_gains(json.load(open(plan)), *audio.load_mix(str(tmp_path / "mix.json")))
     assert gains["music"]["target"] == -28 and gains["music"]["offset"] == -5
+    assert audio.load_mix({"music": -20})[0]["music"] == -20  # audio.mix of remaster.json
+    # declip and loop points carried from the plan to the encode; silent files untouched
+    p2 = str(tmp_path / "n2.json")
+    audio.normalize_group("music", [str(tmp_path / "mus")], p2, declip=["notte"], loops={"tema.wav": [0, 44100]})
+    info = json.load(open(p2))["music"]["files"]
+    assert {e["name"]: e.get("declip") for e in info}["notte.wav"] is True
+    audio.apply_mix(p2, str(tmp_path / "out2"))
+    tags = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format_tags:stream_tags", "-of", "json",
+                           str(tmp_path / "out2" / "music" / "tema.ogg")], capture_output=True, text=True).stdout
+    assert "LOOPLENGTH" in tags.upper()
+    silent = {"music": {"reference": -23, "policy": "file", "files": [{"src": "x", "name": "x", "lufs": -90, "norm_gain": 67}]}}
+    assert audio.mix_gains(silent)["music"]["files"][0]["gain"] == 0.0
 
 
 @need_ffmpeg
@@ -72,7 +84,8 @@ def test_mix_preview_variants(tmp_path):
 def test_pixel_aspect_depends_on_platform_and_art():
     assert platforms.pixel_aspect("dos", 320, 200, 1992)["stretch"] == 1.2
     assert platforms.pixel_aspect("DOS", 640, 480, 1995)["correct"] is False
-    assert platforms.pixel_aspect("dos", 640, 400, 1995, art="digitized")["stretch"] == 1.0
+    dig = platforms.pixel_aspect("dos", 640, 400, 1995, art="digitized")
+    assert dig["confidence"] == "bassa" and "foglio" in dig["reasons"][-1]  # never decided by the art type alone
     assert platforms.pixel_aspect("windows", 640, 480)["stretch"] == 1.0
     assert platforms.pixel_aspect("amiga", 320, 256)["stretch"] == 1.0
     unknown = platforms.pixel_aspect("console-x", 256, 224)
@@ -139,8 +152,11 @@ def test_controls_smooth_and_problems():
     keys = ["0 in key F8 down", "0.5 act toggle", "500 in key F8 down repeat", "501 act toggle",
             "540 in key F8 down repeat", "600 in key F8 up",
             "1000 in key RIGHT down", "1001 act scroll", "1500 in key RIGHT up"]
-    k = controls.analyze_keys(controls.parse(keys))
-    assert k["presses"] == 2 and len(k["problems"]) == 1 and "F8" in k["problems"][0]
+    k = controls.analyze_keys(controls.parse(keys + ["2000 in key RIGHT down", "2001 act scroll",
+                                                     "2300 in key RIGHT down repeat", "2301 act scroll",
+                                                     "2400 in key RIGHT up"]))
+    assert k["presses"] == 3 and len(k["problems"]) == 1 and "F8" in k["problems"][0]
+    assert any(r["action"] == "scroll" for r in k["repeated_actions"])  # continuous: listed, not flagged
 
 
 # ------------------------------------------------------------------ hints
@@ -166,6 +182,8 @@ def test_hints_validate(tmp_path):
     r = hints.validate([str(tmp_path / "it.txt"), str(tmp_path / "en.txt")])
     assert r["ok"], r
     assert hints.parse_condition("A | B C") == [[(False, "A"), (False, "B")], [(False, "C")]]
+    with pytest.raises(ValueError):
+        hints.parse_condition("A || B")
     bad = HINT_IT.replace("fatto: libro_preso", "fatto: libro_preso |").replace("indizio: Guarda in alto.\n", "")
     (tmp_path / "bad.txt").write_text(bad, encoding="utf-8")
     rb = hints.validate([str(tmp_path / "bad.txt")])["files"][str(tmp_path / "bad.txt")]
@@ -194,6 +212,7 @@ def test_manual_check_and_html(tmp_path):
     Image.new("RGB", (8, 8)).save(tmp_path / "img" / "mappa.png")
     assert manual.check(str(md))["problems"] == []
     r = manual.to_html(str(md), str(tmp_path / "out" / "it.html"), colors={"accent": "#224466"})
+    assert r["images"] == 1 and (tmp_path / "out" / "img" / "mappa.png").exists()
     page = open(r["html"], encoding="utf-8").read()
     assert "<b>F8</b>" in page and "#224466" in page and "<nav>" in page and r["sections"] == 3
 
@@ -206,7 +225,15 @@ def test_theme_recolor(tmp_path):
     (base / "THEMERC").write_text("[SCUMMVM_STX0.9.24:Base:Nessuno]\n%using ../common\n")
     (base / "a.stx").write_text("<palette>\n<color name = 'background'\n rgb = '1, 2, 3'\n/>\n"
                                 "<color name = 'button_idle' rgb = '4, 5, 6'/>\n</palette>\n"
-                                "<fonts><font id = 'text_default' file = 'x.bdf'/></fonts>\n")
+                                "<bitmap filename = 'logo.bmp' scalable_file = 'logo.svg' width = '28' height = '8'/>\n"
+                                "<fonts><font resolution = 'y>=H'\n id = 'text_default'\n file = 'x.bdf'>\n"
+                                "<language id = 'ja' scalable_file = 'jp.otf'/>\n"
+                                "<language id = '*'   scalable_file = 'Sans.ttf'/>\n</font>\n"
+                                "<font id = 'text_normal' file = 'x.bdf'/>\n"
+                                "<font id = 'console' file = 'builtinConsole'>\n"
+                                "<language id = '*' scalable_file = 'Mono.ttf'/>\n</font></fonts>\n")
+    Image.new("RGB", (28, 8)).save(tmp_path / "common" / "logo.bmp")
+    (tmp_path / "common" / "logo.svg").write_text("<svg/>")
     (tmp_path / "common" / "x.bdf").write_text("STARTFONT\n")
     font = tmp_path / "stile.ttf"
     font.write_bytes(b"\0\1\0\0fake")
@@ -218,11 +245,15 @@ def test_theme_recolor(tmp_path):
     Image.fromarray(a).save(ui)
     roles = theme.propose_palette(str(ui))
     assert set(roles) == set(theme.ROLES)
-    r = theme.build(str(base), roles, str(tmp_path / "t.zip"), "Tema di prova", font_ttf=str(font))
+    Image.new("RGB", (40, 20), (200, 30, 30)).save(tmp_path / "logo-gioco.png")
+    r = theme.build(str(base), roles, str(tmp_path / "t.zip"), "Tema di prova", font_ttf=str(font),
+                    logo=str(tmp_path / "logo-gioco.png"))
     z = zipfile.ZipFile(tmp_path / "t.zip")
-    assert "x.bdf" in z.namelist() and "stile.ttf" in z.namelist()
+    assert "x.bdf" in z.namelist() and "stile.ttf" in z.namelist() and "logo.svg" not in z.namelist()
     stx = z.read("a.stx").decode()
-    assert "'1, 2, 3'" not in stx and "scalable_file = 'stile.ttf'" in stx
+    assert "'1, 2, 3'" not in stx and "Sans.ttf" not in stx and "jp.otf" in stx and "Mono.ttf" in stx
+    assert stx.count("'stile.ttf'") == 2 and r["fonts"] == 2  # both text fonts, not the console
+    assert "logo.svg" not in stx
     assert z.read("THEMERC").decode().startswith("[SCUMMVM_STX0.9.24:Tema di prova:")
     assert {"background", "button_idle"} <= set(r["colors_replaced"])
     assert theme.contrast("#000000", "#ffffff") == 21.0
@@ -322,6 +353,10 @@ def test_extensions_local_first_and_fal_only_with_budget(dump, tmp_path):
     assert kinds[:3] == ["inpaint", "quilt", "recipe-rows"] and "fal" in kinds and kinds[-1] == "borders"
     assert all("checks" in v for v in aperta["variants"] if v["kind"] != "borders")
     assert len(calls) == 1 and calls[0]["sync_mode"] is True and budget.used == 1
+    assert "aperta.v-fal1.png" in [v["file"] for v in aperta["variants"]]
+    log = tmp_path / "spesa.jsonl"
+    log.write_text('{"image": 1}\n{"image": 2}\n')
+    assert falai.Budget(2, str(log)).used == 2  # cumulative across runs: nothing left
     with pytest.raises(RuntimeError):
         paid(np.zeros((10, 20, 3), np.uint8), np.ones((10, 20)))  # budget exhausted: no second call
     est = falai.estimate(100)
@@ -361,4 +396,4 @@ def test_cli_new_commands(tmp_path):
     assert run("widescreen", "fal-estimate", "--scenes", "10")["max_usd"] == 1.0
     r = subprocess.run([sys.executable, RSTOOL, "--workdir", str(tmp_path), "widescreen", "extend", "x.json",
                         "--hd", "hd", "--fal"], capture_output=True, text=True)
-    assert r.returncode != 0 and "approved-images" in r.stderr
+    assert r.returncode != 0 and "remaster.json" in r.stderr

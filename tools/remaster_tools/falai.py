@@ -56,12 +56,17 @@ def _fetch_image(url):
 
 
 class Budget:
-    """Counts paid calls against the approved number of images; never retries on its own."""
+    """Counts paid calls against the approved number of images; never retries on its own.
+    With a log, the count is cumulative across runs: `approved_images` is the TOTAL approved
+    for that log (one log per approved batch), not per command."""
 
     def __init__(self, approved_images, log_path=None):
         self.approved = int(approved_images)
         self.used = 0
         self.log_path = log_path
+        if log_path and os.path.exists(log_path):
+            with open(log_path, encoding="utf-8") as f:
+                self.used = sum(1 for line in f if line.strip())
 
     def take(self, what):
         if self.used >= self.approved:

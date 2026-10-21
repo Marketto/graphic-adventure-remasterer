@@ -34,8 +34,9 @@ un livello per gruppo fissa il rapporto tra le tracce. Valori di partenza (banco
 | Musica | -25 LUFS | ~7 dB sotto il parlato: a livelli uguali la musica lo copre |
 Guadagno statico (al massimo ±8 dB, la dinamica non cambia), `adeclip` solo sulle tracce già
 saturate nell'originale, limitatore a 0,89, OGG Vorbis q6; i file limitati sono elencati.
-`audio/mix.json`, per esempio `{"voice": -18, "sfx": -16, "music": -25, "cap": {"sfx": -16}}`,
-sta nel repository privato. **Si decide ascoltando**: `rstool.py audio mix-preview --music <brano>
+I livelli stanno in `remaster.json` (`audio.mix`, usato quando non si passa `--mix`) o in un
+`audio/mix.json` nel repository privato, per esempio `{"voice": -18, "sfx": -16, "music": -25,
+"cap": {"sfx": -16}}`. **Si decide ascoltando**: `rstool.py audio mix-preview --music <brano>
 --sfx <effetto> --voice <battuta> --music-offsets 0 -3 3` produce 2-3 prove (musica di sottofondo,
 un effetto, una battuta) da far sentire all'utente; il valore scelto vale per tutto il gioco.
 Se il gioco non viene doppiato, la musica può salire (es. -20): chiedilo con una prova
@@ -56,9 +57,10 @@ Riconosci il formato (`rstool.py audio scan <cartella>`): MIDI generico, formati
   1989-92 (munt con ROM dell'utente), General MIDI con soundfont di qualità dopo.
   Prepara 2 varianti di un brano e falle ascoltare prima di renderizzare tutto.
 - **Tracce CD** → estrazione dall'immagine dell'utente; per ogni traccia misura la loudness
-  (`rstool.py audio loudness`), segna quelle già saturate (`--declip` in fase 2 su richiesta),
-  poi entrano nel gruppo `music` delle due fasi sopra.
-- **Loop**: mantieni i punti di loop (metadati `LOOPSTART/LOOPLENGTH` nell'OGG).
+  (`rstool.py audio loudness`); quelle già saturate nell'originale si indicano in fase 1
+  (`audio normalize music ... --declip <nomi>`) e ricevono `adeclip` nella codifica della fase 2.
+- **Loop**: mantieni i punti di loop: `audio normalize ... --loops loops.json` (`{nome: [inizio,
+  lunghezza]}` in campioni, o campo `loop` nel piano) → metadati `LOOPSTART/LOOPLENGTH` nell'OGG.
 
 ## Effetti originali
 `rstool.py audio sfx <cartella> --rates analysis/sfx-rates.json --out audio/clean/sfx --lossless`
@@ -84,6 +86,7 @@ la musica riparte dallo stesso punto nel formato originale.
 ## Voci
 Le battute generate (skill `voice-dubbing`) sono il gruppo `voice`: la regola è per file, quindi
 `voice generate` fa fase 1 e 2 in un solo passaggio, dalla MP3 originale (conservata in
-`originali/`) al livello del parlato nel mix. Se quel livello cambia, si ricodifica dalle MP3,
-senza nuove chiamate a pagamento. Le voci originali del gioco, se ci sono, passano per le due fasi
+`originali/`) al livello del parlato nel mix (`loudnorm` per battuta: sul parlato una leggera
+compressione è voluta). Se quel livello cambia: `rstool.py voice reencode <copione> --cast
+<cast> --out <cartella voci>`, dalle MP3, senza nuove chiamate a pagamento. Le voci originali del gioco, se ci sono, passano per le due fasi
 come gli altri gruppi.

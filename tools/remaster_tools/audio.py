@@ -118,9 +118,12 @@ def _percentile(vals, q):
 
 
 def normalize_group(group, paths, out_path=None, reference=REFERENCE_LUFS, policy=None, measure=loudness,
-                    root=None):
+                    root=None, declip=(), loops=None):
     """Stage 1: measure a group and compute the normalization gain of every file (nothing is
-    encoded here). Writes/updates a JSON plan {group: {policy, reference, files: [...]}}."""
+    encoded here). Writes/updates a JSON plan {group: {policy, reference, files: [...]}}.
+    declip: names (or substrings) of tracks already clipped in the original; loops:
+    {name: [start_sample, length_samples]} kept as Vorbis comments. Both can also be edited
+    in the plan afterwards (fields "declip" and "loop" of each file)."""
     if group not in GROUPS and not policy:
         raise ValueError(f"gruppo sconosciuto {group}: usa {', '.join(GROUPS)} o indica --policy")
     policy = policy or GROUPS[group]["policy"]
@@ -142,7 +145,13 @@ def normalize_group(group, paths, out_path=None, reference=REFERENCE_LUFS, polic
         else:
             gain = reference - anchor
         rel = os.path.relpath(f, root) if root else os.path.basename(f)
-        entries.append({"src": f, "name": rel, "lufs": None if l is None else round(l, 2), "norm_gain": round(gain, 2)})
+        e = {"src": f, "name": rel, "lufs": None if l is None else round(l, 2), "norm_gain": round(gain, 2)}
+        if any(d and d in rel for d in declip):
+            e["declip"] = True
+        loop = (loops or {}).get(rel) or (loops or {}).get(os.path.basename(f))
+        if loop:
+            e["loop"] = list(loop)
+        entries.append(e)
     info = {"policy": policy, "reference": reference, "files": entries,
             "measured": {"count": len(vals), "min": min(vals) if vals else None, "max": max(vals) if vals else None,
                          "p90": None if anchor is None else round(anchor, 2)}}
@@ -159,11 +168,15 @@ def normalize_group(group, paths, out_path=None, reference=REFERENCE_LUFS, polic
 
 
 def load_mix(path=None):
-    """Mix file: {"voice": -18, "sfx": -16, "music": -25, "cap": {"sfx": -16}} (LUFS after the mix)."""
+    """Mix: path of a JSON file or a dict {"voice": -18, "sfx": -16, "music": -25, "cap": {"sfx": -16}}
+    (LUFS after the mix), e.g. `audio.mix` of remaster.json."""
     mix, cap = dict(MIX), dict(CAP)
     if path:
-        with open(path, encoding="utf-8") as fh:
-            data = json.load(fh)
+        if isinstance(path, dict):
+            data = json.loads(json.dumps(path))
+        else:
+            with open(path, encoding="utf-8") as fh:
+                data = json.load(fh)
         cap.update(data.pop("cap", {}))
         mix.update({k: float(v) for k, v in data.items() if not k.startswith("_")})
     return mix, cap
@@ -181,9 +194,10 @@ def mix_gains(plan, mix=None, cap=None, max_gain=MAX_GAIN_DB):
         offset = mix[group] - info["reference"]
         rows = []
         for e in info["files"]:
-            g = e["norm_gain"] + offset if e["lufs"] is not None else 0.0
+            silent = e["lufs"] is None or e["lufs"] <= -70
+            g = 0.0 if silent else e["norm_gain"] + offset
             notes = []
-            if e["lufs"] is not None and group in cap and e["lufs"] + g > cap[group]:
+            if not silent and group in cap and e["lufs"] + g > cap[group]:
                 g = cap[group] - e["lufs"]
                 notes.append("cap")
             if abs(g) > max_gain:
@@ -211,7 +225,8 @@ def apply_mix(plan_path, out_dir, mix_path=None, groups=None, dry_run=False, qua
             if e["notes"]:
                 limited.append({"file": e["name"], "group": group, "notes": e["notes"]})
             if not dry_run:
-                encode(e["src"], dst, e["gain"], quality=quality, mono=(group == "voice"))
+                encode(e["src"], dst, e["gain"], declip=bool(e.get("declip")), quality=quality,
+                       loop=e.get("loop"), mono=(group == "voice"))
             written.append(dst)
     return {"mix": mix, "cap": cap, "written": len(written), "limited": limited,
             "groups": {g: {"offset": i["offset"], "target": i["target"]} for g, i in gains.items()}}

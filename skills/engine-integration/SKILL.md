@@ -113,10 +113,11 @@ da un punto in cui la patch può sostituirlo, senza toccare i file originali:
 | testi (fumetti, risposte, etichette, menu, titoli) | `Layer::text()` prima del disegno | `text/<lang>.tsv` |
 | voci | `Layer::playVoice()` quando la battuta appare; attesa dello script legata alla voce | `voice/<lang>/<textKey>.ogg` |
 | fondali, sprite, cursori, interfaccia | `setBackground`, `beginSprite`/`mark`, copie con `clearArea` | `gfx/bg`, `gfx/spr` |
-| testi dentro le immagini | fondale localizzato | `gfx/bg/<scena>.<lang>.png` |
+| testi dentro le immagini | fondale localizzato (da aggiungere ad `AssetPack`: oggi non letto) | `gfx/bg/<scena>.<lang>.png` [riservato] |
 | font | `addText` con atlante HD | `fonts/` |
 | musica ed effetti | hook nel driver audio del motore | `music/`, `sfx/` |
-| correzioni del contenuto | lettori generici (§1d) | `text/dialoghi.tsv`, `hint/`, `manual/` ... |
+| manuale e aiuti | lettori generici nel motore del gioco | `manual/`, `hint/` |
+| altre correzioni del contenuto | lettori generici (§1d) | es. `text/dialoghi.tsv` |
 Verifica (obbligatoria prima degli asset):
 1. `rstool.py assets canary <dump> --out /tmp/canary --lang <lang> [--voices 20]`: pacchetto
    che marca tutto (testi tra «», cornice magenta su fondali e sprite, un bip sulle voci).

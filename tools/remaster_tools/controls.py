@@ -98,7 +98,10 @@ def analyze_cursor(ev, min_hz=50.0, max_latency_ms=34.0, jump_factor=3.0):
     return res
 
 
-def analyze_keys(ev):
+CONTINUOUS = ("scroll", "walk", "move", "cammina", "scorri")
+
+
+def analyze_keys(ev, continuous=CONTINUOUS):
     """Every physical press (down without `repeat` ... up) must trigger each action at most once,
     unless the action is meant to repeat (scrolling, walking): those are listed, not flagged."""
     res = {"presses": 0, "problems": [], "repeated_actions": []}
@@ -120,14 +123,17 @@ def analyze_keys(ev):
         elif e[0] == "act" and press:
             press["acts"][e[2]] = press["acts"].get(e[2], 0) + 1
     for r in res["repeated_actions"]:
+        if r["action"] in continuous:
+            continue  # meant to repeat while the key is held
         res["problems"].append(f"tasto {r['key']} tenuto premuto: «{r['action']}» eseguita {r['times']} volte "
                                f"({r['os_repeats']} ripetizioni del sistema). Per azioni a scatto (toggle, menu, "
                                "inventario, salta battuta) ignora gli eventi con kbdRepeat")
     return res
 
 
-def analyze(path):
+def analyze(path, continuous=CONTINUOUS):
+    """continuous: actions that may repeat while a key is held (listed, not flagged)."""
     ev = parse(path)
     cur = analyze_cursor(ev)
-    keys = analyze_keys(ev)
+    keys = analyze_keys(ev, continuous)
     return {"cursor": cur, "keys": keys, "ok": not cur["problems"] and not keys["problems"]}
