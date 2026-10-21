@@ -93,3 +93,17 @@ def test_spending_cap_and_readme(tmp_path):
     project.set_key(data, "extras.hints", True)
     text = release.readme(data, "recipe", "1.0.0")
     assert "premi H" in text
+
+
+def test_cli_audio_sfx_and_spend_units(tmp_path):
+    import subprocess as sp
+    rst = os.path.join(os.path.dirname(HERE), "rstool.py")
+    (tmp_path / "fx").mkdir()
+    r = sp.run([sys.executable, rst, "audio", "sfx", str(tmp_path / "fx"), "--out", str(tmp_path / "o")],
+               capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    from remaster_tools import project
+    data = project.init("Prova", str(tmp_path))
+    with pytest.raises(ValueError):
+        project.spend(data, "fal.ai", 9, "prova")
+    assert project.spend(data, "fal.ai", 9, "USD")["usd"] == 9

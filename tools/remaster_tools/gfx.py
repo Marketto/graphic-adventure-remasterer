@@ -100,7 +100,15 @@ def batch_backgrounds(src_dir, out_dir, scale=3, recipe_path=None, seed=1234, us
     """Restartable: a scene already made with the same scale, upscaler model and recipe is skipped."""
     os.makedirs(out_dir, exist_ok=True)
     recipe = load_recipe(recipe_path, "background") if recipe_path else None
-    want_model = os.path.basename(scalers.model_for("bg", model) or "") or None
+    model_path = scalers.model_for("bg", model)
+    want_model = os.path.basename(model_path or "") or None
+    # identity of the weights: full path and size (two files with the same name are different)
+    model_id = None
+    if model_path:
+        size = os.path.getsize(model_path) if os.path.exists(model_path) else None
+        model_id = f"{os.path.abspath(model_path)}:{size}"
+    backend_now = scalers.choose_backend("bg", model)[0]
+    ai_now = bool(use_ai and recipe and comfy.available())
     rhash = recipe_hash(recipe) if recipe else None
     report = []
     for name in sorted(os.listdir(src_dir)):
@@ -113,14 +121,15 @@ def batch_backgrounds(src_dir, out_dir, scale=3, recipe_path=None, seed=1234, us
         if resume and os.path.exists(dst) and os.path.exists(dst + ".json"):
             with open(dst + ".json") as f:
                 old = json.load(f)
-            if old.get("scale") == scale and old.get("model") == want_model and old.get("recipe") == rhash:
+            if (old.get("scale") == scale and old.get("model_id") == model_id and old.get("recipe") == rhash
+                    and old.get("upscaler") == backend_now and old.get("img2img") == ai_now):
                 report.append({**old, "skipped": True})
                 continue
         orig, hd, used = remaster_background(os.path.join(src_dir, name), scale, recipe, seed, use_ai, model)
         os.makedirs(os.path.dirname(dst), exist_ok=True)
         hd.save(dst, quality=90, subsampling=0) if fmt == "jpg" else hd.save(dst, optimize=True)
-        meta = {"scene": scene, "scale": scale, "backend": used, "model": want_model, "seed": seed,
-                "recipe": rhash}
+        meta = {"scene": scene, "scale": scale, "backend": used, "model": want_model, "model_id": model_id,
+                "upscaler": backend_now, "img2img": ai_now, "seed": seed, "recipe": rhash}
         with open(dst + ".json", "w") as f:
             json.dump(meta, f)
         q = check_pair(orig, hd)
@@ -130,8 +139,8 @@ def batch_backgrounds(src_dir, out_dir, scale=3, recipe_path=None, seed=1234, us
 
 def soft_alpha(mask: np.ndarray, scale: int) -> np.ndarray:
     """Upscaled alpha from an opaque mask: bilinear coverage + smoothstep (0.3..0.7),
-    clamped at the frame border so cut sprites join without seams (same rule as the engine,
-    which rebuilds the alpha of JPEG sprites this way)."""
+    clamped at the frame border so cut sprites join without seams. Used when there is no
+    silhouette pipeline (generative path); the common Layer takes the alpha from the PNG."""
     h, w = mask.shape
     m = mask.astype(np.float64)
     ys = (np.arange(h * scale) + 0.5) / scale - 0.5
@@ -252,8 +261,8 @@ def _upsample_field(a: np.ndarray, scale: int) -> np.ndarray:
 
 
 def silhouette(mask: np.ndarray, scale: int, sigma=0.65):
-    """HD silhouette = 0.5 level of the original mask blurred with `sigma` (px at 1x; the same
-    field the engine uses for the alpha), computed at the HD scale, plus an antialiased alpha in
+    """HD silhouette = 0.5 level of the original mask blurred with `sigma` (px at 1x; the rule
+    of the reference project's engine, which rebuilt the alpha this way), computed at the HD scale, plus an antialiased alpha in
     [0, 1] (signed distance from the field gradient: about one HD pixel of ramp)."""
     big = np.kron(mask.astype(np.float64), np.ones((scale, scale)))
     field = gaussian(big, sigma * scale)
@@ -358,7 +367,8 @@ def batch_sprites(dump_dir, out_dir, scale=3, recipe_path=None, seed=1234, use_a
                   model=None, ink=True, fmt="png"):
     """Deterministic by default: per-frame generative img2img breaks the coherence of animations
     (thousands of frames can not stay coherent); enable it only for a few static frames, after review.
-    JPEG output keeps the filled colours (q90, 4:4:4); the engine rebuilds the alpha from the original."""
+    PNG keeps the alpha, which the common Layer uses. JPEG (q90, 4:4:4) has no alpha: only for an
+    engine hook that rebuilds it from the original mask (the common Layer does not)."""
     os.makedirs(out_dir, exist_ok=True)
     recipe = load_recipe(recipe_path, "sprite") if recipe_path else None
     done, used = 0, {}

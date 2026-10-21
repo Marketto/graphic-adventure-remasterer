@@ -76,7 +76,10 @@ def probe(path):
 
 
 def extract_frames(src, dst_dir, max_frames=None):
-    """All frames 1:1 (no fps conversion) as RGB PNG 000001.png, 000002.png..."""
+    """All frames 1:1 (no fps conversion) as RGB PNG 000001.png, 000002.png...
+    The folder is emptied first: frames of an earlier run must not leak into this one."""
+    if os.path.isdir(dst_dir):
+        shutil.rmtree(dst_dir)
     os.makedirs(dst_dir, exist_ok=True)
     cmd = [_need("ffmpeg"), "-v", "error", "-y", "-i", src, "-map", "0:v:0", "-fps_mode", "passthrough",
            "-pix_fmt", "rgb24"]
@@ -145,7 +148,7 @@ def _container(out):
     raise ValueError("uscita: .mkv, .mp4 (H.264) oppure .ogv (Theora)")
 
 
-def encode(seq_dir, out, fps, audio_src=None, audio_codec=None, crf=12, preset="slow", pix_fmt="yuv444p",
+def encode(seq_dir, out, fps, audio_src=None, audio_codec=None, crf=12, preset="slow", pix_fmt="yuv420p",
            shortest=False):
     """Numbered PNG sequence -> video at `fps` (string or number, e.g. "15" or "30000/1001")."""
     cont = _container(out)
@@ -153,7 +156,8 @@ def encode(seq_dir, out, fps, audio_src=None, audio_codec=None, crf=12, preset="
     if audio_src:
         cmd += ["-i", audio_src, "-map", "0:v:0", "-map", "1:a:0?"]
     if cont == "ogv":
-        cmd += ["-c:v", "libtheora", "-q:v", "9", "-pix_fmt", "yuv444p" if pix_fmt == "yuv444p" else "yuv420p"]
+        # ScummVM's Theora decoder and most phone/web decoders expect 4:2:0
+        cmd += ["-c:v", "libtheora", "-q:v", "9", "-pix_fmt", "yuv420p", "-vf", "pad=ceil(iw/2)*2:ceil(ih/2)*2"]
     else:
         cmd += ["-c:v", "libx264", "-crf", str(crf), "-preset", preset, "-pix_fmt", pix_fmt]
         if pix_fmt == "yuv420p":  # 4:2:0 needs even dimensions
@@ -169,7 +173,7 @@ def encode(seq_dir, out, fps, audio_src=None, audio_codec=None, crf=12, preset="
     return out
 
 
-def upscale(src, out, scale=3, model=None, fps=None, audio=None, work=None, crf=12, pix_fmt="yuv444p",
+def upscale(src, out, scale=3, model=None, fps=None, audio=None, work=None, crf=12, pix_fmt="yuv420p",
             max_frames=None, keep_work=True, upscale_fn=None, log=None):
     """Video file (or folder of PNG frames + fps) -> upscaled video with the original audio.
 
@@ -203,7 +207,13 @@ def upscale(src, out, scale=3, model=None, fps=None, audio=None, work=None, crf=
             (info["audio"][0]["codec"] if info["audio"] else None)
     if not frames:
         raise ValueError("nessun fotogramma")
-    stats = upscale_frames(frames, os.path.join(work, "hd"), os.path.join(work, "seq"), scale, model,
+    # the cache of HD frames depends on scale and model, not only on the input pixels
+    tag = "x%d-%s" % (scale, hashlib.sha256(os.path.abspath(model).encode()).hexdigest()[:10] if model
+                      else (os.environ.get("REMASTER_MODEL_BG") and hashlib.sha256(
+                          os.environ["REMASTER_MODEL_BG"].encode()).hexdigest()[:10]) or "default")
+    if upscale_fn is not None:
+        tag += "-custom"
+    stats = upscale_frames(frames, os.path.join(work, "hd", tag), os.path.join(work, "seq"), scale, model,
                            upscale_fn, log)
     encode(os.path.join(work, "seq"), out, fps, audio_src, audio_codec, crf, pix_fmt=pix_fmt,
            shortest=bool(max_frames))

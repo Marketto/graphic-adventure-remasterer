@@ -21,7 +21,7 @@ remaster/
   gfx/bg/<scene>.<lang>.wide.png|jpg  idem per il fondale esteso (la geometria resta in
                            <scene>.wide.json, unica per tutte le lingue)
   gfx/spr/index.dat        indice sprite (formato RSPR, sotto)
-  gfx/spr/<key>.png|jpg    frame HD, key = frameKey
+  gfx/spr/<key>.png|jpg    frame HD, key = frameKey (PNG con alpha; un JPEG è opaco nei blocchi originali)
   fonts/<font>.dat|png     atlante font HD (formato RFNT, sotto)
   text/<lang>.tsv          testi corretti/tradotti: "<textKey>\t<testo UTF-8>"
   voice/<lang>/<textKey>.ogg   battute doppiate

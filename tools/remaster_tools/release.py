@@ -1,6 +1,7 @@
 """Release packaging and verification (no original game file may ever ship)."""
 import hashlib
 import json
+import math
 import os
 import shutil
 
@@ -206,7 +207,7 @@ def budget(remaster_dir, targets=("desktop", "android", "web"), top=10):
         if big:
             probs.append(f"{len(big)} immagini decodificate oltre {lim['decoded_mb']} MB (es. {big[0]})")
         if lim["volume_mb"]:
-            n = int(total / (lim["volume_mb"] * 2 ** 20)) + 1
+            n = max(1, math.ceil(total / (lim["volume_mb"] * 2 ** 20)))
             probs.append(f"info: {n} volumi da {lim['volume_mb']} MB per la consegna da telefono")
         checks[t] = {"ok": not [p for p in probs if not p.startswith("info")], "notes": probs}
     advice = []

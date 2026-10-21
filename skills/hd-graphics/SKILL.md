@@ -12,7 +12,8 @@ Nessuna GPU richiesta: la pipeline collaudata gira su CPU (2 core, 7 GB di RAM b
 ## Backend (`rstool.py gfx backends` dice cosa c'è e quali modelli sono configurati)
 1. **spandrel + PyTorch su CPU (pipeline collaudata).** Pesi `.pth`/`.safetensors` caricati con
    `spandrel`, inferenza a tessere sovrapposte (256 px + 16 di contesto: memoria limitata,
-   stesso risultato dell'immagine intera). Installazione:
+   senza cuciture visibili: il risultato è identico all'immagine intera solo se la portata del
+   modello sta nei 16 px). Installazione:
    `pip install torch --index-url https://download.pytorch.org/whl/cpu && pip install spandrel`.
    Modelli dalle release GitHub dei progetti, scaricati **fuori dal repository** (es. `~/modelli`):
    - fondali, bande 16:9 e filmati: **APISR RRDB** (`4x_APISR_RRDB_GAN_generator.pth`);
@@ -74,9 +75,14 @@ motore che l'HD sia stato caricato: un'edizione con dimensioni diverse lo fa sca
      ridipinge lungo il bordo smussato una fascia spessa come il contorno originale (misurato in
      px a 1x, di solito ~1, × scala), con antialiasing e nel colore del contorno originale;
      linee interne e colori restano quelli dell'upscaler. `--no-ink` per confrontare;
-  5. **colori fuori sagoma riempiti** allargando quelli di bordo (box blur a raggi 2-16): nel
-     JPEG non compaiono frange scure; l'alpha del JPEG la ricostruisce il motore dalla sagoma
-     originale, il PNG la contiene già.
+  5. **colori fuori sagoma riempiti** allargando quelli di bordo (box blur a raggi 2-16): niente
+     frange scure dove l'alpha sfuma.
+  Formato: **PNG** con l'alpha, l'unico che il Layer comune usa per gli sprite. Limite del Layer
+  comune: disegna i pixel HD di uno sprite solo dentro i blocchi dei pixel originali dello
+  sprite, quindi la sfumatura che esce dalla sagoma originale viene tagliata e un JPEG (senza
+  alpha) torna a scalini. Per contorni pienamente morbidi serve un aggancio nel motore che
+  ricostruisca l'alpha dalla maschera originale anche nei blocchi vicini (come nel progetto di
+  riferimento); solo allora `--format jpg` ha senso.
 - Una resa "cinematografica" calcolata dalla sagoma (ombra cel-shading, luce di bordo) era stata
   approvata e poi **abbandonata**: creava ombre e macchie scure. Prima di cambiare modello,
   isola quale passo della pipeline causa il difetto (prova `--no-ink`, poi senza `--model`).
@@ -111,8 +117,9 @@ Intro, intermezzi e finali in FMV o animazioni precalcolate.
      calcolano una volta sola: niente tempo sprecato e niente sfarfallio sui fermi;
    - cartella di lavoro `<out>.work` (fotogrammi HD per hash): un'esecuzione interrotta
      riparte da dove era arrivata; `--max-frames N` per una prova veloce, `--clean` alla fine;
-   - ricodifica: MKV/MP4 H.264 a CRF 12 (`--crf`), 4:4:4 di default (`--pix-fmt yuv420p` per la
-     massima compatibilità), oppure `.ogv` Theora + Vorbis; l'audio originale si copia se il
+   - ricodifica: MKV/MP4 H.264 a CRF 12 (`--crf`), **4:2:0 di default** (lo leggono anche telefoni,
+     browser e decoder hardware; `--pix-fmt yuv444p` solo per archivio o desktop), oppure `.ogv`
+     Theora + Vorbis (sempre 4:2:0, il formato che ScummVM sa già decodificare); l'audio originale si copia se il
      contenitore lo accetta, altrimenti FLAC (MKV), AAC (MP4) o Vorbis (OGV).
 3. **Sottotitoli e voci**: se il motore disegna i sottotitoli dei filmati come testo, passano
    per `text/<lang>.tsv` e le voci per `voice/<lang>/<textKey>.ogg` come le altre battute

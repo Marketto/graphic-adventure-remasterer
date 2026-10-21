@@ -99,7 +99,7 @@ public:
 		Common::FSNode game(Common::Path("test/remaster.tmp"));
 		Common::FSNode dir = game;
 		const char *const sub[] = { "remaster", "gfx", "bg" };
-		for (int i = 0; i <= ARRAYSIZE(sub); i++) {
+		for (uint i = 0; i <= ARRAYSIZE(sub); i++) {
 			if (!dir.exists())
 				dir.createDirectory();
 			if (i < ARRAYSIZE(sub))
@@ -109,7 +109,7 @@ public:
 			"part1_room.png", "part1_room.it.png", "part1_room.wide.png", "part1_room.it.wide.jpg",
 			"hall.jpg", "hall.wide.png", "yard.png", "yard.wide.json", "yard.it.wide.png"
 		};
-		for (int i = 0; i < ARRAYSIZE(files); i++)
+		for (uint i = 0; i < ARRAYSIZE(files); i++)
 			touch(dir, files[i]);
 		ConfMan.setPath("path", game.getPath(), Common::ConfigManager::kTransientDomain);
 		{

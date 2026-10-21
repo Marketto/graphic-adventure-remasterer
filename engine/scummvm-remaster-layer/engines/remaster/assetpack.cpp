@@ -269,7 +269,7 @@ bool AssetPack::text(uint32 key, Common::String &utf8) const {
 Common::String AssetPack::voicePath(uint32 key, const Common::String &lang) const {
 	static const char *const exts[] = { ".ogg", ".flac", ".mp3", ".wav" };
 	Common::String base = Common::String::format("voice/%s/%08x", lang.c_str(), key);
-	for (int i = 0; i < ARRAYSIZE(exts); i++) {
+	for (uint i = 0; i < ARRAYSIZE(exts); i++) {
 		if (exists(base + exts[i]))
 			return base;
 	}

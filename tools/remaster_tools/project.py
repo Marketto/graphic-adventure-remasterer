@@ -109,6 +109,11 @@ def decide(data, what: str, why: str = ""):
 
 def spend(data, service: str, amount: float, unit: str = "usd", note: str = ""):
     """Record money or credits actually spent; returns the totals and whether a cap is passed."""
+    unit = (unit or "").strip().lower()
+    if unit not in ("usd", "credits"):
+        raise ValueError(f"unità «{unit}» non valida: usd o credits")
+    if amount < 0:
+        raise ValueError("importo negativo")
     b = data.setdefault("budget", {"cap_usd": None, "cap_credits": None, "spent": []})
     b.setdefault("spent", []).append({"date": _now(), "service": service, "amount": float(amount),
                                       "unit": unit, "note": note})

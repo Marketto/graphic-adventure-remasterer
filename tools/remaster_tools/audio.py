@@ -342,30 +342,39 @@ def restore_speech(src, dst, denoise_db=-28.0, highpass=70, model=None):
     images above the original band. Output lossless (.flac/.wav) for the two level stages.
     model="deepfilternet": uses the `deepFilter` command (DeepFilterNet) if installed, a local
     speech-enhancement model; never invents words, but always compare by ear with the original."""
-    tmp = None
-    if model == "deepfilternet":
-        exe = shutil.which("deepFilter")
-        if not exe:
-            raise RuntimeError("deepFilter (DeepFilterNet) non trovato: pip install deepfilternet")
-        work = dst + ".df"
-        os.makedirs(work, exist_ok=True)
-        wav48 = os.path.join(work, "in.wav")
-        _ffmpeg(["-i", src, "-ac", "1", "-ar", "48000", wav48])
-        subprocess.run([exe, wav48, "-o", work], check=True, capture_output=True)
-        outs = [f for f in os.listdir(work) if f != "in.wav" and f.endswith(".wav")]
-        if not outs:
-            raise RuntimeError("deepFilter non ha prodotto file")
-        tmp = os.path.join(work, outs[0])
-        src = tmp
-    af = [f"highpass=f={highpass}", "adeclick"]
-    if model != "deepfilternet":
-        af.append(f"afftdn=nr=12:nf={denoise_db}:tn=1")
-    af.append("aresample=44100:resampler=soxr:precision=28")
+    work = dst + ".df"
     os.makedirs(os.path.dirname(os.path.abspath(dst)), exist_ok=True)
-    _ffmpeg(["-i", src, "-af", ",".join(af), "-ac", "1", dst])
-    if tmp:
-        shutil.rmtree(os.path.dirname(tmp), ignore_errors=True)
+    try:
+        if model == "deepfilternet":
+            exe = shutil.which("deepFilter")
+            if not exe:
+                raise RuntimeError("deepFilter (DeepFilterNet) non trovato: pip install deepfilternet")
+            os.makedirs(work, exist_ok=True)
+            wav48 = os.path.join(work, "in.wav")
+            _ffmpeg(["-i", src, "-ac", "1", "-ar", "48000", wav48])
+            subprocess.run([exe, wav48, "-o", work], check=True, capture_output=True)
+            outs = [f for f in os.listdir(work) if f != "in.wav" and f.endswith(".wav")]
+            if not outs:
+                raise RuntimeError("deepFilter non ha prodotto file")
+            src = os.path.join(work, outs[0])
+        af = [f"highpass=f={highpass}", "adeclick"]
+        if model != "deepfilternet":
+            af.append(f"afftdn=nr=12:nf={denoise_db}:tn=1")
+        af.append(_resampler())
+        _ffmpeg(["-i", src, "-af", ",".join(af), "-ac", "1", dst])
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
     return dst
+
+
+def _resampler(rate=44100):
+    """soxr when ffmpeg is built with libsoxr, else ffmpeg's own resampler at high quality."""
+    exe = shutil.which("ffmpeg")
+    has = False
+    if exe:
+        r = subprocess.run([exe, "-hide_banner", "-buildconf"], capture_output=True, text=True)
+        has = "libsoxr" in r.stdout
+    return f"aresample={rate}:resampler=soxr:precision=28" if has else f"aresample={rate}:filter_size=64:cutoff=0.97"
 
 
 def restore_speech_batch(src_dir, out_dir, model=None, ext=".flac"):

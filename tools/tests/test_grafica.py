@@ -266,8 +266,12 @@ def test_video_probe_upscale_reuse_and_resume(tmp_path):
     # frames are upscaled deterministically (Scale3x of the extracted frame)
     f1 = Image.open(tmp_path / "clip_hd.work" / "in" / "000001.png").convert("RGB")
     h1 = video.frame_hash(f1)
-    assert np.array_equal(np.asarray(Image.open(tmp_path / "clip_hd.work" / "hd" / f"{h1}.png")),
-                          np.asarray(scalers.upscale_rgb(f1, 3)))
+    cached = list((tmp_path / "clip_hd.work" / "hd").glob(f"x3-*/{h1}.png"))
+    assert len(cached) == 1  # cache per scale and model
+    assert np.array_equal(np.asarray(Image.open(cached[0])), np.asarray(scalers.upscale_rgb(f1, 3)))
+    # another scale does not reuse frames made at x3, and a shorter run drops stale frames
+    other = video.upscale(str(clip), str(out), scale=2, max_frames=5)
+    assert other["computed"] > 0 and other["frames"] == 5
 
 
 @need_ffmpeg

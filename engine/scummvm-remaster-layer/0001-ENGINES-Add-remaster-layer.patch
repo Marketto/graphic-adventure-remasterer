@@ -1,4 +1,4 @@
-From 5e7ca347ab66c7f4b3b51a5387e8531f38c6c460 Mon Sep 17 00:00:00 2001
+From 1b99da2278bbbcc5ffdc4178cd04f00bb6d34d8c Mon Sep 17 00:00:00 2001
 From: Marketto <Marketto@users.noreply.github.com>
 Date: Wed, 21 Oct 2026 14:59:36 +0200
 Subject: [PATCH] ENGINES: Add Remaster Layer (HD, 16:9, smooth scrolling,
@@ -60,7 +60,7 @@ index d79c5a7d..86ec4b4b 100644
  	savestate.o
 diff --git a/engines/remaster/assetpack.cpp b/engines/remaster/assetpack.cpp
 new file mode 100644
-index 00000000..066afa75
+index 00000000..2a943272
 --- /dev/null
 +++ b/engines/remaster/assetpack.cpp
 @@ -0,0 +1,279 @@
@@ -335,7 +335,7 @@ index 00000000..066afa75
 +Common::String AssetPack::voicePath(uint32 key, const Common::String &lang) const {
 +	static const char *const exts[] = { ".ogg", ".flac", ".mp3", ".wav" };
 +	Common::String base = Common::String::format("voice/%s/%08x", lang.c_str(), key);
-+	for (int i = 0; i < ARRAYSIZE(exts); i++) {
++	for (uint i = 0; i < ARRAYSIZE(exts); i++) {
 +		if (exists(base + exts[i]))
 +			return base;
 +	}
@@ -1920,7 +1920,7 @@ index 00000000..ef7871f5
 +#endif
 diff --git a/test/graphics/remaster.h b/test/graphics/remaster.h
 new file mode 100644
-index 00000000..4f2574fe
+index 00000000..714d8464
 --- /dev/null
 +++ b/test/graphics/remaster.h
 @@ -0,0 +1,158 @@
@@ -2025,7 +2025,7 @@ index 00000000..4f2574fe
 +		Common::FSNode game(Common::Path("test/remaster.tmp"));
 +		Common::FSNode dir = game;
 +		const char *const sub[] = { "remaster", "gfx", "bg" };
-+		for (int i = 0; i <= ARRAYSIZE(sub); i++) {
++		for (uint i = 0; i <= ARRAYSIZE(sub); i++) {
 +			if (!dir.exists())
 +				dir.createDirectory();
 +			if (i < ARRAYSIZE(sub))
@@ -2035,7 +2035,7 @@ index 00000000..4f2574fe
 +			"part1_room.png", "part1_room.it.png", "part1_room.wide.png", "part1_room.it.wide.jpg",
 +			"hall.jpg", "hall.wide.png", "yard.png", "yard.wide.json", "yard.it.wide.png"
 +		};
-+		for (int i = 0; i < ARRAYSIZE(files); i++)
++		for (uint i = 0; i < ARRAYSIZE(files); i++)
 +			touch(dir, files[i]);
 +		ConfMan.setPath("path", game.getPath(), Common::ConfigManager::kTransientDomain);
 +		{

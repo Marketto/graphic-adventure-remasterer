@@ -121,7 +121,8 @@ Registra ogni risposta con `rstool.py project set <chiave> <valore>` subito dopo
 9. **Piattaforme, distribuzione e spesa.** Default: Windows, Linux, macOS, Android, Web.
    Se il progetto prevede spese (doppiaggio, fal.ai) chiedi un **tetto di spesa totale**
    (`budget.cap_usd`, `budget.cap_credits`), oltre al preventivo per ogni lotto: ogni spesa
-   reale si registra con `rstool.py project spend <servizio> <importo> usd|credits <nota>`, che
+   reale si registra con `rstool.py project spend <servizio> <importo> --unit usd|credits --note
+   "<lotto>"`, che
    avvisa quando il tetto è superato (allora ci si ferma e si chiede).
    Chiedi la modalità di distribuzione degli asset (vedi `${CLAUDE_PLUGIN_ROOT}/references/legal-distribution.md`):
    - `recipe` (consigliata senza permessi): la patch contiene motore, strumenti e "ricette";

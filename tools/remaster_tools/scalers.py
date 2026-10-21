@@ -225,6 +225,10 @@ def choose_backend(kind="bg", model=None, prefer="auto"):
                            f"{MODEL_ENV.get(kind, 'REMASTER_MODEL_BG')}")
     if prefer in ("auto", "realesrgan") and realesrgan_binary():
         return "realesrgan", (m if m and not is_weights(m) else "realesrgan-x4plus-anime")
+    if m and not is_weights(m):
+        raise RuntimeError(f"modello {m} richiesto ma realesrgan-ncnn-vulkan non è nel PATH")
+    if prefer == "realesrgan":
+        raise RuntimeError("backend realesrgan richiesto ma realesrgan-ncnn-vulkan non è nel PATH")
     return "scale", None
 
 

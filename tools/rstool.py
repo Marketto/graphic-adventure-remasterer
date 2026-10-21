@@ -60,10 +60,9 @@ def cmd_project(a):
         out(project.missing_answers(need_project(wd)))
     elif a.action == "spend":
         data = need_project(wd)
-        if len(a.args) < 2:
-            sys.exit("uso: project spend <servizio> <importo> [usd|credits] [nota]")
-        res = project.spend(data, a.args[0], float(a.args[1]), a.args[2] if len(a.args) > 2 else "usd",
-                            " ".join(a.args[3:]))
+        if len(a.args) != 2:
+            sys.exit("uso: project spend <servizio> <importo> --unit usd|credits --note \"...\"")
+        res = project.spend(data, a.args[0], float(a.args[1]), a.unit, a.note)
         project.save(data, wd)
         out(res)
 
@@ -75,9 +74,11 @@ def main(argv=None):
 
     s = g.add_parser("project", help="stato del progetto (remaster.json)")
     s.add_argument("action", choices=["init", "show", "set", "get", "decide", "phase", "missing", "spend"],
-                   help="spend <servizio> <importo> [usd|credits] [nota]: registra una spesa e controlla il tetto")
+                   help="spend <servizio> <importo> --unit usd|credits --note ...: registra una spesa e controlla il tetto")
     s.add_argument("args", nargs="*")
     s.add_argument("--force", action="store_true")
+    s.add_argument("--unit", choices=["usd", "credits"], default="usd", help="per spend")
+    s.add_argument("--note", default="", help="per spend")
     s.set_defaults(fn=cmd_project)
 
     s = g.add_parser("engine", help="riconoscimento motore e MD5 dei file")
@@ -143,7 +144,7 @@ def main(argv=None):
     x.add_argument("--scale", type=int, default=3); x.add_argument("--recipe"); x.add_argument("--seed", type=int, default=1234)
     x.add_argument("--model", help="pesi spandrel (es. APISR GRL) o nome modello ncnn; default REMASTER_MODEL_SPR")
     x.add_argument("--no-ink", action="store_true", help="senza la fascia d'inchiostro sul contorno scuro")
-    x.add_argument("--format", choices=["png", "jpg"], default="png", help="jpg: q90 4:4:4, alpha ricostruita dal motore")
+    x.add_argument("--format", choices=["png", "jpg"], default="png", help="png (default, con alpha: usala col Layer comune); jpg solo se il motore ricostruisce l'alpha")
     x.add_argument("--ai", action="store_true", help="img2img per fotogramma: sconsigliato sulle animazioni (sfarfallio)")
     x.add_argument("--tag", default="RSPR")
     x.set_defaults(fn=lambda a: out(gfx.batch_sprites(a.dump, a.out, a.scale, a.recipe, a.seed, a.ai, a.tag.encode(),
@@ -217,7 +218,7 @@ def main(argv=None):
     x.add_argument("--fps", help="obbligatorio per una cartella di PNG (es. 15 o 30000/1001)")
     x.add_argument("--audio", help="file audio separato (cartella di PNG) o sostitutivo")
     x.add_argument("--work", help="cartella di lavoro (default <out>.work): ripartibile")
-    x.add_argument("--crf", type=int, default=12); x.add_argument("--pix-fmt", default="yuv444p",
+    x.add_argument("--crf", type=int, default=12); x.add_argument("--pix-fmt", default="yuv420p",
                                                                  choices=["yuv444p", "yuv420p"])
     x.add_argument("--max-frames", type=int, help="solo i primi N fotogrammi (prova)")
     x.add_argument("--clean", action="store_true", help="cancella la cartella di lavoro alla fine")
@@ -287,10 +288,10 @@ def main(argv=None):
     x = sg.add_parser("sfx"); x.add_argument("dir"); x.add_argument("--out", default="remaster/sfx"); x.add_argument("--rates")
     x.add_argument("--default-rate", type=int, default=11025); x.add_argument("--raw-format", default="u8")
     x.add_argument("--lossless", action="store_true", help="FLAC da livellare poi con normalize + mix")
+    x.set_defaults(fn=lambda a: out(audio.sfx_batch(a.dir, a.out, a.rates, a.default_rate, a.raw_format, lossless=a.lossless)))
     x = sg.add_parser("restore-speech", help="restauro del parlato ORIGINALE (giochi già parlati): FLAC da livellare poi")
     x.add_argument("dir"); x.add_argument("--out", default="audio/clean/voice")
     x.add_argument("--model", choices=["deepfilternet"], help="modello locale di pulizia della voce, se installato")
-    x.set_defaults(fn=lambda a: out(audio.sfx_batch(a.dir, a.out, a.rates, a.default_rate, a.raw_format, lossless=a.lossless)))
     x.set_defaults(fn=lambda a: out(audio.restore_speech_batch(a.dir, a.out, a.model)))
 
     s = g.add_parser("voice", help="doppiaggio ElevenLabs")
@@ -356,7 +357,8 @@ def main(argv=None):
     x.set_defaults(fn=lambda a: out({"package": release.package(need_project(a.workdir), a.out, a.game_md5, a.patches, a.engines,
                                                                 a.remaster, a.recipes, a.licenses, a.version)}))
     x = sg.add_parser("budget", help="peso del pacchetto e memoria per desktop, Android, web")
-    x.add_argument("remaster"); x.add_argument("--targets", nargs="+", default=["desktop", "android", "web"])
+    x.add_argument("remaster"); x.add_argument("--targets", nargs="+", default=list(release.TARGETS),
+                                               choices=list(release.TARGETS))
     x.set_defaults(fn=lambda a: out(release.budget(a.remaster, tuple(a.targets))))
     x = sg.add_parser("verify"); x.add_argument("root"); x.add_argument("--game-md5")
     x.set_defaults(fn=lambda a: out(release.verify(a.root, a.game_md5)))
