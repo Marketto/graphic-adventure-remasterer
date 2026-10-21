@@ -17,10 +17,18 @@ DEFAULT = {
     "existing_work": [],
     "reuse_existing_work": None,
     "graphics": {"enabled": None, "parts": [], "scale": 3,
-                 "widescreen": {"enabled": None, "aspect": "16:9"},
+                 # stretch 1.0 = square pixels; another value only if the game was made for a
+                 # display that stretched its pixels (decided in the analysis, see platforms.py)
+                 "pixel_aspect": {"stretch": None, "reason": None},
+                 # fill: local methods (LaMa 1x + quilting + recipes); fal_ai: optional paid outpainting
+                 "widescreen": {"enabled": None, "aspect": "16:9", "fill": "local", "fal_ai": None},
                  "framerate": {"enabled": None, "target": 60}},
+    "ui_theme": {"enabled": True},
     "languages": {"requested": [], "available": {}, "translate": []},
-    "audio": {"enabled": None, "music": None, "sfx": None},
+    "audio": {"enabled": None, "music": None, "sfx": None,
+              # stage 1: normalization per group; stage 2: levels of the groups in the mix (LUFS)
+              "mix": {"voice": -18.0, "sfx": -16.0, "music": -25.0}},
+    "extras": {"manual": None, "hints": None},
     "voice": {"enabled": None, "provider": "elevenlabs", "license_confirmed": False,
               "languages": []},
     "platforms": ["windows", "linux", "macos", "android", "web"],
@@ -114,6 +122,8 @@ def missing_answers(data):
         ("languages.requested", "lingue"),
         ("audio.enabled", "miglioramento audio"),
         ("voice.enabled", "doppiaggio"),
+        ("extras.manual", "manuale e aiuti in gioco"),
+        ("extras.hints", "manuale e aiuti in gioco"),
         ("paths.game_files", "file di gioco"),
     ]
     out = []
@@ -125,10 +135,13 @@ def missing_answers(data):
         if v is None or v == []:
             if key == "languages.requested" and data["languages"].get("confirmed"):
                 continue
-            out.append(label)
+            if label not in out:
+                out.append(label)
     g = data.get("graphics", {})
     if g.get("enabled") and g.get("widescreen", {}).get("enabled") is None:
         out.insert(out.index("lingue") if "lingue" in out else len(out), "formato 16:9")
+    if g.get("widescreen", {}).get("enabled") and g["widescreen"].get("fal_ai") is None:
+        out.insert(out.index("lingue") if "lingue" in out else len(out), "fal.ai per le bande 16:9 (opzionale)")
     if data.get("voice", {}).get("enabled") and not data["voice"].get("license_confirmed"):
         out.append("conferma licenza ElevenLabs")
     return out

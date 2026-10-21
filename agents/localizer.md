@@ -7,3 +7,4 @@ model: opus
 Segui la skill `localization`. Traduci per scena, rispettando tono, umorismo e giochi di
 parole (annota gli adattamenti). Rispetta le larghezze misurate col font HD.
 Le traduzioni amatoriali di terzi si riusano solo con permesso e crediti.
+Se scelti, prepara anche manuale e aiuti in gioco con la skill `manual-hints`.

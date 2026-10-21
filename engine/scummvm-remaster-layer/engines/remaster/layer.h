@@ -56,7 +56,7 @@ public:
 	struct Desc {
 		Common::String gameId;
 		int screenW = 320, screenH = 200;
-		float pixelAspect = 1.0f;			///< 1.0: square pixels (640x400 -> 36 px per side); 1.2 with 4:3 aspect correction
+		float pixelAspect = 1.0f;			///< 1.0: square pixels (640x400 -> 36 px per side); other values only for games made for stretched pixels
 		Common::CodePage codePage = Common::kDos850;
 		Common::String language;			///< "it", "en"... (empty: from the ScummVM settings)
 	};

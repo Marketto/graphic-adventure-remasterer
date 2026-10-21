@@ -156,6 +156,12 @@ Se uno script aspetta la fine della voce prima di proseguire, **un clic o un tas
 
 ## 3. Normalizzazione di audio e musica
 
+Regola generalizzata (21/10/2026): le tracce si **normalizzano per gruppo** (musica, effetti,
+parlato: musica e parlato file per file, effetti con un guadagno unico per il gruppo, così resta
+la differenza voluta tra un effetto piano e uno forte) e **poi** si fissa il **livello di mix**
+tra i gruppi, scelto ascoltando prove con musica, effetto e battuta insieme. I valori sotto sono
+quelli scelti nel banco di prova.
+
 | Tipo | Livello | Dettagli |
 |---|---|---|
 | Voci | **-18 LUFS** | `loudnorm=I=-18:TP=-1.5:LRA=11`, mono 44,1 kHz, OGG Vorbis |

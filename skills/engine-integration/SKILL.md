@@ -1,6 +1,6 @@
 ---
 name: engine-integration
-description: Rende giocabile e "rimasterizzabile" il motore di un'avventura d'epoca dentro un fork di ScummVM (o AGS) — driver di test automatico, correzioni, aggancio del Remaster Layer comune (compositore HD, toggle originale/remaster in tempo reale, viewport 16:9, interpolazione a 60 fps, testi e voci per chiave), salvataggi e menu. Usala nella fase motore del remaster.
+description: Rende giocabile e "rimasterizzabile" il motore di un'avventura d'epoca dentro un fork di ScummVM (o AGS) — driver di test automatico, correzioni, tempi confrontati con l'originale sull'emulatore della sua piattaforma, motore che accetta patch su testi, voci e immagini, aggancio del Remaster Layer comune (compositore HD, toggle originale/remaster, viewport 16:9, 60 fps), controlli fluidi, interfaccia nello stile del gioco, salvataggi e menu. Usala nella fase motore del remaster.
 ---
 
 # Integrazione nel motore
@@ -52,21 +52,33 @@ all'inizio di ogni sessione nel fork, prevalgono su qualunque altra istruzione):
   comandi legati a una zona sonora partono a fine suono). È ciò che permette alle voci nuove di dettare i
   tempi delle scene.
 
-## 1b. Tempi: confronto con l'originale (obbligatorio)
-Mai assumere un passo fisso. Molti giochi DOS non hanno timer: un passo dura il tempo di
+## 1b. Tempi: confronto con l'originale sulla sua piattaforma (obbligatorio)
+Mai assumere un passo fisso. Molti giochi d'epoca non hanno timer: un passo dura il tempo di
 disegno più l'attesa del ritraccio verticale, quindi le scene leggere vanno più veloci di
 quelle animate, indipendentemente dalla CPU (caso reale: 43-160 ms; il port andava a 33 ms fissi,
 fino a 4 volte più veloce).
-1. Avvia l'originale in **DOSBox** sotto Xvfb (`[sdl] autolock=false`, mouse con `xdotool`,
-   `mount c` + `imgmount d <iso> -t iso`), registra con `ffmpeg -f x11grab -framerate 60`.
-2. Misura gli intervalli tra fotogrammi che cambiano in 4-5 scene diverse (leggera, media,
-   molto animata, filmato, titoli) e la durata totale dell'intro.
-3. Fai stampare al motore la durata di ogni passo (canale di debug) e confronta.
-4. Se il tempo dipende dal carico, modella il passo (es. dall'area animata a schermo,
+1. **Riferimento**: la piattaforma di destinazione dell'originale (`game.platform`) decide
+   come si simula: `rstool.py engine reference --platform <dos|windows|windows3|mac|amiga-pal|
+   atari-st|pc-98|...>` dà la soluzione affidabile più vicina, in ordine di fedeltà:
+   DOSBox Staging/DOSBox-X per DOS (86Box/PCem se i tempi dipendono dall'hardware), una
+   macchina virtuale d'epoca (86Box/PCem, QEMU, VirtualBox con Windows 95/98) per Windows, Wine
+   solo per ciò che non dipende dai tempi (logica, testi), WinUAE/FS-UAE cycle-exact per Amiga,
+   Hatari per Atari ST, Basilisk II/SheepShaver per Mac, MAME o l'emulatore dedicato per le altre.
+   Stessa edizione del gioco (lingua, floppy/CD). ROM, BIOS e sistemi d'epoca li fornisce l'utente.
+2. Avvia l'originale sotto Xvfb (per DOSBox `[sdl] autolock=false`, `mount c` + `imgmount d <iso>
+   -t iso`), pilota il mouse con `xdotool`, registra con `ffmpeg -f x11grab -framerate 60`.
+3. Misura: `rstool.py engine timing rec.mkv --segments seg.json --crop x,y,w,h --out
+   qa/timing-originale.json` (intervalli tra fotogrammi che cambiano) in 4-5 tratti diversi
+   (leggero, medio, molto animato, filmato, titoli) e la durata totale dell'intro.
+4. Registra allo stesso modo il remaster (o fai stampare al motore la durata di ogni passo) e
+   confronta: `rstool.py engine timing-compare qa/timing-originale.json qa/timing-remaster.json`.
+5. Se il tempo dipende dal carico, modella il passo (es. dall'area animata a schermo,
    arrotondato a ritracce intere) e lascia un override in configurazione (`<gioco>_tick_ms`).
-5. Obiettivo: durata dell'intro entro il 2-3% e cadenza delle animazioni uguale; annota le
-   misure in `docs/test.md`.
+6. Obiettivo: durata dell'intro entro il 2-3% e cadenza delle animazioni uguale; annota
+   misure, emulatore e impostazioni in `docs/test.md`.
 Per i test automatici con molte attese si può forzare un passo corto nella configurazione.
+Lo stesso riferimento serve per l'aspetto (proporzione dei pixel, skill `widescreen`) e per
+la sensazione dei controlli (§1g).
 
 ## 1c. Contenuti dell'edizione localizzata
 Confronta gli script della lingua dell'utente con le altre lingue sul disco: le edizioni
@@ -83,15 +95,58 @@ e un'opzione per spegnerlo. Nel motore restano solo correzioni di bug, routine r
 dall'eseguibile, input e rendering. Questo tiene il codice GPL pubblicabile e i dati privati.
 
 ## 1e. Comodità moderne (da proporre all'utente)
-- Aiuti in gioco (tasto H): file `hint/<lang>.txt` con obiettivi in ordine, condizioni
-  monotone su flag/oggetti/stanze visitate, indizio e soluzione a richiesta (dettagli e formato
-  nella nota del motore, §12).
+- Manuale e aiuti in gioco (tasto H): skill `manual-hints` (formato `hint/<lang>.txt`,
+  condizioni monotone su flag/oggetti/stanze visitate, indizio e soluzione a richiesta;
+  manuale `manual/<lang>.md` leggibile dal menu).
 - Clic destro breve per l'inventario; soglia di trascinamento in **pixel di gioco** (6 px), non
   dello schermo; pressione e rilascio nello stesso frame (tocco) gestiti; combinare oggetti
   dall'inventario; clic durante la camminata che cambia destinazione.
 - Salvataggi con miniatura dallo schermo di gioco (non dal menu), formato originale invariato
-  con intestazione estesa in coda; menu nel tema grafico del gioco; versione della patch nel menu.
+  con intestazione estesa in coda; versione della patch nel menu.
 - Sottotitoli in basso con fascia; attese delle voci sempre interrompibili da clic o tasto.
+
+## 1f. Motore patchabile: testi, voci, immagini (requisito)
+Il motore (ScummVM o un altro) va adeguato perché **ogni** contenuto mostrato o suonato passi
+da un punto in cui la patch può sostituirlo, senza toccare i file originali:
+| Contenuto | Punto di aggancio | File della patch |
+|---|---|---|
+| testi (fumetti, risposte, etichette, menu, titoli) | `Layer::text()` prima del disegno | `text/<lang>.tsv` |
+| voci | `Layer::playVoice()` quando la battuta appare; attesa dello script legata alla voce | `voice/<lang>/<textKey>.ogg` |
+| fondali, sprite, cursori, interfaccia | `setBackground`, `beginSprite`/`mark`, copie con `clearArea` | `gfx/bg`, `gfx/spr` |
+| testi dentro le immagini | fondale localizzato (da aggiungere ad `AssetPack`: oggi non letto) | `gfx/bg/<scena>.<lang>.png` [riservato] |
+| font | `addText` con atlante HD | `fonts/` |
+| musica ed effetti | hook nel driver audio del motore | `music/`, `sfx/` |
+| manuale e aiuti | lettori generici nel motore del gioco | `manual/`, `hint/` |
+| altre correzioni del contenuto | lettori generici (§1d) | es. `text/dialoghi.tsv` |
+Verifica (obbligatoria prima degli asset):
+1. `rstool.py assets canary <dump> --out /tmp/canary --lang <lang> [--voices 20]`: pacchetto
+   che marca tutto (testi tra «», cornice magenta su fondali e sprite, un bip sulle voci).
+   Gioca col driver (`sweep`/`fuzz` + screenshot): **ogni testo o immagine senza marcatore è un
+   percorso del motore da agganciare** (testo disegnato direttamente, fondale copiato senza il
+   Layer, cursore o icona dell'inventario, crediti, salvataggi).
+2. `rstool.py assets coverage <dump> remaster --lang <lang>`: le voci del pacchetto mai
+   richieste dal motore (orfani) indicano un aggancio mancante o una chiave sbagliata.
+3. Toggle F8 con il pacchetto canary: tutto torna senza marcatori (il percorso originale resta).
+
+## 1g. Fluidità dei controlli (requisito)
+Il remaster non deve avere un mouse che scatta né tasti che si ripetono. Comandi del driver da
+aggiungere: `inputlog <file>` (scrive eventi ricevuti, posizione del cursore a ogni fotogramma
+presentato e azioni eseguite; formato in `tools/remaster_tools/controls.py`), `mousepath x0 y0 x1
+y1 ms` (movimento rettilineo a velocità costante, eventi a 120 Hz), `keyhold <tasto> ms` (tasto
+tenuto premuto con la ripetizione automatica del sistema). Poi `rstool.py engine controls
+qa/input.log`. Controlla, in modalità originale e remaster, a 1x e a 3x, in 4:3 e 16:9:
+- **cursore**: ridisegnato a ogni fotogramma (≥ 50 Hz) e non al passo della logica; nessuna
+  pausa né salto oltre il passo tipico; nessuna inversione su un percorso dritto (arrotondamenti
+  nella conversione schermo → gioco, `warpMouse` che riporta indietro); in HD si muove ai pixel
+  dello schermo, non a multipli della scala; ritardo ≤ 2 fotogrammi;
+- **tasti**: le azioni a scatto (toggle F8, menu, inventario, salta battuta, aiuti, salva)
+  avvengono una volta per pressione: ignora gli eventi con `kbdRepeat`; le azioni continue
+  (scorrimento, camminata con le frecce) possono ripetersi;
+- **clic**: un tocco o un clic veloce (pressione e rilascio nello stesso frame) non si perde
+  e non diventa un trascinamento (soglia in pixel di gioco); doppio clic non doppia l'azione;
+- sul telefono e sul web: stesso controllo con eventi touch.
+Confronta anche la sensazione con l'originale sull'emulatore di riferimento (§1b): accelerazione
+del mouse e velocità del puntatore non devono cambiare più del necessario.
 
 ## 2. Hook del Remaster Layer (minimo indispensabile per motore)
 Guida con codice d'esempio: `${CLAUDE_PLUGIN_ROOT}/engine/scummvm-remaster-layer/INTEGRAZIONE.md`.
@@ -127,6 +182,11 @@ Guida con codice d'esempio: `${CLAUDE_PLUGIN_ROOT}/engine/scummvm-remaster-layer
 - Gli sprite esistono solo nell'area originale: un oggetto che esce dal bordo viene tagliato lì
   (oppure ridisegnali nelle bande, vedi la nota del motore §5); le bande prendono la dissolvenza del pixel originale più vicino.
 - Opzione per tornare al 4:3 (`remaster_widescreen=false`).
+- Proporzione dei pixel: quadrati per default; un allungamento verticale solo se deciso
+  nell'analisi (skill `widescreen`, "Geometria"). `Desc::pixelAspect` oggi cambia solo la
+  larghezza della viewport: se l'allungamento serve davvero, il Layer deve anche scalare in
+  verticale (es. 320x200 a 3x → 960x720) e convertire il mouse di conseguenza; non è ancora
+  implementato nel Layer comune.
 
 ## 5. Framerate
 - La logica resta al ritmo originale (spesso 7-30 Hz). `pace(tickMs)` mostra
@@ -144,6 +204,27 @@ Guida con codice d'esempio: `${CLAUDE_PLUGIN_ROOT}/engine/scummvm-remaster-layer
 - Menu di gioco originale tradotto nelle lingue scelte; voce "Opzioni remaster".
 - Test: salva in ogni parte/capitolo, carica da menu principale e da gioco in corso, e carica un
   salvataggio di una parte diversa da quella in corso (è il caso che si rompe più spesso).
+
+## 6b. Interfaccia del motore nello stile del gioco
+Tutto ciò che il motore aggiunge (menu globale, salva/carica, opzioni remaster, finestra degli
+aiuti, lettore del manuale, messaggi) deve sembrare parte del gioco, non di ScummVM:
+1. Colori dall'**interfaccia originale** (menu, inventario, riquadri dei dialoghi), non dai
+   fondali: `rstool.py ui palette <screenshot dell'interfaccia> --out analysis/ui-palette.json`
+   propone i ruoli (fondo, pannello, pulsante, evidenza, testo...); correggili guardando.
+2. `rstool.py ui theme --base <scummvm>/gui/themes/scummremastered --roles analysis/ui-palette.json
+   --name "<gioco> Remaster" --out remaster/theme/<gioco>.zip [--font <ttf in stile>] [--logo <png>]`:
+   copia del tema **dello stesso commit del fork** (la sintassi `.stx` cambia tra versioni), con
+   palette, font (scalabile, con licenza che permette di ridistribuirlo) e logo sostituiti.
+   Contrasto del testo ≥ 4,5 sia sul pannello sia sul fondo (il tool avvisa). Prova subito il
+   tema nel ScummVM del fork: `xvfb-run scummvm --themepath=<cartella dello zip>
+   --gui-theme=<nome dello zip>` e uno screenshot. Prepara 2-3 varianti e lascia scegliere.
+3. Il fork lo rende predefinito (`gui_theme` e `themepath` nella configurazione distribuita col
+   pacchetto: il tema di ScummVM è globale, non per gioco); FreeType nella build web, altrimenti
+   alla scala del telefono il menu è a blocchi.
+4. Un'etichetta più larga del pulsante passa al font normale invece di essere tagliata; niente
+   pulsanti inutili ("Torna a elenco giochi" se si parte diretti nel gioco); versione della patch
+   nel menu principale; finti alfabeti o lettering del gioco preservati dove il gioco li usa.
+5. Verifica col driver (`gui` per aprire i menu, `shot`) a 1x e alla scala del telefono.
 
 ## 7. Consegna
 Rigenera la patch sempre dal sorgente (`git add -A && git diff --cached <commit base>`: un

@@ -69,8 +69,16 @@ def widescreen_gallery(plan_path, variants_dir, out_path, title="Revisione 16:9"
         opts = []
         for v in s.get("variants", []):
             val = v["file"].rsplit(".", 2)[-2]
-            label = {"borders": "Bordi (4:3 decorato)", "inpaint": f"Estensione {val.upper()} (ricostruita, nitida)"}.get(
-                v["kind"], f"Estensione {val.upper()} (generativa, seed {v['seed']})")
+            label = {"borders": "Bordi (4:3 decorato)", "inpaint": "LaMa a 1x + upscaler",
+                     "quilt": "LaMa + quilting dall'originale", "fal": "Outpainting fal.ai (a pagamento)"}.get(
+                v["kind"], f"Ricetta {v['kind'][7:]}" if v["kind"].startswith("recipe-")
+                else f"Generativa {val.upper()} (seed {v['seed']})")
+            ck = v.get("checks")
+            if ck:
+                sh = [x for x in (ck.get("sharpness") or {}).values() if x is not None]
+                note = ("filtro ok" if ck["band_check"].get("ok") else "filtro: da guardare") + \
+                    (f" · nitidezza {min(sh):.2f}" if sh else "")
+                label += f" — {note}"
             figs.append(f'<figure><img alt="{label}" src="{_thumb(os.path.join(variants_dir, v["file"]))}">'
                         f'<figcaption><label><input type="radio" name="{sc}" value="{val}"> {label}</label></figcaption></figure>')
         if s["class"] == "scroll-wide":
