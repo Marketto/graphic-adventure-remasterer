@@ -23,6 +23,11 @@ remaster/
   voice/<lang>/<textKey>.ogg   battute doppiate
   music/<nome>.ogg         sostituti digitali dei brani (MIDI, MOD, CD)        [hook per motore]
   sfx/<nome>[_<rate>].ogg  effetti rimasterizzati (rate = frequenza di riproduzione) [hook per motore]
+  manual/<lang>.md         manuale ripulito/tradotto, letto in gioco dal menu     [hook per motore]
+  manual/img/<file>.png    immagini del manuale
+  manual/<lang>.html       stesso manuale come pagina unica, accanto all'eseguibile
+  hint/<lang>.txt          aiuti in gioco (tasto H), formato in tools/remaster_tools/hints.py [hook per motore]
+  theme/<gioco>.zip        tema GUI di ScummVM nello stile del gioco (stesso commit del fork)
   gfx/inbetween/<key>.png  frame intermedi delle animazioni                       [riservato]
   fonts/<font>.<lang>.dat  atlante per lingue oltre la codepage del gioco          [riservato]
 ```

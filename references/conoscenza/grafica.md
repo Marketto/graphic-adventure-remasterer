@@ -47,6 +47,18 @@ Scelta:
 
 ## 4. Bande 16:9: tecniche in ordine di adozione
 
+**Regola generalizzata per la suite (decisa con l'utente, 21/10/2026).** Si parte sempre dalle
+tecniche locali collaudate qui (§4.2 LaMa a 1x, §4.3 quilting, §4.7 ricette, §4.9 nitidezza) e
+l'outpainting a pagamento (§4.5) si usa **solo se l'utente lo sceglie**, chiedendolo
+nell'intervista, con preventivo e approvazione per ogni lotto. Nel banco di prova fal.ai è
+stato scelto per molte stanze; in un nuovo progetto è un'opzione, non il default.
+
+**Proporzione dei pixel.** Il banco di prova mostra i pixel quadrati (36 px per lato a 640x400)
+perché la sua arte non era pensata per pixel allungati. La correzione dell'aspetto si fa solo
+se il gioco era concepito per un monitor che li allungava: si decide da data di uscita,
+piattaforma di destinazione, monitor dell'epoca e origine dell'arte (disegnata su quel monitor o
+digitalizzata a pixel quadrati), e si verifica guardando oggetti tondi affiancati.
+
 ### 4.1 LaMa direttamente sull'HD (scartato)
 Lavorando sull'HD, LaMa (big-lama TorchScript, ~200 MB) produce bande molto sfocate.
 

@@ -85,6 +85,11 @@ Questa nota riguarda solo il lato motore. Descrive le tecniche e le regole usate
 
 ## 7. Tempi calibrati su DOSBox
 
+Regola generalizzata: il confronto si fa sulla **piattaforma di destinazione** dell'originale,
+con la soluzione affidabile più vicina (DOSBox per DOS, macchina virtuale d'epoca o Wine per
+Windows, emulatori cycle-exact per Amiga, Atari ST, Mac...). Nel banco di prova era DOS, quindi
+DOSBox; le misure sotto valgono come metodo per qualunque piattaforma.
+
 - **Il gioco DOS non ha un timer**: ogni passo disegna e poi aspetta due ritracce verticali. La durata di un passo è quindi 2 ritracce + il tempo di disegno, limitato dalle porte VGA e non dalla CPU (identico a 40k e a 120k cicli in DOSBox).
 - **Misura**: si registra DOSBox su Xvfb con `ffmpeg -f x11grab -framerate 60` e si contano i fotogrammi tra due cambi (7–8 fotogrammi a 60 fps = ~128 ms). Il mouse si pilota con `xdotool` (`autolock=false`). Valori trovati: da ~43 ms senza animazioni fino a ~160 ms con molte figure grandi.
 - **Modello**: la durata del passo si stima dall'area dei fotogrammi animati a schermo, interpolando i punti misurati e arrotondando a ritracce intere (70 Hz). Un'opzione forza un valore fisso.
@@ -98,6 +103,11 @@ Questa nota riguarda solo il lato motore. Descrive le tecniche e le regole usate
 - **Attese bloccate**: se uno script aspetta la fine di una voce e il backend audio non la segnala, un clic o un tasto la interrompe e lo script prosegue.
 
 ## 8. Input
+
+Regola generalizzata: la **fluidità dei controlli** si verifica sempre, con un log degli eventi e
+dei fotogrammi del driver: cursore ridisegnato a ogni fotogramma e non al passo della logica,
+nessun salto o inversione, in HD ai pixel dello schermo; azioni a scatto (toggle, menu,
+inventario) una volta per pressione, ignorando la ripetizione automatica dei tasti.
 
 - **Clic destro breve per l'inventario**: il gesto originale è "tieni premuto, spostati, rilascia". Il gesto agevolato: rilascio entro 350 ms senza spostamento, e l'inventario resta aperto. Poi un sinistro su un oggetto lo prende, un sinistro fuori chiude, il destro chiude.
 - **Soglia di trascinamento in pixel di gioco** (6 px), non in pixel dello schermo.
@@ -130,6 +140,9 @@ Questa nota riguarda solo il lato motore. Descrive le tecniche e le regole usate
 - **Bug trovato**: caricare durante il gioco una partita con lo stesso personaggio non ricaricava la sua grafica (crash). Ora si ricarica quando la grafica manca, non solo quando cambia il nome.
 
 ## 11. Menu nello stile del gioco
+
+Regola generalizzata: tutta l'interfaccia che il motore aggiunge (menu, salvataggi, opzioni,
+aiuti, manuale) prende colori e font dall'interfaccia originale del gioco.
 
 - **Tema GUI dedicato** (archivio zip del tema): colori, pulsanti e font ricavati dallo stile del gioco, generati da uno script. Il logo è rimpicciolito con un filtro.
   - Un'etichetta più larga del pulsante passa al font normale invece di essere tagliata.

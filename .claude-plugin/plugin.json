@@ -1,7 +1,7 @@
 {
   "name": "graphic-adventure-remasterer",
-  "version": "0.2.0",
-  "description": "Suite agentica per il remaster HD di avventure grafiche 2D (fino a fine anni '90): intervista, compatibilità del motore (ScummVM e altri interpreti open source), style bible, grafica HD e 16:9, framerate, traduzioni, audio, doppiaggio ElevenLabs, build multipiattaforma e patch distribuibile.",
+  "version": "0.3.0",
+  "description": "Suite agentica per il remaster HD di avventure grafiche 2D (fino a fine anni '90): intervista, compatibilità del motore (ScummVM e altri interpreti open source), style bible, grafica HD e 16:9, framerate, traduzioni, audio normalizzato per gruppo e mixato, doppiaggio ElevenLabs, manuale e aiuti in gioco, interfaccia nello stile del gioco, build multipiattaforma e patch distribuibile.",
   "author": {
     "name": "Marco Ricupero"
   },

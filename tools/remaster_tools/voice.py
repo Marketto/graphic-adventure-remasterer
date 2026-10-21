@@ -165,8 +165,12 @@ def voice_settings(c):
     return s
 
 
-def to_ogg(src, dst, lufs=-18, pad=0.0, filt=None):
-    """Trim silences, optional character filter, -18 LUFS, mono 44.1 kHz, pause appended."""
+def to_ogg(src, dst, lufs=None, pad=0.0, filt=None):
+    """Trim silences, optional character filter, level of the `voice` group in the mix (per
+    file: normalization and mix in one encode, default -18 LUFS), mono 44.1 kHz, pause appended."""
+    if lufs is None:
+        from . import audio
+        lufs = audio.MIX["voice"]
     exe = shutil.which("ffmpeg")
     if not exe:
         raise RuntimeError("ffmpeg non trovato")

@@ -30,24 +30,29 @@ Variabili: `ANTHROPIC_API_KEY` (o login del CLI), `ELEVENLABS_API_KEY` per il do
 
 ## Il flusso
 1. **Intervista**: titolo → compatibilità del motore → riuso del lavoro esistente → grafica
-   (fondali, sprite, testi; 16:9; framerate) → lingue (verifica, traduzione) → audio →
-   doppiaggio ElevenLabs (licenza) → piattaforme e distribuzione → file di gioco dell'utente.
-2. **Analisi**: style bible, inventario degli asset, classificazione delle scene per il 16:9,
-   piano con stime di tempo e costi → conferma.
-3. **Motore**: fork di ScummVM + Remaster Layer, gioco completabile, tempi calibrati
-   sull'originale in DOSBox, salvataggi, menu, aiuti in gioco.
-4. **Asset**: grafica HD, bande 16:9 (fogli numerati da approvare), testi e traduzioni, audio,
-   voci (censimento, provini, preventivo, approvazione, verifica).
+   (fondali, sprite, testi; 16:9 con tecniche locali, fal.ai solo se lo scegli; framerate) →
+   lingue (verifica, traduzione) → audio → doppiaggio ElevenLabs (licenza) → manuale e aiuti →
+   piattaforme e distribuzione → file di gioco dell'utente.
+2. **Analisi**: style bible, inventario degli asset, piattaforma di riferimento e proporzione
+   dei pixel (solo se il gioco era pensato per pixel non quadrati), classificazione delle scene
+   per il 16:9, piano con stime di tempo e costi → conferma.
+3. **Motore**: fork di ScummVM + Remaster Layer, gioco completabile, motore che accetta patch su
+   testi, voci e immagini, tempi calibrati sull'originale nell'emulatore o nella VM della sua
+   piattaforma (DOSBox, VM Windows d'epoca, Wine...), controlli fluidi, interfaccia nello stile
+   del gioco, salvataggi, menu, manuale e aiuti in gioco.
+4. **Asset**: grafica HD, bande 16:9 (fogli numerati da approvare), testi e traduzioni, audio
+   (normalizzazione per gruppo e poi mix), voci (censimento, provini, preventivo, approvazione,
+   verifica), manuale e aiuti.
 5. **QA indipendente** e **rilascio**: build per Windows, Linux, macOS, Android, Web, pagina HTML
    unica per il telefono, patch e installer che verifica la copia del giocatore.
 
 ## Contenuto
 | Cartella | Cosa |
 |---|---|
-| `skills/` | orchestratore + 9 skill (motore, style bible, grafica HD, 16:9, localizzazione, audio, doppiaggio, integrazione nel motore, rilascio) |
-| `agents/` | 9 subagenti specializzati, tra cui un QA indipendente |
+| `skills/` | orchestratore + 10 skill (motore, style bible, grafica HD, 16:9, localizzazione, audio, doppiaggio, integrazione nel motore, manuale e aiuti, rilascio) |
+| `agents/` | 10 subagenti specializzati, tra cui un QA indipendente e un revisore |
 | `commands/remaster.md` | comando `/remaster` |
-| `tools/rstool.py` | pipeline a riga di comando: progetto, rilevamento, chiavi degli asset, stile, grafica, font, 16:9, gallerie di revisione, testi, audio, voci, ricette, rilascio |
+| `tools/rstool.py` | pipeline a riga di comando: progetto, rilevamento, emulatore di riferimento, misura dei tempi, fluidità dei controlli, chiavi e copertura degli asset, pacchetto canary, stile, grafica, font, proporzione dei pixel, 16:9 (LaMa, quilting, ricette, controlli, fal.ai opzionale), gallerie di revisione, testi, audio (gruppi e mix), voci, tema GUI, aiuti, manuale, ricette, rilascio |
 | `tools/ip_guard.py` | controllo che il repository resti privo di contenuti e riferimenti a giochi |
 | `engine/scummvm-remaster-layer/` | patch per ScummVM (`engines/remaster/`) + guida di integrazione |
 | `ci/` | workflow GitHub Actions multipiattaforma, librerie Android, build locale |
@@ -57,14 +62,17 @@ Variabili: `ANTHROPIC_API_KEY` (o login del CLI), `ELEVENLABS_API_KEY` per il do
 ## Conoscenza dal banco di prova
 | Nota | Contenuto |
 |---|---|
-| `references/conoscenza/motore-e-test.md` | motore e contenuto separati, renderer HD, sprite via buffer di id, testo HD, 16:9 con sprite e zone nelle bande, scorrimento fluido, tempi misurati in DOSBox, input moderno, salvataggi con miniature, aiuti in gioco, driver di test e casi di regressione, pagina web che si aggiorna da sola, versioni |
+| `references/conoscenza/motore-e-test.md` | motore e contenuto separati, renderer HD, sprite via buffer di id, testo HD, 16:9 con sprite e zone nelle bande, scorrimento fluido, tempi misurati sull'emulatore della piattaforma (DOSBox nel banco di prova), input moderno e fluidità dei controlli, salvataggi con miniature, aiuti in gioco, driver di test e casi di regressione, pagina web che si aggiorna da sola, versioni |
 | `references/conoscenza/grafica.md` | confronto degli upscaler (APISR, Real-ESRGAN...), pipeline dei fondali, bande 16:9 (LaMa a 1x, quilting, FLUX Fill via fal.ai, ricette locali), controlli e costi, insegne e firme inventate, sprite e font |
-| `references/conoscenza/voci-testi-audio-flusso.md` | doppiaggio ElevenLabs (chi parla, cast, regia, testo detto, pause, crediti, lotti in CI, verifica), correzione dei testi, livelli audio, flusso con agenti (router, revisore, hook, PR, rilasci, spese) |
+| `references/conoscenza/voci-testi-audio-flusso.md` | doppiaggio ElevenLabs (chi parla, cast, regia, testo detto, pause, crediti, lotti in CI, verifica), correzione dei testi, normalizzazione per gruppo e mix, flusso con agenti (router, revisore, hook, PR, rilasci, spese) |
 
 ## Requisiti sul tuo PC
 Python 3.10+ con `numpy` e `Pillow`; `ffmpeg`; `git` e toolchain C++ per ScummVM.
 Opzionali: `torch` + `spandrel` per gli upscaler (APISR, Real-ESRGAN) e LaMa su CPU,
-`fluidsynth` + soundfont, munt (MT-32) con le tue ROM, una GPU con ComfyUI, chiavi ElevenLabs e fal.ai.
+`fluidsynth` + soundfont, munt (MT-32) con le tue ROM, una GPU con ComfyUI, chiavi ElevenLabs e
+fal.ai (solo se scegli l'outpainting a pagamento), l'emulatore o la VM della piattaforma
+originale (DOSBox, 86Box/PCem, QEMU, Wine, WinUAE/FS-UAE, Hatari...) con ROM e sistemi tuoi,
+Xvfb + `xdotool` per le misure automatiche.
 
 ## Stato delle verifiche
 - `tools/`: test automatici su dati sintetici (`python -m pytest tools/tests`), tutti verdi.
@@ -73,7 +81,11 @@ Opzionali: `torch` + `spandrel` per gli upscaler (APISR, Real-ESRGAN) e LaMa su 
 - Build Linux in modalità release verificata; Windows, macOS, Web e Android da provare al primo
   giro di CI.
 - Non ancora provati con questo codice su un gioco vero: generazione grafica, ElevenLabs via API,
-  classificazione 16:9 (le soglie vanno tarate sul primo gioco). Le tecniche in
+  fal.ai via API (il client è provato solo con un servizio finto), classificazione 16:9 (le
+  soglie vanno tarate sul primo gioco), tema GUI dentro ScummVM (provato sul formato dei file).
+- Da implementare nel Layer comune: la scala verticale per i giochi pensati per pixel non
+  quadrati (oggi `pixelAspect` cambia solo la geometria 16:9) e i comandi `inputlog`,
+  `mousepath`, `keyhold` del driver di test, che vanno scritti nel motore di ogni gioco. Le tecniche in
   `references/conoscenza/` invece sono state usate in produzione sul banco di prova.
 
 ## Repository pubblico: regole

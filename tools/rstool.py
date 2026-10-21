@@ -2,7 +2,8 @@
 """rstool — command line of the Remaster Studio pipeline. Every command prints JSON.
 
 Run `rstool.py <group> -h` for the commands of a group:
-  project, engine, key, assets, style, gfx, font, widescreen, review, text, audio, voice, recipe, release
+  project, engine, key, assets, style, gfx, font, widescreen, review, text, audio, voice, ui, hint,
+  manual, recipe, release
 """
 import argparse
 import json
@@ -11,8 +12,9 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from remaster_tools import (assets, audio, detect, font, gfx, keys, project, rawframe,  # noqa: E402
-                            recipe, release, review, style, text, voice, widescreen)
+from remaster_tools import (assets, audio, controls, detect, falai, font, gfx, hints, keys,  # noqa: E402
+                            manual, platforms, project, rawframe, recipe, release, review, style,
+                            text, theme, timing, voice, widescreen)
 
 
 def out(obj):
@@ -75,6 +77,19 @@ def main(argv=None):
     x.set_defaults(fn=lambda a: out(detect.detect(a.dir, a.scummvm)))
     x = sg.add_parser("md5"); x.add_argument("dir"); x.add_argument("--out", required=True); x.add_argument("--version-name", default="default")
     x.set_defaults(fn=lambda a: out(release.game_md5(a.dir, a.out, a.version_name)))
+    x = sg.add_parser("reference", help="emulatore o VM di riferimento per la piattaforma dell'originale")
+    x.add_argument("--platform", required=True)
+    x.set_defaults(fn=lambda a: out(platforms.reference_emulators(a.platform)))
+    x = sg.add_parser("timing", help="durata dei passi misurata da una registrazione dello schermo")
+    x.add_argument("video"); x.add_argument("--segments", help='JSON [{"name","start","duration"}] in secondi')
+    x.add_argument("--crop", help="x,y,w,h dell'area di gioco nel video"); x.add_argument("--out")
+    x.set_defaults(fn=cmd_timing)
+    x = sg.add_parser("timing-compare", help="confronta le misure dell'originale e del remaster")
+    x.add_argument("original"); x.add_argument("remaster"); x.add_argument("--tolerance", type=float, default=0.03)
+    x.set_defaults(fn=lambda a: out(timing.compare(_json(a.original), _json(a.remaster), a.tolerance)))
+    x = sg.add_parser("controls", help="fluidità di mouse e tasti dal log del driver (inputlog)")
+    x.add_argument("log")
+    x.set_defaults(fn=lambda a: out(controls.analyze(a.log)))
 
     s = g.add_parser("key", help="chiavi RAC")
     sg = s.add_subparsers(dest="action", required=True)
@@ -87,6 +102,14 @@ def main(argv=None):
     sg = s.add_subparsers(dest="action", required=True)
     x = sg.add_parser("inventory"); x.add_argument("dump"); x.add_argument("--out", default="analysis/assets.csv")
     x.set_defaults(fn=lambda a: out(assets.inventory(a.dump, a.out)))
+    x = sg.add_parser("coverage", help="cosa del dump il pacchetto sostituisce; voci mai richieste dal motore")
+    x.add_argument("dump"); x.add_argument("pack"); x.add_argument("--lang")
+    x.set_defaults(fn=lambda a: out(assets.coverage(a.dump, a.pack, a.lang)))
+    x = sg.add_parser("canary", help="pacchetto di prova con marcatori visibili su testi, fondali, sprite (e voci)")
+    x.add_argument("dump"); x.add_argument("--out", required=True); x.add_argument("--lang", required=True)
+    x.add_argument("--codepage", default="cp850"); x.add_argument("--scale", type=int, default=3)
+    x.add_argument("--voices", type=int, default=0)
+    x.set_defaults(fn=lambda a: out(assets.canary(a.dump, a.out, a.lang, a.codepage, a.scale, a.voices)))
 
     s = g.add_parser("style", help="misure dello stile originale")
     sg = s.add_subparsers(dest="action", required=True)
@@ -125,16 +148,38 @@ def main(argv=None):
     s = g.add_parser("widescreen", help="16:9")
     sg = s.add_subparsers(dest="action", required=True)
     x = sg.add_parser("geometry"); x.add_argument("--w", type=int, required=True); x.add_argument("--h", type=int, required=True)
-    x.add_argument("--par", type=float, default=1.0, help="1.0 pixel quadrati (default), 1.2 con correzione 4:3")
+    x.add_argument("--par", type=float, default=1.0, help="allungamento verticale del pixel: 1.0 quadrati (default); altro solo se deciso con `aspect`")
     x.set_defaults(fn=lambda a: out(widescreen.geometry(a.w, a.h, a.par)))
+    x = sg.add_parser("aspect", help="proporzione del pixel: candidata da piattaforma, risoluzione, anno, tipo di arte")
+    x.add_argument("--platform", required=True); x.add_argument("--w", type=int, required=True); x.add_argument("--h", type=int, required=True)
+    x.add_argument("--year", type=int); x.add_argument("--art", choices=["pixel", "digitized"])
+    x.set_defaults(fn=lambda a: out(platforms.pixel_aspect(a.platform, a.w, a.h, a.year, a.art)))
+    x = sg.add_parser("aspect-sheet", help="stesse scene a pixel quadrati e allungati, affiancate")
+    x.add_argument("images", nargs="+"); x.add_argument("--out", default="review/aspect.png")
+    x.add_argument("--stretch", type=float, nargs="+", default=[1.0, 1.2])
+    x.set_defaults(fn=lambda a: out(platforms.aspect_sheet(a.images, a.out, tuple(a.stretch))))
     x = sg.add_parser("classify"); x.add_argument("src"); x.add_argument("--screen-w", type=int, required=True)
     x.add_argument("--screen-h", type=int, required=True); x.add_argument("--par", type=float, default=1.0)
     x.add_argument("--out", default="analysis/widescreen-plan.json")
     x.set_defaults(fn=lambda a: out({"counts": widescreen.classify(a.src, a.screen_w, a.screen_h, a.par, a.out)["counts"], "plan": a.out}))
-    x = sg.add_parser("extend"); x.add_argument("plan"); x.add_argument("--hd", required=True); x.add_argument("--out", default="review/widescreen")
+    x = sg.add_parser("extend", help="varianti delle bande: LaMa 1x, LaMa+quilting, ricette, (fal.ai solo se approvato), bordi")
+    x.add_argument("plan"); x.add_argument("--hd", required=True); x.add_argument("--out", default="review/widescreen")
     x.add_argument("--scale", type=int, default=3); x.add_argument("--recipe")
     x.add_argument("--lama", help="modello LaMa TorchScript (big-lama.pt): bande dipinte a 1x e poi ingrandite")
+    x.add_argument("--no-quilt", action="store_true", help="senza la variante LaMa + quilting")
+    x.add_argument("--no-sharpen", action="store_true")
+    x.add_argument("--recipes", help='JSON {scena: {"kind": "rows"|"shift", ...}} per le stanze residue')
+    x.add_argument("--only", nargs="*", help="solo queste scene")
+    x.add_argument("--fal", action="store_true", help="aggiungi la variante fal.ai (a pagamento)")
+    x.add_argument("--approved-images", type=int, default=0, help="immagini fal.ai approvate dall'utente per questo lotto")
     x.set_defaults(fn=cmd_ws_extend)
+    x = sg.add_parser("fal-estimate", help="preventivo gratuito delle bande con fal.ai")
+    x.add_argument("--plan", default="analysis/widescreen-plan.json"); x.add_argument("--scenes", type=int)
+    x.add_argument("--attempts", type=int, default=2); x.add_argument("--price", type=float, default=falai.PRICE_USD)
+    x.set_defaults(fn=cmd_fal_estimate)
+    x = sg.add_parser("check", help="band_check e indice di nitidezza di un'immagine 16:9")
+    x.add_argument("image"); x.add_argument("--left", type=int, required=True); x.add_argument("--right", type=int, required=True)
+    x.set_defaults(fn=cmd_ws_check)
     x = sg.add_parser("apply"); x.add_argument("decisions"); x.add_argument("--plan", default="analysis/widescreen-plan.json")
     x.add_argument("--variants", default="review/widescreen"); x.add_argument("--out", default="remaster/gfx/bg")
     x.set_defaults(fn=lambda a: out(widescreen.apply_decisions(a.plan, a.decisions, a.variants, a.out)))
@@ -167,15 +212,33 @@ def main(argv=None):
     x = sg.add_parser("scan"); x.add_argument("dir"); x.set_defaults(fn=lambda a: out(audio.scan(a.dir)))
     x = sg.add_parser("render-midi"); x.add_argument("mid"); x.add_argument("--soundfont", required=True); x.add_argument("--out", required=True)
     x.set_defaults(fn=lambda a: out({"written": audio.render_midi(a.mid, a.soundfont, a.out)}))
-    x = sg.add_parser("master", help="livello fisso: musica -25 LUFS (default), voci -18, effetti al massimo -16")
-    x.add_argument("src"); x.add_argument("dst"); x.add_argument("--lufs", type=float, default=audio.LEVELS["music"])
+    x = sg.add_parser("master", help="un file a un livello fisso (per prove); per il gioco usa normalize + mix")
+    x.add_argument("src"); x.add_argument("dst"); x.add_argument("--lufs", type=float, default=audio.MIX["music"])
     x.add_argument("--denoise", action="store_true"); x.add_argument("--declip", action="store_true")
     x.set_defaults(fn=lambda a: out({"written": audio.master(a.src, a.dst, a.lufs, denoise=a.denoise, declip=a.declip)}))
+    x = sg.add_parser("normalize", help="fase 1: misura un gruppo (music, sfx, voice) e calcola i guadagni di normalizzazione")
+    x.add_argument("group"); x.add_argument("paths", nargs="+"); x.add_argument("--out", default="analysis/audio-norm.json")
+    x.add_argument("--reference", type=float, default=audio.REFERENCE_LUFS); x.add_argument("--policy", choices=["file", "group"])
+    x.add_argument("--root", help="cartella di partenza per i nomi (sottocartelle mantenute)")
+    x.set_defaults(fn=lambda a: out({k: v for k, v in audio.normalize_group(a.group, a.paths, a.out, a.reference, a.policy,
+                                                                          root=a.root).items() if k != "files"}))
+    x = sg.add_parser("mix", help="fase 2: livelli tra i gruppi e codifica unica dei file")
+    x.add_argument("plan", nargs="?", default="analysis/audio-norm.json"); x.add_argument("--mix", help="audio/mix.json")
+    x.add_argument("--out", default="remaster"); x.add_argument("--groups", nargs="*"); x.add_argument("--dry-run", action="store_true")
+    x.set_defaults(fn=lambda a: out(audio.apply_mix(a.plan, a.out, a.mix, a.groups, a.dry_run)))
+    x = sg.add_parser("mix-preview", help="prova d'ascolto: musica + effetto + battuta coi guadagni del mix")
+    x.add_argument("--voice"); x.add_argument("--music"); x.add_argument("--sfx"); x.add_argument("--mix")
+    x.add_argument("--plan", default="analysis/audio-norm.json"); x.add_argument("--out", default="review/mix.ogg")
+    x.add_argument("--duration", type=float, default=12.0)
+    x.add_argument("--music-offsets", type=float, nargs="+", default=[0.0], help="varianti della musica in dB, es. 0 -3 3")
+    x.set_defaults(fn=lambda a: out(audio.mix_preview(a.out, a.voice, a.music, a.sfx, a.mix, a.plan, a.duration,
+                                                      tuple(a.music_offsets))))
     x = sg.add_parser("loudness"); x.add_argument("files", nargs="+")
     x.set_defaults(fn=lambda a: out({f: audio.loudness(f) for f in a.files}))
     x = sg.add_parser("sfx"); x.add_argument("dir"); x.add_argument("--out", default="remaster/sfx"); x.add_argument("--rates")
     x.add_argument("--default-rate", type=int, default=11025); x.add_argument("--raw-format", default="u8")
-    x.set_defaults(fn=lambda a: out(audio.sfx_batch(a.dir, a.out, a.rates, a.default_rate, a.raw_format)))
+    x.add_argument("--lossless", action="store_true", help="FLAC da livellare poi con normalize + mix")
+    x.set_defaults(fn=lambda a: out(audio.sfx_batch(a.dir, a.out, a.rates, a.default_rate, a.raw_format, lossless=a.lossless)))
 
     s = g.add_parser("voice", help="doppiaggio ElevenLabs")
     sg = s.add_subparsers(dest="action", required=True)
@@ -190,6 +253,31 @@ def main(argv=None):
     x = sg.add_parser("transcripts", help="confronta le trascrizioni automatiche ({chiave: testo}) col copione")
     x.add_argument("script"); x.add_argument("transcripts")
     x.set_defaults(fn=lambda a: out(voice.check_transcripts(a.script, a.transcripts)))
+
+    s = g.add_parser("ui", help="interfaccia del motore nello stile del gioco")
+    sg = s.add_subparsers(dest="action", required=True)
+    x = sg.add_parser("palette", help="ruoli di colore proposti da uno screenshot dell'interfaccia originale")
+    x.add_argument("screenshot"); x.add_argument("--out", default="analysis/ui-palette.json")
+    x.set_defaults(fn=lambda a: out({"roles": theme.propose_palette(a.screenshot),
+                                     "file": theme.save_roles(theme.propose_palette(a.screenshot), a.out)}))
+    x = sg.add_parser("theme", help="tema GUI di ScummVM ricolorato (stesso commit del fork)")
+    x.add_argument("--base", required=True, help="<scummvm>/gui/themes/scummremastered")
+    x.add_argument("--roles", required=True); x.add_argument("--name", required=True)
+    x.add_argument("--out", required=True); x.add_argument("--font"); x.add_argument("--logo")
+    x.set_defaults(fn=lambda a: out(theme.build(a.base, _json(a.roles), a.out, a.name, a.font, a.logo)))
+
+    s = g.add_parser("hint", help="aiuti in gioco (hint/<lingua>.txt)")
+    sg = s.add_subparsers(dest="action", required=True)
+    x = sg.add_parser("check"); x.add_argument("files", nargs="+"); x.add_argument("--vocab")
+    x.set_defaults(fn=lambda a: out(hints.validate(a.files, a.vocab)))
+
+    s = g.add_parser("manual", help="manuale di gioco (manual/<lingua>.md)")
+    sg = s.add_subparsers(dest="action", required=True)
+    x = sg.add_parser("check"); x.add_argument("md"); x.add_argument("--codepage")
+    x.set_defaults(fn=lambda a: out(manual.check(a.md, a.codepage)))
+    x = sg.add_parser("html"); x.add_argument("md"); x.add_argument("--out", required=True)
+    x.add_argument("--colors", help="JSON {bg, panel, text, accent} o i ruoli di `ui palette`"); x.add_argument("--lang", default="it")
+    x.set_defaults(fn=lambda a: out(manual.to_html(a.md, a.out, colors=_json(a.colors) if a.colors else None, lang=a.lang)))
 
     s = g.add_parser("recipe", help="ricette riproducibili")
     sg = s.add_subparsers(dest="action", required=True)
@@ -227,10 +315,61 @@ def cmd_font(a):
     out(font.build(a.ttf, os.path.join(a.out, a.name), a.size, a.scale, a.codepage, a.outline))
 
 
+def _json(path):
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
 def cmd_ws_extend(a):
     rec = gfx.load_recipe(a.recipe, "background_extension") if a.recipe else None
-    plan = widescreen.make_extensions(a.plan, a.hd, a.out, a.scale, rec, lama=a.lama)
-    out({"scenes_with_variants": sum(1 for s in plan["scenes"] if s.get("variants")), "variants_dir": a.out})
+    paid = None
+    if a.fal:
+        data = project.load(a.workdir)
+        try:
+            chosen = project.get_key(data, "graphics.widescreen.fal_ai") if data is not None else None
+        except KeyError:
+            chosen = None
+        if data is not None and chosen is not True:
+            sys.exit("fal.ai non scelto nell'intervista (graphics.widescreen.fal_ai): chiedi all'utente prima")
+        if a.approved_images <= 0:
+            sys.exit("serve --approved-images N: il numero di immagini approvate dall'utente dopo il preventivo "
+                     "(`widescreen fal-estimate`)")
+        os.makedirs(a.out, exist_ok=True)
+        budget = falai.Budget(a.approved_images, os.path.join(a.out, "fal-spesa.jsonl"))
+        paid = falai.fill_function(budget)
+    plan = widescreen.make_extensions(a.plan, a.hd, a.out, a.scale, rec, lama=a.lama, quilting=not a.no_quilt,
+                                      sharpen=not a.no_sharpen, paid_fill=paid,
+                                      recipes=_json(a.recipes) if a.recipes else None, only=a.only)
+    res = {"scenes_with_variants": sum(1 for s in plan["scenes"] if s.get("variants")), "variants_dir": a.out}
+    if paid is not None:
+        res["fal_images_used"] = budget.used
+    out(res)
+
+
+def cmd_fal_estimate(a):
+    n = a.scenes
+    if n is None:
+        plan = _json(a.plan)
+        n = sum(1 for s in plan["scenes"] if s["class"] in ("open-static", "scroll-narrow"))
+    out(falai.estimate(n, a.attempts, a.price))
+
+
+def cmd_ws_check(a):
+    from PIL import Image
+    im = Image.open(a.image)
+    from remaster_tools import bands
+    out({"band_check": bands.band_check(im, a.left, a.right), "sharpness": bands.sharpness_index(im, a.left, a.right)})
+
+
+def cmd_timing(a):
+    segs = _json(a.segments) if a.segments else None
+    crop = tuple(int(v) for v in a.crop.split(",")) if a.crop else None
+    res = timing.measure(a.video, segs, crop)
+    if a.out:
+        os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
+        with open(a.out, "w", encoding="utf-8") as f:
+            json.dump(res, f, indent=2)
+    out(res)
 
 
 def cmd_review_compare(a):

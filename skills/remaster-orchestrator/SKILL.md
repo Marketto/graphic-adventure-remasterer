@@ -18,6 +18,10 @@ deve sempre poter tornare all'originale in tempo reale (tasto di toggle, default
 **Requisiti non negoziabili del risultato** (verificali in QA):
 - salvataggio e caricamento funzionanti (anche dal menu globale), menu di gioco completo;
 - tasto per passare in tempo reale da originale a rimasterizzato (grafica, testi, audio);
+- motore che accetta patch su testi, voci e immagini, senza toccare i file originali;
+- interfaccia del motore (menu, salvataggi, opzioni, aiuti) nello stile del gioco;
+- controlli fluidi: mouse che non scatta, tasti che non si ripetono;
+- manuale e aiuti in gioco, salvo rinuncia dell'utente;
 - eseguibili per le piattaforme scelte + patch che NON contiene i file del gioco originale.
 
 ## Regole di progetto (dall'esperienza del progetto di riferimento)
@@ -77,26 +81,40 @@ Registra ogni risposta con `rstool.py project set <chiave> <valore>` subito dopo
      scenari a scorrimento → allargati automaticamente; interni chiusi statici → restano
      4:3 con bordi; esterni aperti statici → la parte mancante viene inventata in stile e
      **ogni scena ti viene mostrata per conferma**.
+   - Se sì: il riempimento delle bande si fa con le **tecniche locali collaudate** (LaMa a 1x,
+     image quilting dall'originale, ricette per scena: gratis, su CPU). Chiedi se vuole
+     **anche** provare l'outpainting a pagamento con **fal.ai** sulle scene in cui il metodo
+     locale non convince (circa 0,05 $ a immagine, preventivo e approvazione prima di ogni
+     lotto). Registra `graphics.widescreen.fal_ai` (true/false); senza un sì, fal.ai non si usa.
    - Chiedi se **aumentare il framerate** (scorrimento e movimenti fluidi a 60 fps con la
      logica di gioco invariata) — consigliato sì.
+   - Non chiedere la proporzione dei pixel: si decide nell'analisi (Fase 1) da data di uscita,
+     piattaforma e monitor dell'epoca, e si mostra all'utente solo se il gioco era pensato per
+     pixel non quadrati.
 5. **Lingue.** Chiedi quali lingue vuole. Verifica quali esistono già (versioni ufficiali,
    traduzioni amatoriali). Per ogni lingua mancante chiedi se puoi tradurre tu
    (skill `localization`); avvisa che servono font con i glifi giusti, che la suite genera.
 6. **Audio.** Chiedi se migliorare musica ed effetti (skill `audio-remaster`): MIDI renderizzato
-   con soundfont di qualità o tracce CD rimasterizzate, effetti ricampionati e ripuliti.
+   con soundfont di qualità o tracce CD rimasterizzate, effetti ricampionati e ripuliti. In ogni
+   caso le tracce si **normalizzano per gruppo** (musica, effetti, parlato) e poi si fissa il
+   **livello di mix** tra i gruppi, scelto con prove d'ascolto.
 7. **Doppiaggio.** Chiedi se implementarlo. Se sì: serve un account **ElevenLabs con licenza
    commerciale** (piano a pagamento) per distribuire le voci; chiedi conferma esplicita di
    averla e registra `voice.license_confirmed`. Niente cloni di doppiatori reali senza consenso.
    Avvisa dei limiti: il piano gratuito (~10.000 crediti al mese) non usa le voci della Voice
    Library via API; un gioco intero costa ~0,43 crediti per carattere di copione (un gioco medio: ~100.000
    caratteri) e si fa un capitolo alla volta, ognuno approvato con la sua stima.
-8. **Piattaforme e distribuzione.** Default: Windows, Linux, macOS, Android, Web.
+8. **Manuale e aiuti.** Proponi (consigliato sì) il manuale di gioco nel remaster, ripulito,
+   tradotto e leggibile dal menu, e gli aiuti in gioco col tasto H (skill `manual-hints`).
+   Chiedi se ha il manuale stampato o in PDF (servirà la sua copia). Registra `extras.manual`
+   ed `extras.hints`.
+9. **Piattaforme e distribuzione.** Default: Windows, Linux, macOS, Android, Web.
    Chiedi la modalità di distribuzione degli asset (vedi `${CLAUDE_PLUGIN_ROOT}/references/legal-distribution.md`):
    - `recipe` (consigliata senza permessi): la patch contiene motore, strumenti e "ricette";
      gli asset HD si rigenerano sul PC dell'utente dalla sua copia originale;
    - `asset-pack`: la patch contiene gli asset HD già pronti — solo con il permesso scritto
      del titolare dei diritti (registra `distribution.rights_confirmed`).
-9. **Riepilogo e file di gioco.** Mostra il riepilogo delle scelte (una tabella breve) e chiedi
+10. **Riepilogo e file di gioco.** Mostra il riepilogo delle scelte (una tabella breve) e chiedi
    conferma. Poi chiedi i file di gioco: cartella del PC (tramite la connessione al computer),
    allegati, o immagine CD (.iso/.cue/.ccd). Non scaricare mai il gioco da siti terzi,
    anche se lo definiscono "abandonware": l'utente deve fornire la propria copia.
@@ -110,7 +128,13 @@ Lancia in parallelo:
   produce `analysis/style-bible.md` e i prompt di stile. Gli attori servono come riferimento
   di look/epoca/illuminazione, **mai** per dare a un personaggio il volto di una persona reale.
 - `engine-scout` (seconda passata): estrazione asset, inventario (`rstool.py assets inventory`).
-- `widescreen-planner` (se 16:9): classificazione scene (`rstool.py widescreen classify`).
+- `engine-scout`: **piattaforma di riferimento** dell'originale e soluzione per simularla
+  (`rstool.py engine reference --platform <piattaforma>`: DOSBox, VM Windows d'epoca, Wine,
+  emulatori Amiga/Atari/Mac...), da usare per tempi, aspetto e controlli.
+- `widescreen-planner` (se 16:9): prima la **proporzione dei pixel** (skill `widescreen`,
+  "Geometria": data di uscita, piattaforma, monitor dell'epoca, origine dell'arte; foglio di
+  confronto se il candidato non è "pixel quadrati"), poi la classificazione delle scene
+  (`rstool.py widescreen classify ... --par <allungamento deciso>`).
 
 Poi presenta il **Piano di remaster**: cosa cambia, cosa resta, rischi, stima del volume
 (numero di fondali, frame di sprite, righe di testo, brani, battute da doppiare) e del costo
@@ -122,13 +146,20 @@ Subagente `build-engineer` con skill `engine-integration`:
 2. rendere il gioco giocabile dall'inizio alla fine (driver di test automatico, correzioni);
 3. integrare il Remaster Layer: compositore HD, toggle originale/remaster, viewport 16:9,
    interpolazione dei frame, sostituzione asset per chiave (contratto in `${CLAUDE_PLUGIN_ROOT}/references/asset-contract.md`);
-4. salvataggi e menu: verificare `canSaveGameStateCurrently`, menu globale, slot.
+4. **motore patchabile**: ogni testo, voce e immagine passa da un punto sostituibile dalla
+   patch (pacchetto `canary` + `assets coverage`, skill `engine-integration` §1f);
+5. **controlli fluidi** (§1g): cursore a ogni fotogramma, nessun salto, azioni a scatto una volta
+   per pressione;
+6. salvataggi e menu: verificare `canSaveGameStateCurrently`, menu globale, slot;
+7. **interfaccia nello stile del gioco** (§6b): tema GUI dai colori e dai font dell'interfaccia
+   originale, 2-3 varianti da far scegliere.
 
 ## Fase 3 — Asset (in parallelo dove possibile)
 - `graphics-artist` → skill `hd-graphics` (fondali, sprite, UI, font HD);
 - `widescreen-planner` → skill `widescreen` (estensioni; **cancello**: galleria di conferma);
 - `localizer` → skill `localization` (testi corretti, traduzioni, font con glifi);
-- `audio-engineer` → skill `audio-remaster`;
+- `audio-engineer` → skill `audio-remaster` (fase 1: normalizzazione per gruppo; fase 2: mix);
+- `localizer` → skill `manual-hints` (manuale e aiuti, se scelti);
 - `voice-director` → skill `voice-dubbing`, **un capitolo alla volta**: censimento di chi parla
   → provini dei personaggi nuovi → regia → stima dei crediti → **cancello**: approvazione →
   generazione → verifica. Prima il doppiaggio dell'intro come prova, da far ascoltare.
@@ -137,14 +168,17 @@ Manda all'utente un confronto originale/HD appena il primo fondale è pronto, pe
 la direzione presto.
 
 ## Fase 3b — Tempi e mix (prima della QA)
-- Calibra la velocità sul gioco originale in DOSBox (skill `engine-integration`, §1b): mai
-  fidarsi di un passo fisso.
-- Livelli del mix fissi: voci -18, effetti ≤ -16, musica -25 LUFS (skill `audio-remaster`).
+- Calibra la velocità sul gioco originale nell'emulatore o nella VM di riferimento della sua
+  piattaforma (skill `engine-integration`, §1b): mai fidarsi di un passo fisso.
+- Mix: dopo la normalizzazione per gruppo, livelli tra i gruppi (partenza: parlato -18,
+  effetti fino a -16, musica -25 LUFS) scelti con le prove d'ascolto `audio mix-preview`, poi
+  `audio mix` su tutto (skill `audio-remaster`).
 
 ## Fase 4 — QA (subagente `qa-tester`)
 Percorso completo con il driver automatico, screenshot affiancati, test del toggle in ogni
 schermata tipo, salva/carica in ogni parte, controllo testi (troncamenti, glifi mancanti),
-sincronia voci, prova di avvio su ogni piattaforma prodotta. Il verificatore non deve essere
+sincronia voci, fluidità di mouse e tasti (`engine controls`), menu nel tema del gioco, manuale
+e aiuti (H avanza e non torna indietro), prova di avvio su ogni piattaforma prodotta. Il verificatore non deve essere
 l'agente che ha prodotto gli asset.
 
 ## Fase 5 — Rilascio (skill `build-release`)
@@ -154,7 +188,7 @@ licenze (GPL, crediti, licenza ElevenLabs), checksum. Consegna con una riga per 
 
 ## Regole di comportamento
 - Una domanda per volta durante l'intervista; non chiedere ciò che puoi verificare tu.
-- I cancelli di conferma (piano, cast voci, estensioni 16:9 inventate, rilascio) non si
-  saltano nemmeno in esecuzione non presidiata: prepara tutto e fermati lì.
+- I cancelli di conferma (piano, cast voci, estensioni 16:9 inventate, spese fal.ai/ElevenLabs,
+  rilascio) non si saltano nemmeno in esecuzione non presidiata: prepara tutto e fermati lì.
 - Registra le decisioni in `remaster.json` (`decisions[]`) con data e motivazione.
 - Lavora su copie: i file originali dell'utente non si modificano mai.

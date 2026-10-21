@@ -28,6 +28,7 @@ La suite non apre pull request verso ScummVM per conto dell'utente.
 // tutti gli hook qui sotto vanno chiamati solo se _remaster esiste
 Remaster::Layer::Desc d;
 d.gameId = "<id>"; d.screenW = 640; d.screenH = 400; d.pixelAspect = 1.0f;	// 36 px per lato in 16:9
+// pixelAspect != 1 solo se deciso nell'analisi (gioco pensato per pixel non quadrati)
 d.codePage = Common::kDos850;
 _remaster = Remaster::Layer::create(d);
 if (!_remaster)
@@ -86,7 +87,21 @@ if (!_remaster || !_remaster->playVoice(original)) showSubtitle(...);
 | `remaster_language` | lingua ScummVM | testi/voci da `text/<lang>.tsv`, `voice/<lang>/` |
 | `remaster_dump` | — | cartella dove scrivere `bg/` (chiave scena con `_`), `spr/`, `text.jsonl` per la pipeline |
 
+## Driver di test: comandi per i controlli
+Da aggiungere al driver del motore (attivo solo con la variabile d'ambiente di test):
+- `inputlog <file>`: per ogni evento letto scrive `<ms> in mouse <x> <y>` o
+  `<ms> in key <nome> down|up [repeat]` (`repeat` se `e.kbdRepeat`), per ogni fotogramma
+  presentato `<ms> draw cursor <x> <y>` (coordinate dello schermo), per ogni azione a scatto
+  eseguita `<ms> act <nome>` (toggle, menu, inventario, salta, aiuti, salva);
+- `mousepath x0 y0 x1 y1 ms`: eventi di movimento a 120 Hz lungo una retta;
+- `keyhold <tasto> ms`: pressione, eventi ripetuti come quelli del sistema, rilascio.
+Il log si analizza con `rstool.py engine controls <file>`. Le azioni a scatto ignorano gli
+eventi con `kbdRepeat`; il cursore si ridisegna a ogni `present()`/`pace()`, non solo a ogni tick.
+
 ## Limiti noti (da completare per motore)
+- `pixelAspect` cambia solo la larghezza della viewport 16:9: la scala verticale per i giochi
+  pensati per pixel non quadrati (es. 320x200 a 3x → 960x720) e la conversione del mouse
+  relativa non sono ancora implementate nel Layer comune.
 - L'interpolazione riguarda lo scorrimento e i frame intermedi tra un tick e l'altro; gli
   spostamenti degli sprite sono interpolati solo se il motore ridisegna gli oggetti con
   la posizione intermedia (hook specifico del motore, es. le camminate).

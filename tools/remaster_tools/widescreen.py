@@ -9,7 +9,7 @@ import shutil
 import numpy as np
 from PIL import Image, ImageFilter
 
-from . import comfy, imaging, rawframe
+from . import bands, comfy, imaging, rawframe
 
 UI_HINTS = re.compile(r"(menu|map|mappa|inv|intro|title|titolo|credits|crediti|logo|slide|option)", re.I)
 
@@ -17,9 +17,10 @@ UI_HINTS = re.compile(r"(menu|map|mappa|inv|intro|title|titolo|credits|crediti|l
 def geometry(screen_w, screen_h, par=1.0, aspect=(16, 9)):
     """Viewport width in original pixels and the (symmetric) extension per side.
 
-    par is the pixel aspect the remaster displays: 1.0 when pixels are shown square (the
-    Remaster Layer: 640x400 -> 36 px per side), 1.2 only when the game is shown
-    with 4:3 aspect correction (320x200 on a CRT).
+    par is the vertical stretch the remaster gives each pixel: 1.0 = square pixels (default:
+    640x400 -> 36 px per side); another value ONLY if the game was conceived for a display
+    that stretched its pixels (release date, target platform, devices of the time: see
+    platforms.pixel_aspect), e.g. 1.2 for a 320x200 picture made for a 4:3 CRT.
     """
     target = screen_h * par * aspect[0] / aspect[1]
     side = max(0, int(math.ceil((target - screen_w) / 2 - 1e-9)))
@@ -79,7 +80,7 @@ def classify_scene(img, screen_w, screen_h, geo, name=""):
     return "closed-static", 0.4, f"incerto (punteggio {open_score:.2f}): verificare a vista"
 
 
-def classify(src_dir, screen_w, screen_h, par=1.2, out_path=None):
+def classify(src_dir, screen_w, screen_h, par=1.0, out_path=None):
     geo = geometry(screen_w, screen_h, par)
     scenes = []
     for name in sorted(os.listdir(src_dir)):
@@ -152,11 +153,13 @@ def blank_borders(src: np.ndarray, limit=20):
 
 
 def extend_inpaint(orig: Image.Image, hd: Image.Image, left: int, right: int, scale: int, fill,
-                   upscale=None, context=24, ramp=8):
+                   upscale=None, context=24, ramp=8, refine=None):
     """16:9 bands painted at the ORIGINAL resolution by an inpainting
     model (LaMa works best at the scale the art was drawn), then upscaled with the same
     upscaler as the HD background, with `context` original pixels and a `ramp` blend into
     the HD centre. Black border columns of the original are repainted too. Sharp, not blurred.
+    `fill(img, mask)` paints the bands (LaMa, a recipe, or the optional paid outpainting);
+    `refine(wide, band_mask, (x0, x1))` reworks them at 1x before upscaling (image quilting).
     left/right are in original pixels; the result is (w + left + right) * scale wide."""
     from . import scalers
     up = upscale or (lambda im, k: scalers.upscale_rgb(im, k))
@@ -173,8 +176,11 @@ def extend_inpaint(orig: Image.Image, hd: Image.Image, left: int, right: int, sc
     mask = np.zeros((h, W), np.float32)
     mask[:, :left + bl] = 1
     mask[:, left + w - br:] = 1
-    wide = fill(wide, mask)
+    wide = np.array(fill(wide, mask), np.uint8)
     wide[:, left + bl:left + w - br] = src[:, bl:w - br]
+    if refine is not None:
+        wide = np.array(refine(wide, mask > 0, (left + bl, left + w - br)), np.uint8)
+        wide[:, left + bl:left + w - br] = src[:, bl:w - br]
     out = np.zeros((h * S, W * S, 3), np.float32)
     out[:, left * S:(left + w) * S] = hd_a
     for is_left, n in ((True, left), (False, right)):
@@ -208,16 +214,46 @@ def extend(hd_img: Image.Image, left: int, right: int, recipe=None, seeds=(11, 2
     return variants
 
 
-def make_extensions(plan_path, hd_dir, out_dir, scale, recipe=None, seeds=(11, 22, 33), lama=None):
-    """Variants per scene: inpainted bands (if `lama`: model path or fill function), generative
-    outpainting (if ComfyUI and a recipe), and pillarbox borders."""
+def _recipe_fill(kind, **kw):
+    """Local recipe as a `fill`: LaMa-free continuation for fog/sky (rows) or shifted texture."""
+    def fill(img, mask):
+        m = mask > 0
+        cols = np.where(~m.all(0))[0]
+        box = (int(cols.min()), int(cols.max()) + 1)
+        if kind == "rows":
+            return bands.recipe_rows(img, m, box, **kw)
+        if kind == "shift":
+            return bands.recipe_shift(img, m, box, **kw)
+        raise ValueError(f"ricetta sconosciuta {kind}")
+    return fill
+
+
+def check_variant(img, left_px, right_px):
+    """Automatic checks stored next to every variant (a filter, the eye decides)."""
+    return {"band_check": bands.band_check(img, left_px, right_px),
+            "sharpness": bands.sharpness_index(img, left_px, right_px)}
+
+
+def make_extensions(plan_path, hd_dir, out_dir, scale, recipe=None, seeds=(11, 22, 33), lama=None,
+                    quilting=True, sharpen=True, paid_fill=None, recipes=None, only=None):
+    """Variants per scene, with the local methods of the reference project first:
+      v-lama     LaMa at 1x + upscaler                     (if `lama`)
+      v-quilt    LaMa + image quilting from the original   (if `lama` and quilting)
+      v-<recipe> local recipe for the scene (recipes={scene: {"kind": "rows"|"shift", ...}})
+      v-fal      OPTIONAL paid masked outpainting           (only with `paid_fill`, already approved)
+      ai         generative outpainting with ComfyUI        (if a recipe and ComfyUI)
+      borders    pillarbox in keeping with the picture
+    Every inventive variant gets band_check + sharpness index; blurred bands are sharpened."""
     fill = load_lama(lama) if isinstance(lama, str) else lama
     with open(plan_path, encoding="utf-8") as f:
         plan = json.load(f)
     geo = plan["geometry"]
     os.makedirs(out_dir, exist_ok=True)
+    recipes = recipes or {}
     for s in plan["scenes"]:
         if s["class"] not in ("open-static", "scroll-narrow", "closed-static"):
+            continue
+        if only and s["scene"] not in only:
             continue
         hd_path = None
         for ext in (".png", ".jpg"):
@@ -226,33 +262,51 @@ def make_extensions(plan_path, hd_dir, out_dir, scale, recipe=None, seeds=(11, 2
         img = Image.open(hd_path).convert("RGB") if hd_path else _load(s["source"]).resize(
             (s["size"][0] * scale, s["size"][1] * scale), Image.NEAREST)
         need = max(0, geo["viewport_w"] - s["size"][0])
-        left_px, right_px = (need // 2) * scale, (need - need // 2) * scale
+        lw, rw = need // 2, need - need // 2
+        left_px, right_px = lw * scale, rw * scale
         inventable = s["class"] in ("open-static", "scroll-narrow")
         use_recipe = recipe if inventable else None
         s["variants"] = []
-        n = 0
-        if fill is not None and inventable:
-            im = extend_inpaint(_load(s["source"]), img, need // 2, need - need // 2, scale, fill)
-            n += 1
-            vname = f"{s['scene']}.v{n}.png"
+        orig = _load(s["source"]) if inventable else None
+
+        def save(tag, im, kind, seed=None):
+            info = None
+            if sharpen and kind != "borders":
+                im, amount, _idx = bands.unsharp_band(im, left_px, right_px)
+                info = amount
+            vname = f"{s['scene']}.{tag}.png"
             im.save(os.path.join(out_dir, vname))
-            s["variants"].append({"file": vname, "kind": "inpaint", "seed": None})
+            v = {"file": vname, "kind": kind, "seed": seed}
+            if kind != "borders":
+                v["checks"] = check_variant(im, left_px, right_px)
+                v["unsharp"] = info
+            s["variants"].append(v)
+        if inventable and fill is not None:
+            save("v-lama", extend_inpaint(orig, img, lw, rw, scale, fill), "inpaint")
+            if quilting:
+                save("v-quilt", extend_inpaint(orig, img, lw, rw, scale, fill,
+                                               refine=lambda w_, m_, b_: bands.quilt(w_, m_, b_)), "quilt")
+        if inventable and s["scene"] in recipes:
+            r = dict(recipes[s["scene"]])
+            kind = r.pop("kind")
+            save(f"v-{kind}", extend_inpaint(orig, img, lw, rw, scale, _recipe_fill(kind, **r)), f"recipe-{kind}")
+        if inventable and paid_fill is not None:
+            save("v-fal", extend_inpaint(orig, img, lw, rw, scale, paid_fill), "fal")
+        n = 0
         for kind, seed, im in extend(img, left_px, right_px, use_recipe, seeds):
             if kind == "ai":
                 n += 1
-                vname = f"{s['scene']}.v{n}.png"
+                save(f"v{n}", im, "ai", seed)
             else:
-                vname = f"{s['scene']}.borders.png"
-            im.save(os.path.join(out_dir, vname))
-            s["variants"].append({"file": vname, "kind": kind, "seed": seed})
-        s["extend"] = {"left": need // 2, "right": need - need // 2}
+                save("borders", im, "borders")
+        s["extend"] = {"left": lw, "right": rw}
     with open(plan_path, "w", encoding="utf-8") as f:
         json.dump(plan, f, indent=2, ensure_ascii=False)
     return plan
 
 
 def apply_decisions(plan_path, decisions_path, variants_dir, bg_out_dir):
-    """decisions: {scene: "v1"|"v2"|"v3"|"borders"|"4:3"|"redo"}"""
+    """decisions: {scene: "v-lama"|"v-quilt"|"v-rows"|"v-fal"|"v1"|"borders"|"4:3"|"redo"}"""
     with open(plan_path, encoding="utf-8") as f:
         plan = json.load(f)
     with open(decisions_path, encoding="utf-8") as f:

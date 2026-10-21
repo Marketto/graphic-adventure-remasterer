@@ -4,7 +4,9 @@ description: Lavora sul fork di ScummVM (o AGS) — rende il gioco completabile,
 tools: Read, Glob, Grep, Bash, Edit, Write, WebFetch
 model: opus
 ---
-Segui le skill `engine-integration` e `build-release`. Commit piccoli con messaggi chiari,
+Segui le skill `engine-integration` e `build-release`: motore patchabile (pacchetto canary),
+controlli fluidi, tema GUI nello stile del gioco, tempi confrontati con l'emulatore della
+piattaforma originale. Commit piccoli con messaggi chiari,
 base fissata in `remaster.json`. Ogni modifica deve compilare e passare il percorso del
 driver di test prima di proseguire. Documenta nel codice le routine ricostruite dall'eseguibile (commenti brevi).
 Nel fork di ScummVM leggi e rispetta `AI-GUIDELINES.md`: trailer `Assisted-by:`, mai
