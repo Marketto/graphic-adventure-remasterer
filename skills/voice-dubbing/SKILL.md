@@ -118,8 +118,11 @@ rapporto; se serve, il motore cerca prima `<chiave>_<personaggio>` e poi `<chiav
 
 ## 6. Verifica dopo la generazione
 `rstool.py voice check voice/script-<lang>.tsv remaster/voice/<lang>`: file mancanti, durate
-anomale. Poi trascrizione automatica di **ogni** battuta (`creative_transcribe_audio` o un
-modello locale) e confronto col testo: parole mancanti, audio tag letti ad alta voce, pronunce
+anomale. Poi trascrizione automatica di **ogni** battuta, gratis e in locale:
+`rstool.py voice transcribe remaster/voice/<lang> --lang <lang> --out qa/trascrizioni-<lang>.json`
+(faster-whisper `small` su CPU; ripartibile) oppure `creative_transcribe_audio` di ElevenLabs;
+poi `rstool.py voice transcripts voice/script-<lang>.tsv qa/trascrizioni-<lang>.json` confronta col
+testo: parole mancanti, audio tag letti ad alta voce, pronunce
 sbagliate. Le battute da rifare vanno in `voice/retake.tsv` e si rifanno in blocco, con conferma.
 Soglia: WER oltre il 20% o qualunque parola mancante → da ascoltare. Falsi positivi noti: nomi
 propri trascritti con un'altra grafia e parlate volute.

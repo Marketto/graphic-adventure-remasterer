@@ -1,0 +1,33 @@
+{
+  "_nota": "Esempio di ricetta (modalità recipe): ricostruisce remaster/ dalla copia del giocatore con gli stessi parametri e seed usati nel progetto. Segnaposto: {game} {out} {work} {engine} {recipes} {python}. Le varianti 16:9 scelte da fal.ai NON si rigenerano in modo identico: in modalità recipe usa per quelle scene la variante locale (v-quilt) o distribuiscile solo col permesso dei titolari.",
+  "rac": 1,
+  "game": "<id del gioco>",
+  "version": "1.0.0",
+  "scale": 3,
+  "aspect": "16:9",
+  "languages": ["it"],
+  "contents": ["bg", "spr", "fonts", "text", "music", "sfx", "voice"],
+  "steps": [
+    {"name": "dump", "exec": ["{engine}", "--config={recipes}/dump.ini", "--path={game}", "<id del gioco>"]},
+    {"name": "fondali", "rstool": ["gfx", "bg", "{work}/dump/bg", "--out", "{out}/gfx/bg", "--scale", "3",
+                                    "--seed", "1234", "--no-ai", "--format", "jpg"]},
+    {"name": "sprite", "rstool": ["gfx", "sprites", "{work}/dump/spr", "--out", "{out}/gfx/spr", "--scale", "3",
+                                   "--seed", "1234"]},
+    {"name": "bande 16:9", "rstool": ["widescreen", "extend", "{recipes}/widescreen-plan.json", "--hd", "{out}/gfx/bg",
+                                       "--out", "{work}/varianti", "--scale", "3", "--lama", "{work}/modelli/big-lama.pt",
+                                       "--recipes", "{recipes}/ricette-bande.json"]},
+    {"name": "scelte 16:9", "rstool": ["widescreen", "apply", "{recipes}/decisions.json", "--plan",
+                                        "{recipes}/widescreen-plan.json", "--variants", "{work}/varianti",
+                                        "--out", "{out}/gfx/bg"]},
+    {"name": "audio fase 1 musica", "rstool": ["audio", "normalize", "music", "{work}/audio/render", "--out",
+                                                "{work}/audio-norm.json"]},
+    {"name": "audio fase 1 effetti", "rstool": ["audio", "normalize", "sfx", "{work}/audio/clean/sfx", "--out",
+                                                 "{work}/audio-norm.json"]},
+    {"name": "audio fase 2 mix", "rstool": ["audio", "mix", "{work}/audio-norm.json", "--mix", "{recipes}/mix.json",
+                                             "--out", "{out}"]},
+    {"name": "testi, aiuti, manuale", "copy": ["{recipes}/contenuti", "{out}"]},
+    {"name": "tema", "rstool": ["ui", "theme", "--base", "{work}/scummvm/gui/themes/scummremastered", "--roles",
+                                 "{recipes}/ui-palette.json", "--name", "<gioco> Remaster", "--out",
+                                 "{out}/theme/<gioco>.zip"]}
+  ]
+}

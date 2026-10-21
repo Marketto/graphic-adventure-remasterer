@@ -118,3 +118,42 @@ def compare_gallery(pairs, out_path, title="Originale vs HD"):
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(page)
     return {"items": len(cards), "path": out_path}
+
+
+# ------------------------------------------------------------------ visual regression
+def diff_dirs(before_dir, after_dir, out_path, threshold=0.002, level=12):
+    """Screenshots with the same name in two runs (e.g. sweep of every room before and after a
+    change): share of pixels changed by more than `level`; the changed ones go in a page with
+    before / after / heat map, so a regression is seen at once."""
+    import numpy as np
+    from PIL import Image
+    names = sorted(set(os.listdir(before_dir)) & set(os.listdir(after_dir)))
+    names = [n for n in names if n.lower().endswith((".png", ".jpg", ".bmp"))]
+    rows, cards = [], []
+    for n in names:
+        a = Image.open(os.path.join(before_dir, n)).convert("RGB")
+        b = Image.open(os.path.join(after_dir, n)).convert("RGB")
+        if a.size != b.size:
+            rows.append({"file": n, "changed": 1.0, "note": f"dimensioni diverse {a.size} → {b.size}"})
+            b = b.resize(a.size)
+        d = np.abs(np.asarray(a, np.int16) - np.asarray(b, np.int16)).max(-1)
+        share = float((d > level).mean())
+        rows.append({"file": n, "changed": round(share, 4)})
+        if share > threshold:
+            heat = np.zeros(d.shape + (3,), np.uint8)
+            heat[..., 0] = np.clip(d * 3, 0, 255)
+            mix = (np.asarray(b, np.float32) * 0.35 + heat * 0.65).astype(np.uint8)
+            figs = "".join(f'<figure><img alt="{lab} {html.escape(n)}" src="{_thumb(im)}"><figcaption>{lab}</figcaption></figure>'
+                           for lab, im in (("Prima", a), ("Dopo", b), ("Differenze", Image.fromarray(mix))))
+            cards.append(f'<section class="card"><div class="head"><strong>{len(cards) + 1}. {html.escape(n)}</strong>'
+                         f'<span class="tag">{share:.1%} cambiato</span></div><div class="grid">{figs}</div></section>')
+    only_before = sorted(set(os.listdir(before_dir)) - set(os.listdir(after_dir)))
+    page = (f'<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" '
+            f'content="width=device-width,initial-scale=1"><title>Differenze</title><style>{CSS}</style></head><body>'
+            f'<header><h1>Differenze tra due passate</h1><p class="sub">{len(cards)} schermate cambiate su '
+            f'{len(names)}; mancanti nella seconda: {len(only_before)}</p></header><main>{"".join(cards)}</main></body></html>')
+    os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write(page)
+    return {"compared": len(names), "changed": [r for r in rows if r["changed"] > threshold],
+            "missing_after": only_before, "page": out_path}

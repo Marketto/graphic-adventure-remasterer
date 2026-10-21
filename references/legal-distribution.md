@@ -35,7 +35,19 @@ Note pratiche per `recipe`:
 - la generazione su GPU può non essere bit-identica tra macchine: piccole differenze sono
   accettate (`rstool.py gfx check` ne misura la fedeltà); senza GPU la ricetta ripiega
   sull'upscaling deterministico e le estensioni inventate restano bordi;
-- le parti inventate (estensioni 16:9) sono descritte da prompt + maschera + seed.
+- le parti inventate (estensioni 16:9) con i metodi locali (LaMa, quilting, ricette) si
+  rigenerano con gli stessi parametri e seed (`references/recipe.example.json`); quelle scelte
+  da un servizio a pagamento (fal.ai) **non** sono riproducibili in modo identico: in modalità
+  `recipe` quelle scene usano la variante locale, oppure si distribuiscono solo col permesso;
+- il manuale (anche tradotto o ripulito) è un'opera protetta come il gioco: in `recipe` si
+  consegna solo la sezione nuova scritta per il remaster, il resto si ricava dalla copia
+  dell'utente.
+
+## Marchi e loghi
+Logo e titolo del gioco (anche nel tema dei menu, `ui theme --logo`) sono marchi dei titolari:
+vanno bene nella copia privata dell'utente e nei pacchetti distribuiti con permesso; in un
+pacchetto distribuito senza permesso il tema usa un'intestazione neutra (titolo in testo
+semplice o nessun logo). Mai loghi o nomi dei titolari su siti pubblici del progetto.
 
 ## Regole del progetto ScummVM sull'AI
 Il fork resta dell'utente e si distribuisce sotto GPL; ma ScummVM vieta la co-autorialità

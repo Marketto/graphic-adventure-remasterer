@@ -26,8 +26,26 @@ al momento, sul web e nei file dell'utente, e resta nella cartella privata del p
 
 Classifica in: **A** supportato e completabile → si lavora sul fork; **B** supportato in parte
 → prima lo si rende completabile (vedi `${CLAUDE_PLUGIN_ROOT}/references/conoscenza/motore-e-test.md`);
-**C** non supportato → serve un nuovo interprete (settimane-mesi). DOSBox solo come
-riferimento di confronto per tempi e comportamento, non come base del remaster.
+**C** non supportato → serve un nuovo interprete (settimane-mesi, vedi §2b). L'emulatore o la VM
+della piattaforma originale (`rstool.py engine reference --platform <piattaforma>`: DOSBox, VM
+Windows d'epoca, Wine, emulatori Amiga/Atari/Mac...) serve solo come riferimento per tempi,
+aspetto e controlli, non come base del remaster.
+
+## 2b. Classe C: come impostare un nuovo interprete
+Non promettere tempi: proponi all'utente uno studio di fattibilità di qualche giorno.
+1. **Formati**: archivi e risorse (indice, compressione, palette, sprite, fondali, testi,
+   suoni) dai file dell'utente; cerca documentazione pubblica e strumenti di estrazione open
+   source esistenti. Un estrattore che produce il dump RAC (`bg/`, `spr/`, `text.jsonl`) serve
+   subito alla pipeline grafica e ai testi, anche prima dell'interprete.
+2. **Script**: disassemblatore degli script del gioco (opcode, parametri, salti); confronto col
+   comportamento sull'emulatore di riferimento.
+3. **Interprete dentro ScummVM** (nuovo motore in `engines/<id>/`): ScummVM fornisce già
+   rilevamento, salvataggi, audio, input, piattaforme e il Remaster Layer. Partire da un motore
+   esistente di struttura simile (fondali + sprite + script a opcode).
+4. **Tappe verificabili**: mostrare la prima stanza → camminare e cliccare → primo enigma →
+   prima parte completa → tutto il gioco; il driver di test e i casi di regressione dal giorno uno.
+5. Rispetta la licenza e le regole di ScummVM (codice GPL, nessun asset del gioco nel fork);
+   l'estrazione dagli eseguibili si fa solo dalla copia dell'utente.
 
 ## 3. Lavoro esistente da cercare
 - Codice upstream e fork (GitHub), rami di sviluppatori, issue aperte sul motore.

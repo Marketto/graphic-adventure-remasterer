@@ -29,6 +29,8 @@ DEFAULT = {
               # stage 1: normalization per group; stage 2: levels of the groups in the mix (LUFS)
               "mix": {"voice": -18.0, "sfx": -16.0, "music": -25.0}},
     "extras": {"manual": None, "hints": None},
+    # spending cap for the whole project (on top of the quote per batch) and the ledger
+    "budget": {"cap_usd": None, "cap_credits": None, "spent": []},
     "voice": {"enabled": None, "provider": "elevenlabs", "license_confirmed": False,
               "languages": []},
     "platforms": ["windows", "linux", "macos", "android", "web"],
@@ -105,6 +107,21 @@ def decide(data, what: str, why: str = ""):
     return data
 
 
+def spend(data, service: str, amount: float, unit: str = "usd", note: str = ""):
+    """Record money or credits actually spent; returns the totals and whether a cap is passed."""
+    b = data.setdefault("budget", {"cap_usd": None, "cap_credits": None, "spent": []})
+    b.setdefault("spent", []).append({"date": _now(), "service": service, "amount": float(amount),
+                                      "unit": unit, "note": note})
+    usd = sum(e["amount"] for e in b["spent"] if e["unit"] == "usd")
+    cred = sum(e["amount"] for e in b["spent"] if e["unit"] == "credits")
+    over = []
+    if b.get("cap_usd") is not None and usd > b["cap_usd"]:
+        over.append(f"speso {usd:.2f} $ oltre il tetto di {b['cap_usd']} $")
+    if b.get("cap_credits") is not None and cred > b["cap_credits"]:
+        over.append(f"usati {cred:.0f} crediti oltre il tetto di {b['cap_credits']}")
+    return {"usd": round(usd, 2), "credits": round(cred), "over_cap": over}
+
+
 def set_phase(data, phase: str):
     if phase not in PHASES:
         raise ValueError(f"fase sconosciuta: {phase} (valide: {', '.join(PHASES)})")
@@ -142,6 +159,10 @@ def missing_answers(data):
         out.insert(out.index("lingue") if "lingue" in out else len(out), "formato 16:9")
     if g.get("widescreen", {}).get("enabled") and g["widescreen"].get("fal_ai") is None:
         out.insert(out.index("lingue") if "lingue" in out else len(out), "fal.ai per le bande 16:9 (opzionale)")
+    paid = data.get("voice", {}).get("enabled") or g.get("widescreen", {}).get("fal_ai")
+    b = data.get("budget", {})
+    if paid and b.get("cap_usd") is None and b.get("cap_credits") is None:
+        out.append("tetto di spesa del progetto")
     if data.get("voice", {}).get("enabled") and not data["voice"].get("license_confirmed"):
         out.append("conferma licenza ElevenLabs")
     return out

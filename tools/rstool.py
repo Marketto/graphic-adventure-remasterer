@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""rstool — command line of the Remaster Studio pipeline. Every command prints JSON.
+"""rstool — command line of the graphic-adventure-remasterer pipeline. Every command prints JSON.
 
 Run `rstool.py <group> -h` for the commands of a group:
   project, engine, key, assets, style, gfx, font, widescreen, review, text, audio, voice, ui, hint,
@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from remaster_tools import (assets, audio, controls, detect, falai, font, gfx, hints, keys,  # noqa: E402
                             manual, platforms, project, rawframe, recipe, release, review, style,
-                            text, theme, timing, voice, widescreen)
+                            text, theme, timing, transcribe, voice, widescreen)
 
 
 def out(obj):
@@ -58,6 +58,14 @@ def cmd_project(a):
         out({"phase": a.args[0]})
     elif a.action == "missing":
         out(project.missing_answers(need_project(wd)))
+    elif a.action == "spend":
+        data = need_project(wd)
+        if len(a.args) < 2:
+            sys.exit("uso: project spend <servizio> <importo> [usd|credits] [nota]")
+        res = project.spend(data, a.args[0], float(a.args[1]), a.args[2] if len(a.args) > 2 else "usd",
+                            " ".join(a.args[3:]))
+        project.save(data, wd)
+        out(res)
 
 
 def main(argv=None):
@@ -66,7 +74,8 @@ def main(argv=None):
     g = p.add_subparsers(dest="group", required=True)
 
     s = g.add_parser("project", help="stato del progetto (remaster.json)")
-    s.add_argument("action", choices=["init", "show", "set", "get", "decide", "phase", "missing"])
+    s.add_argument("action", choices=["init", "show", "set", "get", "decide", "phase", "missing", "spend"],
+                   help="spend <servizio> <importo> [usd|credits] [nota]: registra una spesa e controlla il tetto")
     s.add_argument("args", nargs="*")
     s.add_argument("--force", action="store_true")
     s.set_defaults(fn=cmd_project)
@@ -190,6 +199,10 @@ def main(argv=None):
     x = sg.add_parser("gallery"); x.add_argument("--widescreen", required=True); x.add_argument("--variants", default="review/widescreen")
     x.add_argument("--out", default="review/widescreen.html"); x.add_argument("--title", default="Revisione 16:9")
     x.set_defaults(fn=lambda a: out(review.widescreen_gallery(a.widescreen, a.variants, a.out, a.title)))
+    x = sg.add_parser("diff", help="regressione visiva: schermate con lo stesso nome in due passate")
+    x.add_argument("before"); x.add_argument("after"); x.add_argument("--out", default="review/diff.html")
+    x.add_argument("--threshold", type=float, default=0.002)
+    x.set_defaults(fn=lambda a: out(review.diff_dirs(a.before, a.after, a.out, a.threshold)))
     x = sg.add_parser("compare"); x.add_argument("orig"); x.add_argument("hd"); x.add_argument("--out", default="review/compare.html")
     x.set_defaults(fn=cmd_review_compare)
 
@@ -244,7 +257,11 @@ def main(argv=None):
     x = sg.add_parser("sfx"); x.add_argument("dir"); x.add_argument("--out", default="remaster/sfx"); x.add_argument("--rates")
     x.add_argument("--default-rate", type=int, default=11025); x.add_argument("--raw-format", default="u8")
     x.add_argument("--lossless", action="store_true", help="FLAC da livellare poi con normalize + mix")
+    x = sg.add_parser("restore-speech", help="restauro del parlato ORIGINALE (giochi già parlati): FLAC da livellare poi")
+    x.add_argument("dir"); x.add_argument("--out", default="audio/clean/voice")
+    x.add_argument("--model", choices=["deepfilternet"], help="modello locale di pulizia della voce, se installato")
     x.set_defaults(fn=lambda a: out(audio.sfx_batch(a.dir, a.out, a.rates, a.default_rate, a.raw_format, lossless=a.lossless)))
+    x.set_defaults(fn=lambda a: out(audio.restore_speech_batch(a.dir, a.out, a.model)))
 
     s = g.add_parser("voice", help="doppiaggio ElevenLabs")
     sg = s.add_subparsers(dest="action", required=True)
@@ -262,6 +279,11 @@ def main(argv=None):
     x.set_defaults(fn=lambda a: out(voice.reencode(a.script, a.cast, a.out, audio.load_mix(_mix_source(a))[0]["voice"])))
     x = sg.add_parser("check"); x.add_argument("script"); x.add_argument("dir")
     x.set_defaults(fn=lambda a: out(voice.check(a.script, a.dir)))
+    x = sg.add_parser("transcribe", help="trascrizione locale e gratuita delle battute (faster-whisper o whisper.cpp)")
+    x.add_argument("dir"); x.add_argument("--lang", required=True); x.add_argument("--out", default="qa/trascrizioni.json")
+    x.add_argument("--model", default="small", help="faster-whisper: tiny/base/small/medium; whisper.cpp: file ggml")
+    x.add_argument("--backend", choices=["faster-whisper", "whisper.cpp"])
+    x.set_defaults(fn=lambda a: out(transcribe.transcribe_dir(a.dir, a.out, a.lang, a.model, a.backend)))
     x = sg.add_parser("transcripts", help="confronta le trascrizioni automatiche ({chiave: testo}) col copione")
     x.add_argument("script"); x.add_argument("transcripts")
     x.set_defaults(fn=lambda a: out(voice.check_transcripts(a.script, a.transcripts)))
@@ -303,6 +325,9 @@ def main(argv=None):
     x.add_argument("--licenses"); x.add_argument("--version", default="1.0.0")
     x.set_defaults(fn=lambda a: out({"package": release.package(need_project(a.workdir), a.out, a.game_md5, a.patches, a.engines,
                                                                 a.remaster, a.recipes, a.licenses, a.version)}))
+    x = sg.add_parser("budget", help="peso del pacchetto e memoria per desktop, Android, web")
+    x.add_argument("remaster"); x.add_argument("--targets", nargs="+", default=["desktop", "android", "web"])
+    x.set_defaults(fn=lambda a: out(release.budget(a.remaster, tuple(a.targets))))
     x = sg.add_parser("verify"); x.add_argument("root"); x.add_argument("--game-md5")
     x.set_defaults(fn=lambda a: out(release.verify(a.root, a.game_md5)))
 
