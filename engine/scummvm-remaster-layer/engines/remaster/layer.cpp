@@ -78,14 +78,13 @@ Layer::Layer(const Desc &desc, AssetPack *pack, int scale, const Graphics::Pixel
 	_toggleKey = ConfMan.hasKey("remaster_toggle_key") ? CLIP(ConfMan.getInt("remaster_toggle_key"), 1, 12) : 8;
 	memset(_pal, 0, sizeof(_pal));
 
+	// games made for non-square pixels: stretch the rows (remaster_aspect=false keeps square pixels)
+	float aspect = CLIP(desc.pixelAspect, 0.5f, 2.0f);
+	_aspect = aspect != 1.0f && confBool("remaster_aspect", true);
+	if (_aspect)
+		_comp->setAspect(aspect);
 	if (_widescreen) {
-		// same number of pixels on each side, as in the pipeline tools (rstool widescreen geometry)
-		float target = desc.screenH * desc.pixelAspect * 16.0f / 9.0f;
-		float half = (target - desc.screenW) / 2.0f - 1e-4f;
-		int side = (int)half;
-		if (half > side)
-			side++;
-		side = MAX(0, side);
+		int side = Compositor::sideExtension(desc.screenW, desc.screenH, _aspect ? aspect : 1.0f);
 		_comp->setMaxExtension(side, side);
 	}
 
@@ -102,8 +101,8 @@ Layer::Layer(const Desc &desc, AssetPack *pack, int scale, const Graphics::Pixel
 		_dumpDir = ConfMan.get("remaster_dump");
 
 	_comp->setClassic(confBool("remaster_classic", false));
-	debug(1, "Remaster: %dx%d -> %dx%d (scale %d, widescreen %d, language %s)", desc.screenW, desc.screenH,
-		_comp->outputWidth(), _comp->outputHeight(), scale, _widescreen, _lang.c_str());
+	debug(1, "Remaster: %dx%d -> %dx%d (scale %d, aspect %d, widescreen %d, language %s)", desc.screenW, desc.screenH,
+		_comp->outputWidth(), _comp->outputHeight(), scale, _aspect, _widescreen, _lang.c_str());
 }
 
 Layer::~Layer() {
@@ -258,6 +257,11 @@ bool Layer::handleEvent(Common::Event &ev) {
 	default:
 		return false;
 	}
+}
+
+void Layer::warpMouse(int x, int y) {
+	Common::Point p = _comp->toScreen(Common::Point(x, y));
+	g_system->warpMouse(p.x, p.y);
 }
 
 // ---------------------------------------------------------------------------

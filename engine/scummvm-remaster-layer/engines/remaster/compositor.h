@@ -63,6 +63,10 @@ struct FontAtlas {
  * Palette fades and grayscale views are applied to HD pixels; other palette
  * effects fall back to (3) for the colours involved.
  * In classic mode it shows the original frame with sharp pixels.
+ *
+ * Games drawn for non-square pixels (e.g. 320x200 shown on a 4:3 monitor) can
+ * be stretched vertically (setAspect): the frame is composed at the square
+ * scale and its rows are resampled with an area filter to the final height.
  */
 class Compositor {
 public:
@@ -71,8 +75,16 @@ public:
 
 	int scale() const { return _scale; }
 	int outputWidth() const { return (_screenW + _maxExtL + _maxExtR) * _scale; }
-	int outputHeight() const { return _screenH * _scale; }
+	int outputHeight() const { return _outH ? _outH : _screenH * _scale; }
 	void setMaxExtension(int left, int right) { _maxExtL = left; _maxExtR = right; }
+	/**
+	 * Vertical stretch for games made for non-square pixels: the output is
+	 * round(screenH * scale * pixelAspect) rows high (1.0: no stretch).
+	 */
+	void setAspect(float pixelAspect);
+	bool stretched() const { return _outH != 0; }
+	/** columns to add on each side for a 16:9 view (same count per side) */
+	static int sideExtension(int screenW, int screenH, float pixelAspect);
 	int extLeft() const { return _maxExtL; }
 
 	void setClassic(bool c) { _classic = c; }
@@ -102,6 +114,8 @@ public:
 
 	/** Output (HD) coordinates -> engine screen coordinates. */
 	Common::Point toGame(const Common::Point &p, int scrollX) const;
+	/** Engine screen coordinates -> output (HD) coordinates (centre of the pixel; inverse of toGame) */
+	Common::Point toScreen(const Common::Point &p) const;
 
 private:
 	enum Mode { kSame = 0, kFade = 1, kGray = 2, kLowRes = 3 };
@@ -125,10 +139,12 @@ private:
 	const AssetPack &_pack;
 	int _scale, _screenW, _screenH;
 	int _maxExtL = 0, _maxExtR = 0;
+	int _outH = 0;				// stretched output height (0: square pixels)
 	Graphics::PixelFormat _fmt;
 	bool _classic = false;
 
-	Graphics::Surface _out;
+	Graphics::Surface _frame;	// composed at the square scale
+	Graphics::Surface _out;		// _frame stretched vertically (only with setAspect)
 	Graphics::Surface _hdBg;	// ARGB at _scale
 	Graphics::Surface _origBg;	// 8-bit copy of the original background
 	Graphics::Surface _wideBg;	// ARGB at _scale, scene + extensions
@@ -164,6 +180,8 @@ private:
 	void drawTexts(int originX);
 	void drawText(const Text &t, int originX);
 	void resampleTo(const Graphics::Surface &src, int srcScale, Graphics::Surface &dst) const;
+	const Graphics::Surface &finish();
+	void stretchRows(const Graphics::Surface &src, Graphics::Surface &dst) const;
 };
 
 } // End of namespace Remaster

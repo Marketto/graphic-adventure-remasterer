@@ -23,8 +23,10 @@ disegnato> --out review/aspect.png` mette le scene a pixel quadrati e allungati 
 versione giusta li mostra rotondi. In caso di dubbio guarda l'originale sull'emulatore di
 riferimento (skill `engine-integration` §1b) con la correzione d'aspetto dell'epoca.
 Registra la scelta con i motivi (`graphics.pixel_aspect` e una decisione con la data).
-Default: **pixel quadrati** (`stretch` 1.0). Se l'allungamento serve, il Layer deve anche
-scalare in verticale: oggi non lo fa (vedi `INTEGRAZIONE.md`).
+Default: **pixel quadrati** (`stretch` 1.0). Se l'allungamento serve, imposta
+`Desc::pixelAspect`: il Layer scala in verticale con righe filtrate (320x200 a 3x con 1,2 →
+960x720), allarga la viewport 16:9 di conseguenza e converte il mouse; `remaster_aspect=false`
+lo spegne (vedi `INTEGRAZIONE.md`, "Pixel non quadrati").
 
 Larghezza delle bande per lato (`rstool.py widescreen geometry --w W --h H [--par <stretch>]`):
 - pixel quadrati: 640x400 → **+36 per lato** (712x400, a 3x 2136x1200; approvato nel progetto

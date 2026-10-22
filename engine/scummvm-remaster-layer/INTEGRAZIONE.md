@@ -2,7 +2,7 @@
 
 `0001-ENGINES-Add-remaster-layer.patch` aggiunge `engines/remaster/` (codice comune, namespace
 `Remaster`) e i test `test/graphics/remaster.h`. Verificata su ScummVM `5d13ee16` (14 ottobre 2026):
-si applica pulita, compila, i 410 test di `make test` passano e l'eseguibile si collega.
+si applica pulita, compila, i 415 test di `make test` passano e l'eseguibile si collega.
 
 ```
 git clone https://github.com/scummvm/scummvm && cd scummvm
@@ -28,7 +28,8 @@ La suite non apre pull request verso ScummVM per conto dell'utente.
 // tutti gli hook qui sotto vanno chiamati solo se _remaster esiste
 Remaster::Layer::Desc d;
 d.gameId = "<id>"; d.screenW = 640; d.screenH = 400; d.pixelAspect = 1.0f;	// 36 px per lato in 16:9
-// pixelAspect != 1 solo se deciso nell'analisi (gioco pensato per pixel non quadrati)
+// pixelAspect != 1 solo se deciso nell'analisi (gioco pensato per pixel non quadrati):
+// con 1.2 un 320x200 a 3x esce 960x720 (righe ricampionate), in 16:9 54 px per lato
 d.codePage = Common::kDos850;
 _remaster = Remaster::Layer::create(d);
 if (!_remaster)
@@ -70,6 +71,8 @@ if (_remaster) {
 
 // input (Events::poll), per ogni evento letto
 if (_remaster && _remaster->handleEvent(e)) continue;   // F8 + coordinate mouse
+// spostamenti del cursore decisi dal gioco (coordinate di gioco → schermo, anche con l'allungamento)
+if (_remaster) _remaster->warpMouse(x, y); else g_system->warpMouse(x, y);
 
 // voci (fumetti, sottotitoli, risposte)
 if (!_remaster || !_remaster->playVoice(original)) showSubtitle(...);
@@ -83,6 +86,7 @@ if (!_remaster || !_remaster->playVoice(original)) showSubtitle(...);
 | `remaster_classic` | false | parte in versione originale (stesso stato del toggle) |
 | `remaster_toggle_key` | 8 | tasto F1-F12 per il cambio in tempo reale |
 | `remaster_widescreen` | true | viewport 16:9 |
+| `remaster_aspect` | true se `pixelAspect` != 1 | allungamento verticale per i giochi pensati per pixel non quadrati; false: pixel quadrati (anche la geometria 16:9 si calcola a 1,0) |
 | `remaster_smooth` | true | scorrimento interpolato tra i tick |
 | `remaster_voices` | true | voci registrate |
 | `remaster_language` | lingua ScummVM | testi/voci da `text/<lang>.tsv`, `voice/<lang>/`; fondali localizzati `gfx/bg/<scena>.<lang>[.wide].png` se presenti |
@@ -99,10 +103,17 @@ Da aggiungere al driver del motore (attivo solo con la variabile d'ambiente di t
 Il log si analizza con `rstool.py engine controls <file>`. Le azioni a scatto ignorano gli
 eventi con `kbdRepeat`; il cursore si ridisegna a ogni `present()`/`pace()`, non solo a ogni tick.
 
+## Pixel non quadrati (`pixelAspect`)
+Con `pixelAspect` != 1 e `remaster_aspect` attivo l'uscita è alta `round(screenH × scala ×
+pixelAspect)` (320x200 a 3x con 1,2 → 960x720; in 16:9 la viewport è calcolata sull'altezza
+allungata: 54 px per lato a 1x, 1284x720). Il fotogramma si compone a pixel quadrati (fondali,
+sprite, testo HD) e poi le righe si ricampionano con un filtro d'area: ogni riga d'uscita è la
+media pesata delle righe che copre, quindi niente righe duplicate a scatti. La modalità classica
+(F8) passa per lo stesso filtro. Il mouse torna alle coordinate di gioco con la stessa
+proporzione (`y = Y × screenH / altezza`, senza salti); `warpMouse()` fa il contrario e porta il
+cursore al centro della riga di gioco. Il motore non cambia: lavora sempre a 320x200.
+
 ## Limiti noti (da completare per motore)
-- `pixelAspect` cambia solo la larghezza della viewport 16:9: la scala verticale per i giochi
-  pensati per pixel non quadrati (es. 320x200 a 3x → 960x720) e la conversione del mouse
-  relativa non sono ancora implementate nel Layer comune.
 - L'interpolazione riguarda lo scorrimento e i frame intermedi tra un tick e l'altro; gli
   spostamenti degli sprite sono interpolati solo se il motore ridisegna gli oggetti con
   la posizione intermedia (hook specifico del motore, es. le camminate).
