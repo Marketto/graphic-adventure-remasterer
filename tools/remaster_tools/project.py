@@ -16,7 +16,9 @@ DEFAULT = {
     "game": {"title": None, "year": None, "developer": None, "publisher": None,
              "platform": None, "version": None, "languages_original": []},
     "engine": {"id": None, "runtime": None, "support": None, "notes": None,
-               "base_commit": None, "patchable": True, "smooth_controls": True},
+               "base_commit": None, "patchable": True, "smooth_controls": True,
+               # True once the Remaster Layer is hooked into this engine (dump, keys, HD, viewport)
+               "layer_hooked": None},
     "existing_work": [],
     "reuse_existing_work": True,
     "graphics": {"enabled": True, "parts": ["backgrounds", "sprites", "fonts", "ui", "cursors"],
@@ -151,16 +153,74 @@ def set_phase(data, phase: str):
     return decide(data, f"fase → {phase}")
 
 
+_FAN = ("amatorial", "fan", "non ufficial", "unofficial", "community")
+_OTHER_ED = ("floppy", "altra edizione", "other edition", "altra versione", "other version", "edizione diversa",
+             "solo nella versione", "only in the")
+_NO_VOICE = ("solo testi", "text only", "doppiaggio assente", "senza voci", "no voice", "no dub")
+
+
+def language_status(value):
+    """What `languages.available[lang]` really offers for the USER'S edition.
+
+    The value is either a dict {"text": "official"|"fan"|None, "voice": bool,
+    "edition": "same"|"other", "user_owns": bool} or a free description (then read with
+    keywords: "amatoriale"/"fan" → fan text, "floppy"/"altra edizione" → official text only in
+    another edition). Returns {"text", "voice", "edition", "user_owns", "usable"}, where usable
+    means an official text in the user's own edition (nothing to translate)."""
+    if isinstance(value, dict):
+        st = {"text": value.get("text"), "voice": bool(value.get("voice")),
+              "edition": value.get("edition") or "same", "user_owns": value.get("user_owns")}
+    elif isinstance(value, str) and value.strip():
+        v = value.lower()
+        official = "ufficial" in v.replace("non ufficial", "") or "official" in v.replace("unofficial", "")
+        fan = any(k in v for k in _FAN)
+        st = {"text": "official" if official else ("fan" if fan else None),
+              "voice": any(k in v for k in ("voc", "voice", "doppia", "dub", "parlat"))
+              and not any(k in v for k in _NO_VOICE),
+              "edition": "other" if any(k in v for k in _OTHER_ED) else "same", "user_owns": None}
+    elif value:
+        st = {"text": "official", "voice": False, "edition": "same", "user_owns": None}
+    else:
+        st = {"text": None, "voice": False, "edition": "same", "user_owns": None}
+    st["usable"] = st["text"] == "official" and st["edition"] == "same"
+    return st
+
+
+def translation_plan(data):
+    """{lang: "translate" | "import"} for the languages to bring into the game.
+
+    `languages.translate` (when decided) wins; otherwise the user's language when the game does
+    not really exist in it for his edition. "import": the official text exists in ANOTHER edition
+    (e.g. a text-only release): import it from the user's copy of that edition and align it, then
+    translate only the lines missing there. Fan translations are reused only with permission
+    (`existing_work`), so they still count as "translate"."""
+    lang = data.get("languages", {}) or {}
+    avail = lang.get("available") or {}
+    original = set(data.get("game", {}).get("languages_original") or [])
+    wanted = lang.get("translate")
+    if wanted is None:
+        user = lang.get("user")
+        wanted = [user] if user and user not in original and not language_status(avail.get(user)).get("usable") else []
+    out = {}
+    for code in wanted or []:
+        st = language_status(avail.get(code))
+        if st["usable"]:
+            continue
+        out[code] = "import" if (st["text"] == "official" and st["edition"] == "other"
+                                 and st["user_owns"] is not False) else "translate"
+    return out
+
+
 def user_needs_translation(data):
-    """True when the user's language is known and the game does not exist in it (official
-    versions and reusable fan translations included)."""
+    """True when the user's language is known and the game does not really exist in it for his
+    edition (an official text only in another edition or a fan translation do not count)."""
     lang = data.get("languages", {})
     user = lang.get("user")
     if not user:
         return False
-    have = set(data.get("game", {}).get("languages_original") or [])
-    have |= {k for k, v in (lang.get("available") or {}).items() if v}
-    return user not in have
+    if user in set(data.get("game", {}).get("languages_original") or []):
+        return False
+    return not language_status((lang.get("available") or {}).get(user))["usable"]
 
 
 def needs_dub_question(data):

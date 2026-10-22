@@ -13,7 +13,11 @@ dentro il codice. Tutto ciò che deriva dal gioco sta nel repository **privato**
 **Fonte**: solo la copia dell'utente: manuale stampato (scansione o foto delle pagine),
 file sul disco del gioco (`.txt`, `.doc`, `.pdf`, `readme`), schede di riferimento, mappe e
 ruote/codici della protezione anticopia. Non si scarica da siti terzi.
-1. **Estrazione**: testo da OCR (skill `pdf-reading` o tesseract) o dai file; le immagini
+1. **Estrazione**: `rstool.py manual ocr <file.pdf> --out analysis/manual-ocr/manuale --lang eng`
+   prova prima lo strato di testo (`pdftotext`); i PDF fatti **solo di immagini** (0 caratteri,
+   il caso comune delle scansioni) passano a tesseract a 250 dpi (`--dpi`), che su pagine stampate
+   dà un testo quasi pulito; un file per pagina più `all.txt`. Per foto o file non PDF: skill
+   `pdf-reading` o tesseract direttamente. Le immagini
    utili (mappe, schermate, tabelle dei comandi) ritagliate e ripulite in `manual/img/`.
    Rileggi l'OCR contro le pagine: numeri, nomi e comandi sbagliati sono i difetti tipici.
 2. **Ripulitura** in `manual/<lingua originale>.md` (formato in
@@ -44,7 +48,10 @@ altri asset derivati (`${CLAUDE_PLUGIN_ROOT}/references/legal-distribution.md`);
 Formato, condizioni ed esempi: `tools/remaster_tools/hints.py` e la nota
 `${CLAUDE_PLUGIN_ROOT}/references/conoscenza/motore-e-test.md` §12.
 1. **Obiettivi** in ordine di gioco, per parte, ricavati dalla soluzione verificata
-   (`qa/walkthrough.txt`) e dagli script: un obiettivo per ogni blocco che un giocatore può
+   (`qa/walkthrough.txt`) e dagli script. Se l'utente ha una **guida agli indizi a domande
+   progressive** (libretto ufficiale: domanda → indizio → soluzione), è la fonte migliore della
+   struttura: è già a livelli come gli aiuti in gioco; estraila con `rstool.py manual ocr` e usala
+   per scegliere gli obiettivi e la gradazione, riscrivendo sempre il testo con parole tue: un obiettivo per ogni blocco che un giocatore può
    non capire (non per ogni clic). Le soluzioni pubbliche servono solo da riferimento: gli
    aiuti si scrivono con parole tue.
 2. **Condizione `fatto`** per ogni obiettivo su flag globali, flag locali di una scena,

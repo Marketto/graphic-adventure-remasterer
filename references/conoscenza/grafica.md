@@ -131,6 +131,30 @@ Esempi: un indice da 0,32 a 0,93, uno da 0,32 a 1,00.
 - Le zone cliccabili che toccano il bordo valgono anche nella banda.
 - Limite: uno sprite "parcheggiato" dagli script appena fuori schermo diventa visibile.
 
+### 4.11 Classificazione 16:9 su un secondo gioco: cosa sbagliava
+Seconda prova (un'avventura del 1993 a 320x200, area di gioco 320x144 sopra una barra di verbi,
+96 scene etichettate a mano): il classificatore della prima versione ne sbagliava 35 su 63
+statiche; `open-static` era giusto in 7 casi su 30. Cause e correzioni (ora nel codice):
+- il "cielo" (terzo superiore liscio) scattava su **soffitti e interni bui**: ora serve anche una
+  luminanza media > 0,25, il blu pesa 0,2-1,0 e conta la monotonia del gradiente; restano fuori
+  i **cieli notturni** e le strade senza cielo, da riconoscere a vista;
+- **primi piani, documenti, mappe, schermata di morte, logo** non venivano mai riconosciuti
+  (i nomi dei file del dump erano numeri): ora contano i **nomi delle stanze** dall'indice del
+  gioco (`bg/names.json`) e i fondali quasi a tinta unita (≤ 3 colori, il contenuto è negli
+  oggetti); una scena a tutto schermo in un gioco con l'area di gioco più bassa è segnalata come
+  probabile primo piano (`full_height`), ma da sola non decide (vale per metà dei casi);
+- le **stanze fittizie** larghe 8-16 px vanno in `skip`, non si estendono;
+- una mappa larga che scorre resta `scroll-wide` anche se il nome dice "mappa";
+- `scroll-narrow` ora ha `sides` (`open`/`closed`): solo i lati aperti si inventano, e il
+  preventivo fal.ai conta solo quelli.
+Risultato sulle 96 scene: classi giuste dal 64% all'86% (statiche dal 44% al 79%), decisione
+"inventare o no" dal 74% al 96%; senza i nomi delle stanze 80% e 94%.
+
+### 4.12 Proporzione dei pixel: misurare invece di guardare
+Su viste in prospettiva e documenti il foglio a confronto non aiuta. È stata decisiva la misura
+di un oggetto rotondo visto dall'alto, diviso tra quattro stanze e ricomposto: larghezza/altezza
+1,20-1,23, quindi pixel pensati per un CRT 4:3 (`rstool.py widescreen aspect-measure ... --compose 2x2`).
+
 ## 5. Scritte, insegne e firme
 
 - **I modelli inventano lettere.** Un'insegna tagliata dal bordo originale viene "completata" con lettere sbagliate. Va corretta a mano:

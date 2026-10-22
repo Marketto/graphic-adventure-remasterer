@@ -56,6 +56,14 @@ Riconosci il formato (`rstool.py audio scan <cartella>`): MIDI generico, formati
   Dispositivo pensato dai compositori (style bible/crediti): MT-32 per molti giochi
   1989-92 (munt con ROM dell'utente), General MIDI con soundfont di qualità dopo.
   Prepara 2 varianti di un brano e falle ascoltare prima di renderizzare tutto.
+- **Blocchi con più varianti**: alcuni motori tengono nello stesso blocco di suono più versioni
+  (MT-32/General MIDI, AdLib, altoparlante, campioni digitali) e `audio scan` non li vede:
+  l'estrazione (adattatore, `rstool.py engine extract`) scrive in `midi/` la variante più vicina
+  al General MIDI come .mid standard. Poi `rstool.py audio midi-classify <dump>/midi` separa
+  **brani** ed **effetti** (brano: durata ≥ 20 s **e** ≥ 80 note, `--min-seconds`/`--min-notes`
+  per un altro gioco) e dà i minuti di musica. Con un sistema di **musica interattiva** (punti di
+  ripetizione e di salto) la durata del file è più lunga di un ascolto: i minuti sono un limite
+  superiore, e i loop vanno misurati sul rendering (o registrando l'uscita MIDI del motore).
 - **Tracce CD** → estrazione dall'immagine dell'utente; per ogni traccia misura la loudness
   (`rstool.py audio loudness`); quelle già saturate nell'originale si indicano in fase 1
   (`audio normalize music ... --declip <nomi>`) e ricevono `adeclip` nella codifica della fase 2.

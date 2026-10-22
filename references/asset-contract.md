@@ -25,6 +25,10 @@ remaster/
   fonts/<font>.dat|png     atlante font HD (formato RFNT, sotto)
   text/<lang>.tsv          testi corretti/tradotti: "<textKey>\t<testo UTF-8>"
   voice/<lang>/<textKey>.ogg   battute doppiate
+  voice/<lang>/<textKey>.lip.json  sincronia labiale della voce nuova: {"fps": 60, "frames": [indici
+                           della bocca]}, generata dall'audio; senza file il motore guida la bocca
+                           dall'ampiezza o la lascia ferma (le voci nuove perdono i dati
+                           originali di movimento della bocca)                   [hook per motore]
   music/<nome>.ogg         sostituti digitali dei brani (MIDI, MOD, CD)        [hook per motore]
   sfx/<nome>[_<rate>].ogg  effetti rimasterizzati (rate = frequenza di riproduzione) [hook per motore]
   manual/<lang>.md         manuale ripulito/tradotto, letto in gioco dal menu     [hook per motore]
@@ -39,6 +43,23 @@ remaster/
   gfx/inbetween/<key>.png  frame intermedi delle animazioni                       [riservato]
   fonts/<font>.<lang>.dat  atlante per lingue oltre la codepage del gioco          [riservato]
 ```
+
+## Dump (ingresso degli strumenti)
+Il dump è ciò che gli strumenti leggono dell'originale: lo scrive il Layer (`remaster_dump=`,
+frame `.raw`) oppure, finché il Layer non è agganciato al motore, un **adattatore** del
+repository privato (`rstool.py engine extract --adapter <script> --game <dir> --out <dump>`, PNG
+ammessi). Stesso formato in entrambi i casi, controllato da `rstool.py engine validate-dump`:
+```
+<dump>/bg/<scene>.png|raw     fondali a misura originale     bg/names.json  {scena: nome della stanza}
+<dump>/spr/<key>.png|raw      sprite (PNG RGBA)              spr/index.json elenco dei fotogrammi
+<dump>/obj/<nome>.png         oggetti disegnati sui fondali
+<dump>/text.jsonl             {"hex", "kind", "location", "speaker", "voice", ...} una riga per occorrenza
+<dump>/voice-index.json       {id voce: {"file", "hex", "speaker", "seconds", "lipsync"}}
+<dump>/midi/<nome>.mid        musica come MIDI standard (variante più vicina al General MIDI)
+<dump>/meta.json              {"screen": [w, h], "playfield_h", "engine", "extractor"}
+```
+Dettagli e tipi di battuta ammessi: `tools/remaster_tools/extract.py`. `lipsync` vero vuol dire
+che la clip originale porta dati di movimento della bocca: le voci nuove ne richiedono di nuovi.
 
 ## Chiavi
 - **frameKey** (sprite, UI, cursori): CRC32 zlib di `w` (LE16), `h` (LE16), poi i pixel

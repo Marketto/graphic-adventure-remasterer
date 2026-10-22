@@ -385,3 +385,97 @@ def restore_speech_batch(src_dir, out_dir, model=None, ext=".flac"):
         done.append(rel)
     return {"written": len(done), "out": out_dir,
             "next": "rstool.py audio normalize voice <out> poi audio mix (gruppo del parlato)"}
+
+
+# ------------------------------------------------------------------ MIDI from engine blocks
+def _vlq(b, i):
+    v = 0
+    while True:
+        c = b[i]
+        i += 1
+        v = (v << 7) | (c & 0x7F)
+        if not c & 0x80:
+            return v, i
+
+
+def midi_stats(path):
+    """Duration (seconds, tempo changes included), note-ons, tracks and markers of a standard MIDI
+    file, with a small parser (no dependency)."""
+    with open(path, "rb") as f:
+        b = f.read()
+    if b[:4] != b"MThd":
+        raise ValueError(f"{path}: non è un MIDI standard")
+    ntrk, div = int.from_bytes(b[10:12], "big"), int.from_bytes(b[12:14], "big")
+    i, events, notes, markers = 8 + int.from_bytes(b[4:8], "big"), [], 0, []
+    for _ in range(ntrk):
+        if b[i:i + 4] != b"MTrk":
+            break
+        ln = int.from_bytes(b[i + 4:i + 8], "big")
+        # some extractors write a wrong track length: never read past the end of the file
+        j, end, tick, status = i + 8, min(i + 8 + ln, len(b)), 0, 0
+        try:
+            while j < end - 1:
+                dt, j = _vlq(b, j)
+                tick += dt
+                c = b[j]
+                if c == 0xFF:
+                    typ = b[j + 1]
+                    n, j = _vlq(b, j + 2)
+                    data = b[j:j + n]
+                    j += n
+                    if typ == 0x51 and n == 3:
+                        events.append((tick, int.from_bytes(data, "big")))
+                    elif typ in (0x06, 0x01) and data:
+                        markers.append(data.decode("latin-1", "replace"))
+                    elif typ == 0x2F:
+                        events.append((tick, None))
+                    continue
+                if c in (0xF0, 0xF7):
+                    n, j = _vlq(b, j + 1)
+                    j += n
+                    continue
+                if c & 0x80:
+                    status, j = c, j + 1
+                hi = status & 0xF0
+                if hi in (0xC0, 0xD0):
+                    j += 1
+                else:
+                    if hi == 0x90 and b[j + 1] > 0:
+                        notes += 1
+                    j += 2
+        except IndexError:   # truncated last event
+            pass
+        events.append((tick, None))
+        i = end
+    last = max((t for t, _ in events), default=0)
+    seconds, tempo, prev = 0.0, 500000, 0
+    if div & 0x8000:  # SMPTE time division
+        fps, tpf = 256 - (div >> 8), div & 0xFF
+        seconds = last / (fps * tpf)
+    else:
+        for t, v in sorted((e for e in events if e[1] is not None), key=lambda e: e[0]):
+            seconds += (t - prev) * tempo / (div * 1e6)
+            tempo, prev = v, t
+        seconds += (last - prev) * tempo / (div * 1e6)
+    return {"seconds": round(seconds, 1), "notes": notes, "tracks": ntrk, "markers": markers[:8]}
+
+
+def midi_classify(src, min_seconds=20.0, min_notes=80):
+    """Music or effect for every MIDI of a folder: a track is long AND rich in notes (≥ 20 s and
+    ≥ 80 notes, measured on a reference game), the rest are effects. Engines with interactive
+    music (loop and jump points) make the durations of the file LONGER than what is heard once:
+    the minutes of music are an upper bound."""
+    out = {"music": [], "sfx": [], "errors": []}
+    files = sorted(f for f in os.listdir(src) if f.lower().endswith((".mid", ".midi")))
+    for f in files:
+        try:
+            st = midi_stats(os.path.join(src, f))
+        except (ValueError, IndexError) as e:
+            out["errors"].append(f"{f}: {e}")
+            continue
+        st["file"] = f
+        (out["music"] if st["seconds"] >= min_seconds and st["notes"] >= min_notes else out["sfx"]).append(st)
+    out["summary"] = {"music_tracks": len(out["music"]), "sfx": len(out["sfx"]),
+                      "music_minutes_upper_bound": round(sum(s["seconds"] for s in out["music"]) / 60, 1),
+                      "note": "durate con i punti di ripetizione: limite superiore"}
+    return out

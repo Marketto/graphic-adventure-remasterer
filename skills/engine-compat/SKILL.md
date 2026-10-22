@@ -16,6 +16,16 @@ al momento, sul web e nei file dell'utente, e resta nella cartella privata del p
   stringhe di copyright/versione negli eseguibili) e, se `scummvm` è installato, l'esito di
   `scummvm --detect`, la fonte più affidabile perché confronta gli MD5 con le tabelle di
   rilevamento di ScummVM. Le stringhe degli eseguibili servono a cercare il motore online.
+- **Provenienza dei file**: se `engine detect` riporta `third_party_links` (collegamenti `.url`,
+  `.lnk`, `.webloc` o readme che puntano a siti diversi dai negozi ufficiali e dagli strumenti
+  open source), la cartella potrebbe venire da un sito di redistribuzione. Non è una prova: lo
+  segnali all'utente e gli chiedi di confermare che i file vengono dalla **sua copia** (regola
+  «copia propria», `references/legal-distribution.md`); la risposta va nelle decisioni.
+- **Motore non ancora agganciato al Layer**: per l'analisi si estrae senza Layer con gli
+  strumenti open source di estrazione di quel motore, tramite un adattatore nel repository
+  privato del gioco: `rstool.py engine extract --adapter <script> --game <cartella> --out
+  analysis/dump` (contratto e regole in `references/conoscenza/motore-e-test.md` §0). Registra
+  `engine.layer_hooked` false: il piano aggiunge il pacchetto `engine-hook`.
 
 ## 2. Livello di supporto (verificalo sempre online: cambia nel tempo)
 - ScummVM: elenco di compatibilità sul sito ufficiale e pagina del gioco; wiki (formati dei

@@ -31,6 +31,11 @@ permette le voci della Voice Library via API (errore 402).
 ## 1. Censimento: chi parla (prima di ogni capitolo)
 Il personaggio **non si deduce mai dal nome della stanza o del file** (nel progetto di
 riferimento le battute di una stanza chiamata come un personaggio erano di una comparsa).
+**L'attribuzione dagli script statici è una prima stima**: dove l'attore è un numero riassegnato
+da scena a scena o sta in una variabile, la mappa attore → nome per stanza sbaglia in parte
+(antagonisti finiti sotto nomi generici). La **conferma** viene dal driver di test, che con il
+Layer registra il nome dell'attore nel momento in cui la battuta va a schermo: prima di generare
+un capitolo, confronta le due attribuzioni e risolvi le differenze.
 1. **Dalla struttura dello script**: file del dialogo e domande → personaggio non giocante;
    risposte, esami degli oggetti → personaggio giocante della stanza (attenzione ai
    travestimenti: alias); commenti di stanza → narratore; un file con due persone → separale
@@ -91,7 +96,11 @@ fonetica, parole tutte maiuscole (la sintesi le compita); punteggiatura pensata 
 ## 5. Stima e generazione per capitolo
 - Stima: caratteri del testo recitato **con i tag** × ~0,43 crediti (misurato: 45.000
   caratteri ≈ 19.200 crediti), più ~2.000 crediti di provini se ci sono molti personaggi
-  nuovi. Confronta con i crediti rimasti (modalità `verifica`, gratuita) e mostra il conto.
+  nuovi. Contala sui **testi unici** (le clip originali ripetono spesso la stessa frase: sul
+  banco di prova +15% di clip rispetto ai testi) e sulla **lunghezza nella lingua di arrivo**
+  (italiano ≈ +10-15% sull'inglese): `rstool.py voice estimate <dump>/text.jsonl --expand 1.12`
+  (deduplica di default, `--no-dedupe` per contare ogni clip). Confronta con i crediti rimasti
+  (modalità `verifica`, gratuita) e mostra il conto.
 - Ordine: censimento → provini → regia → stima → **approvazione** → generazione → verifica.
 - File: `remaster/voice/<lang>/<textKey>.ogg` (chiave del testo **originale**, non di quello
   corretto); battute delle scene come sostituti dei suoni (`sfx/...`) se il motore le suona così.
@@ -130,6 +139,19 @@ Verifica gratuita dopo l'integrazione: altezza media della voce dei file integra
 con il personaggio a schermo (una battuta del protagonista a ~100 Hz invece di 150-190 Hz ha
 rivelato la voce sbagliata).
 Scrivi `docs/<capitolo>-rapporto-voci.md` (battuta, voce, durata, esito).
+
+## 6b. Sincronia labiale
+Nei giochi parlati in cui ogni clip ha i suoi dati di movimento della bocca (blocchi di
+controllo accanto al campione; nel dump `voice-index.json` → `"lipsync": true`) le voci nuove
+**perdono la sincronia originale**: la durata e le sillabe cambiano. Opzioni, da proporre con il
+preventivo del doppiaggio (pacchetto `lipsync` del piano):
+1. **dati di sincronia generati dall'audio nuovo**: inviluppo dell'ampiezza o fonemi
+   (riconoscimento vocale locale con i tempi delle parole) convertiti nel formato del motore e
+   salvati accanto alla voce, `voice/<lang>/<textKey>.lip.json` (`{"fps": 60, "frames": [indici
+   della bocca]}`, letto dal codice del motore);
+2. **ripiego**: bocca guidata dall'ampiezza in tempo reale (aperta sopra una soglia), senza dati;
+3. bocca ferma o animazione originale in ciclo, se il gioco lo regge.
+Prova la scelta su un capitolo col driver di test prima di estenderla.
 
 ## 7. In gioco
 Opzioni del Layer: `remaster_voices` (on/off), volume "Parlato" separato, sottotitoli sempre

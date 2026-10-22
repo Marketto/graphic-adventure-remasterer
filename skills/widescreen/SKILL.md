@@ -20,11 +20,18 @@ Non basta la risoluzione: decidi nell'analisi, prima di classificare, da
 dà l'allungamento candidato, i motivi e quanto è sicuro. Poi **decide l'occhio**:
 `rstool.py widescreen aspect-sheet <3-4 fondali con oggetti tondi, volti, ruote, lune, testo
 disegnato> --out review/aspect.png` mette le scene a pixel quadrati e allungati affiancate; la
-versione giusta li mostra rotondi. In caso di dubbio guarda l'originale sull'emulatore di
+versione giusta li mostra rotondi. Il foglio **non basta** su viste in prospettiva e documenti
+(l'occhio non vede la differenza): allora **misura** una forma rotonda nella realtà (disco o
+tavolo visto dall'alto, ruota, luna, oblò), anche divisa tra più stanze:
+`rstool.py widescreen aspect-measure <img...> [--compose 2x2] [--box x,y,w,h] [--color #rrggbb]
+--out review/aspect-misura.png` dà larghezza/altezza della forma sui pixel originali (riquadro e
+momenti, quanto somiglia a un'ellisse piena) e il candidato più vicino tra 1,0 e 1,2: un cerchio
+disegnato per pixel allungati di 1,2 misura ~1,2. In caso di dubbio guarda l'originale sull'emulatore di
 riferimento (skill `engine-integration` §1b) con la correzione d'aspetto dell'epoca.
 Registra la scelta con i motivi (`graphics.pixel_aspect` e una decisione con la data).
 Default: **pixel quadrati** (`stretch` 1.0). Se l'allungamento serve, il Layer deve anche
-scalare in verticale: oggi non lo fa (vedi `INTEGRAZIONE.md`).
+scalare in verticale: oggi non lo fa (vedi `INTEGRAZIONE.md`); il piano aggiunge il pacchetto
+`pixel-aspect`.
 
 Larghezza delle bande per lato (`rstool.py widescreen geometry --w W --h H [--par <stretch>]`):
 - pixel quadrati: 640x400 → **+36 per lato** (712x400, a 3x 2136x1200; approvato nel progetto
@@ -32,19 +39,36 @@ Larghezza delle bande per lato (`rstool.py widescreen geometry --w W --h H [--pa
 - con allungamento 1,2 (320x200 pensato per un CRT 4:3): 320x200 → +54.
 Le bande sono piccole (~11% dell'immagine): l'obiettivo è che non si notino.
 
-## Classificazione (`rstool.py widescreen classify <dump>/bg --screen-w W --screen-h H --par <allungamento deciso>`)
+## Classificazione (`rstool.py widescreen classify <dump>/bg --screen-w W --screen-h H --par <allungamento deciso> [--names bg/names.json] [--playfield-h H]`)
 Per ogni scena il tool propone una classe; tu verifichi guardando l'immagine (Read):
 | Classe | Riconoscimento | Azione |
 |---|---|---|
-| `scroll-wide` | fondale più largo dello schermo di almeno 2×estensione | automatica: la viewport mostra più fondale; ai bordi del fondale la camera si ferma prima, così non si vede mai il vuoto |
-| `scroll-narrow` | fondale più largo dello schermo ma meno della viewport 16:9 | estensione solo dei lati mancanti come `open-static`, oppure bordi |
+| `scroll-wide` | larghezza del fondale ≥ viewport (schermo + 2 × estensione per lato), anche se è una mappa | automatica: la viewport mostra più fondale; ai bordi del fondale la camera si ferma prima, così non si vede mai il vuoto |
+| `scroll-narrow` | fondale più largo dello schermo ma meno della viewport 16:9; `sides`: `open` o `closed` | lati `open`: estensione dei lati mancanti come `open-static`; lati `closed`: bande o bordi come `closed-static` |
 | `closed-static` | interno chiuso: pareti/soffitto/cornici che chiudono i lati, porte, stanza | resta 4:3 con **bande nere** (scelta del progetto di riferimento); bordi decorati solo se l'utente li preferisce |
 | `open-static` | esterno o spazio aperto delimitato: cielo, orizzonte, strada, paesaggio che continuano oltre il bordo | **parte mancante inventata** coerente con la scena; conferma obbligatoria |
-| `ui-fixed` | menu, mappe, inventario a tutto schermo, filmati | resta 4:3 centrato |
+| `ui-fixed` | menu, mappe, inventario a tutto schermo, primi piani e inserti (documenti, oggetti, volti), schermata di morte, logo, filmati | resta 4:3 centrato |
+| `skip` | fondale largo meno di 64 px (stanza fittizia senza fondale vero) | nessuna: non si estende |
 
-Indizi usati dal tool: larghezza del fondale, continuità ai bordi (linee orizzontali che
-escono dal quadro, gradienti di cielo nelle colonne di bordo), verticali forti vicino ai
-bordi (pareti), varianza dei bordi. È una proposta: la decisione finale è tua + dell'utente.
+Indizi usati dal tool, in quest'ordine: larghezza (`skip`, `scroll-wide`); **nomi delle stanze**
+da `bg/names.json` (dall'indice del gioco; i nomi dei file del dump sono spesso numeri: menu,
+mappa, logo, morte, primo piano, `cu-`...); fondale **quasi a tinta unita** (≤ 3 colori: il
+contenuto lo disegnano gli oggetti → `ui-fixed`); poi i bordi: **cielo** solo se il terzo
+superiore è liscio, **luminoso** (luminanza media > 0,25) e **blu** (peso del blu 0,2-1,0),
+meglio se il gradiente verticale è monotono; linee orizzontali che escono dal quadro; verticali
+forti vicino ai bordi (pareti). Soffitti, interni bui e cieli notturni hanno il terzo superiore
+scuro: il tool li mette tra i chiusi, e un **esterno notturno** o una strada senza cielo vanno
+riconosciuti a vista. Punteggio > 0,40 aperto, 0,15-0,40 incerto (verifica a vista). Una scena
+a tutto schermo in un gioco con l'area di gioco più bassa (`full_height`) è spesso un primo
+piano: controlla se va in `ui-fixed`. Sul banco di prova (96 scene etichettate a mano) queste
+regole hanno portato le classi giuste dal 64% all'86% e la decisione "inventare o no" dal 74%
+al 96%. È una proposta: la decisione finale è tua + dell'utente.
+
+**Barra dell'interfaccia sotto l'area di gioco.** Se i fondali sono più bassi dello schermo
+(es. 144 su 200: verbi e inventario sotto), il piano riporta `ui_bar` e la stima aggiunge il
+pacchetto `ui-bar`: la viewport 16:9 allarga anche la barra. Si estende con **bande neutre** nel
+colore di fondo della barra, oppure ridisegnandone i bordi (cornici, pannelli) a scala 1x come
+le bande dei fondali; i pulsanti e le scritte non si spostano e non si duplicano.
 
 ## Estensione di `open-static`: prima le tecniche locali collaudate
 Dettagli, numeri e costi: `${CLAUDE_PLUGIN_ROOT}/references/conoscenza/grafica.md` (§3-4, §9).
@@ -74,6 +98,7 @@ rifà su un'immagine corretta a mano. Sono **filtri**: scartano anche bande buon
 Scartato: LaMa direttamente sull'HD → **bande sfocate**. Regola: bande inventate **nitide**.
 
 **2. Outpainting a pagamento con fal.ai: opzionale, solo se l'utente lo sceglie.**
+Contano solo le scene con lati **aperti** (`open-static` e `scroll-narrow` con `sides` `open`).
 Dopo l'analisi, col preventivo delle scene da inventare, si chiede se vuole provarlo
 (`graphics.widescreen.fal_ai`); se no, non si usa
 mai. Se sì, dopo il metodo locale e solo per le scene in cui le varianti locali non convincono:

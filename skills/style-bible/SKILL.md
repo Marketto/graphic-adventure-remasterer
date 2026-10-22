@@ -19,7 +19,9 @@ oggi. La style bible è il riferimento vincolante per `hd-graphics` e `widescree
   il personaggio resta quello disegnato dall'autore, mai il ritratto di una persona reale.
 
 ## 2. Analisi degli asset (dai file dell'utente)
-`rstool.py style analyze <cartella dump>` produce in `analysis/style/`:
+`rstool.py style analyze <cartella dump>` (dump del Layer `.raw` o PNG di un'estrazione senza
+Layer: fondali RGB, sprite RGBA; il numero di fotogrammi da `spr/index.json` se presente) produce
+in `analysis/style/`:
 - palette dominanti per scena e globali, rampe di colore usate (quante sfumature per tinta);
 - statistiche del dithering (scacchiera, ordinato, assente), contorni (neri, colorati, assenti);
 - direzione della luce stimata, contrasto, saturazione media;

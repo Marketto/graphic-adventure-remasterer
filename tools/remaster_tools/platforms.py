@@ -8,7 +8,10 @@ applied to one pixel (1.2 = a 320x200 picture filling a 4:3 CRT); 1.0 = square p
 The table gives a candidate with reasons; the art decides (round objects, faces, text drawn
 in the picture) with `aspect_sheet`, and the user confirms.
 """
+import math
 import os
+
+import numpy as np
 
 from PIL import Image
 
@@ -140,3 +143,102 @@ def aspect_sheet(images, out_path, stretches=(1.0, 1.2), height=360):
     os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
     sheet.save(out_path)
     return {"sheet": out_path, "stretches": list(stretches), "scenes": len(images)}
+
+
+def _compose(images, grid):
+    cols, rows = grid
+    ims = [Image.open(p).convert("RGB") for p in images]
+    if len(ims) != cols * rows:
+        raise ValueError(f"--compose {cols}x{rows} vuole {cols * rows} immagini, ricevute {len(ims)}")
+    w, h = max(i.width for i in ims), max(i.height for i in ims)
+    out = Image.new("RGB", (w * cols, h * rows))
+    for k, im in enumerate(ims):
+        out.paste(im, ((k % cols) * w, (k // cols) * h))
+    return out
+
+
+def _largest_component(mask):
+    try:
+        from scipy import ndimage
+        lab, n = ndimage.label(mask)
+        if not n:
+            return mask & False
+        sizes = ndimage.sum(mask, lab, range(1, n + 1))
+        return lab == (int(np.argmax(sizes)) + 1)
+    except ImportError:  # small pictures: plain flood fill
+        import collections
+        seen = np.zeros_like(mask, dtype=bool)
+        best = None
+        for y, x in zip(*np.nonzero(mask)):
+            if seen[y, x]:
+                continue
+            comp, q = [], collections.deque([(y, x)])
+            seen[y, x] = True
+            while q:
+                cy, cx = q.popleft()
+                comp.append((cy, cx))
+                for ny, nx in ((cy + 1, cx), (cy - 1, cx), (cy, cx + 1), (cy, cx - 1)):
+                    if 0 <= ny < mask.shape[0] and 0 <= nx < mask.shape[1] and mask[ny, nx] and not seen[ny, nx]:
+                        seen[ny, nx] = True
+                        q.append((ny, nx))
+            if best is None or len(comp) > len(best):
+                best = comp
+        out = np.zeros_like(mask, dtype=bool)
+        if best:
+            ys, xs = zip(*best)
+            out[list(ys), list(xs)] = True
+        return out
+
+
+def aspect_measure(images, compose=None, box=None, color=None, tolerance=40, candidates=(1.0, 1.2), out_path=None):
+    """Width/height of a shape that is ROUND in reality (a disc seen from above, a wheel, a
+    moon, a round table), measured on the original pixels. A circle drawn for a display that
+    stretched pixels by s measures w/h ≈ s. Decisive when the aspect sheet does not help
+    (perspective views, documents).
+
+    images: one picture, or several to compose (`compose`=(cols, rows), in reading order) when
+    the shape is split between rooms. box: (x, y, w, h) around the shape. color: "#rrggbb" of the
+    shape (pixels within `tolerance`); without it the shape is what differs from the colour of the
+    box border. The largest connected region is measured: bounding box, second moments (ellipse
+    fit) and how much it looks like an ellipse (filled area / ellipse area)."""
+    img = _compose(images, compose) if compose else Image.open(images[0]).convert("RGB")
+    a = np.asarray(img).astype(int)
+    x0, y0 = 0, 0
+    if box:
+        x0, y0, bw, bh = box
+        a = a[y0:y0 + bh, x0:x0 + bw]
+    if color:
+        c = np.array([int(color.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4)])
+        mask = np.abs(a - c).sum(axis=2) <= tolerance
+    else:
+        border = np.concatenate([a[0], a[-1], a[:, 0], a[:, -1]])
+        vals, cnt = np.unique(border, axis=0, return_counts=True)
+        bgc = vals[int(np.argmax(cnt))]
+        mask = np.abs(a - bgc).sum(axis=2) > tolerance
+    comp = _largest_component(mask)
+    ys, xs = np.nonzero(comp)
+    if len(xs) < 20:
+        return {"error": "nessuna forma abbastanza grande: indica --box o --color"}
+    bw, bh = int(xs.max() - xs.min() + 1), int(ys.max() - ys.min() + 1)
+    sx, sy = float(xs.std()), float(ys.std())
+    ratio_bbox, ratio_mom = bw / bh, sx / sy if sy else 0.0
+    fill = len(xs) / (math.pi / 4 * bw * bh)
+    ratio = round((ratio_bbox + ratio_mom) / 2, 3)
+    best = min(candidates, key=lambda s: abs(s - ratio))
+    res = {"shape_px": [bw, bh], "origin": [int(xs.min()) + x0, int(ys.min()) + y0],
+           "ratio_bbox": round(ratio_bbox, 3), "ratio_moments": round(ratio_mom, 3), "ratio": ratio,
+           "ellipse_fill": round(fill, 3), "closest": best,
+           "candidates": {str(s): round(abs(s - ratio), 3) for s in candidates},
+           "note": ("forma piena ed ellittica: misura attendibile" if 0.9 <= fill <= 1.1 else
+                    "la forma non è un'ellisse piena (anello, contorno o pezzi): controlla il ritaglio, "
+                    "usa --box o --color, o misura un riquadro a mano")}
+    if out_path:
+        from PIL import ImageDraw
+        vis = img.copy()
+        d = ImageDraw.Draw(vis)
+        d.rectangle([res["origin"][0], res["origin"][1], res["origin"][0] + bw - 1, res["origin"][1] + bh - 1],
+                    outline=(255, 0, 255))
+        os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
+        vis.save(out_path)
+        res["image"] = out_path
+    return res

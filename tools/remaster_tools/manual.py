@@ -167,3 +167,40 @@ nav ul{{columns:2;padding-left:1.2rem}} a{{color:var(--accent)}}
                 shutil.copyfile(a, b)
                 copied += 1
     return {"html": out_path, "sections": len(toc), "images": copied}
+
+
+def ocr(pdf, out_dir, dpi=250, lang="eng", min_chars_per_page=40):
+    """Text of a manual or of a hint book in PDF. First the text layer (pdftotext); scanned
+    PDFs (images only: almost no text) go through tesseract at `dpi` (250 dpi gives an almost
+    clean text on printed pages). One `page-NNN.txt` per page plus `all.txt`."""
+    import subprocess
+    import tempfile
+    for tool in ("pdftotext", "pdftoppm", "tesseract"):
+        if not shutil.which(tool):
+            raise RuntimeError(f"manca {tool} (poppler-utils, tesseract-ocr)")
+    os.makedirs(out_dir, exist_ok=True)
+    info = subprocess.run(["pdfinfo", pdf], capture_output=True, text=True).stdout if shutil.which("pdfinfo") else ""
+    m = re.search(r"Pages:\s+(\d+)", info)
+    pages = int(m.group(1)) if m else None
+    layer = subprocess.run(["pdftotext", "-layout", pdf, "-"], capture_output=True, text=True).stdout
+    method = "pdftotext"
+    texts = layer.split("\f")
+    if pages is None:
+        pages = max(1, len([t for t in texts if t is not None]) - (1 if texts and not texts[-1].strip() else 0))
+    if len(layer.strip()) < min_chars_per_page * pages:
+        method = f"tesseract {dpi} dpi ({lang})"
+        texts = []
+        with tempfile.TemporaryDirectory() as tmp:
+            subprocess.run(["pdftoppm", "-r", str(dpi), "-gray", "-png", pdf, os.path.join(tmp, "p")], check=True)
+            for img in sorted(os.listdir(tmp)):
+                r = subprocess.run(["tesseract", os.path.join(tmp, img), "-", "-l", lang],
+                                   capture_output=True, text=True)
+                texts.append(r.stdout)
+    texts = [t for t in texts][:pages] if pages else texts
+    for k, t in enumerate(texts, 1):
+        with open(os.path.join(out_dir, f"page-{k:03d}.txt"), "w", encoding="utf-8") as f:
+            f.write(t)
+    with open(os.path.join(out_dir, "all.txt"), "w", encoding="utf-8") as f:
+        f.write("\n\f\n".join(texts))
+    return {"pages": len(texts), "method": method, "chars": sum(len(t) for t in texts),
+            "words": sum(len(t.split()) for t in texts), "out": out_dir}

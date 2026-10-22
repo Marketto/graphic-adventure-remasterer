@@ -12,7 +12,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from remaster_tools import (assets, audio, controls, detect, falai, font, gfx, hints, keys,  # noqa: E402
+from remaster_tools import (assets, audio, controls, detect, extract, falai, font, gfx, hints, keys,  # noqa: E402
                             manual, plan, platforms, project, rawframe, recipe, release, review, style,
                             text, theme, timing, transcribe, video, voice, widescreen)
 
@@ -95,14 +95,14 @@ def _plan_packages(a):
     c = plan.load_coeffs(a.coeffs)
     data = project.load(a.workdir)
     budget = a.budget or ((data or {}).get("plan") or {}).get("token_budget") or 200000
-    return plan.packages(plan.estimate(counts, c), _paid(a), budget, c)
+    return plan.packages(plan.estimate(counts, c, data), _paid(a), budget, c)
 
 
 def cmd_plan(a):
     if a.action == "estimate":
         with open(a.counts, encoding="utf-8") as f:
             counts = json.load(f)
-        est = plan.estimate(counts, plan.load_coeffs(a.coeffs))
+        est = plan.estimate(counts, plan.load_coeffs(a.coeffs), project.load(a.workdir))
         if a.record:
             data = need_project(a.workdir)
             project.set_key(data, "analysis.counts", os.path.abspath(a.counts))
@@ -123,7 +123,7 @@ def cmd_plan(a):
                 json.dump(pk, f, ensure_ascii=False, indent=2)
         out(pk)
     elif a.action == "table":
-        text = plan.table(_plan_packages(a), a.parallel)
+        text = plan.table(_plan_packages(a), a.parallel, group=not a.detail)
         if a.out:
             with open(a.out, "w", encoding="utf-8") as f:
                 f.write(text)
@@ -155,6 +155,15 @@ def main(argv=None):
     sg = s.add_subparsers(dest="action", required=True)
     x = sg.add_parser("detect"); x.add_argument("dir"); x.add_argument("--scummvm")
     x.set_defaults(fn=lambda a: out(detect.detect(a.dir, a.scummvm)))
+    x = sg.add_parser("extract", help="estrazione senza Layer: esegue l'adattatore del repository privato e valida il dump")
+    x.add_argument("--adapter", required=True, help="comando o script (.py) con {game} e {out}, altrimenti riceve --game/--out")
+    x.add_argument("--game", default=".", help="cartella dei file del gioco (default: la corrente)")
+    x.add_argument("--out", required=True, help="cartella del dump (formato in remaster_tools/extract.py)")
+    x.add_argument("--timeout", type=int)
+    x.set_defaults(fn=lambda a: out(extract.run_adapter(a.adapter, a.game, a.out, a.timeout)))
+    x = sg.add_parser("validate-dump", help="controlla un dump (del Layer o di un adattatore) contro il contratto")
+    x.add_argument("dump")
+    x.set_defaults(fn=lambda a: out(extract.validate_dump(a.dump)))
     x = sg.add_parser("md5"); x.add_argument("dir"); x.add_argument("--out", required=True); x.add_argument("--version-name", default="default")
     x.set_defaults(fn=lambda a: out(release.game_md5(a.dir, a.out, a.version_name)))
     x = sg.add_parser("reference", help="emulatore o VM di riferimento per la piattaforma dell'originale")
@@ -248,10 +257,20 @@ def main(argv=None):
     x.add_argument("images", nargs="+"); x.add_argument("--out", default="review/aspect.png")
     x.add_argument("--stretch", type=float, nargs="+", default=[1.0, 1.2])
     x.set_defaults(fn=lambda a: out(platforms.aspect_sheet(a.images, a.out, tuple(a.stretch))))
+    x = sg.add_parser("aspect-measure", help="misura larghezza/altezza di una forma rotonda (disco, ruota, luna)")
+    x.add_argument("images", nargs="+"); x.add_argument("--compose", help="CxR: ricompone più immagini in griglia (es. 2x2)")
+    x.add_argument("--box", help="x,y,w,h attorno alla forma"); x.add_argument("--color", help="#rrggbb della forma")
+    x.add_argument("--tolerance", type=int, default=40); x.add_argument("--out", help="immagine con il riquadro misurato")
+    x.set_defaults(fn=lambda a: out(platforms.aspect_measure(
+        a.images, tuple(int(v) for v in a.compose.lower().split("x")) if a.compose else None,
+        tuple(int(v) for v in a.box.split(",")) if a.box else None, a.color, a.tolerance, out_path=a.out)))
     x = sg.add_parser("classify"); x.add_argument("src"); x.add_argument("--screen-w", type=int, required=True)
     x.add_argument("--screen-h", type=int, required=True); x.add_argument("--par", type=float, default=1.0)
     x.add_argument("--out", default="analysis/widescreen-plan.json")
-    x.set_defaults(fn=lambda a: out({"counts": widescreen.classify(a.src, a.screen_w, a.screen_h, a.par, a.out)["counts"], "plan": a.out}))
+    x.add_argument("--names", help="JSON {scena: nome della stanza} (default: <src>/names.json)")
+    x.add_argument("--playfield-h", type=int, help="altezza dell'area di gioco (default: l'altezza più comune dei fondali)")
+    x.set_defaults(fn=lambda a: out((lambda pl: {"counts": pl["counts"], "ui_bar": pl["ui_bar"], "plan": a.out})(
+        widescreen.classify(a.src, a.screen_w, a.screen_h, a.par, a.out, a.names, a.playfield_h))))
     x = sg.add_parser("extend", help="varianti delle bande: LaMa 1x, LaMa+quilting, ricette, (fal.ai solo se approvato), bordi")
     x.add_argument("plan"); x.add_argument("--hd", required=True); x.add_argument("--out", default="review/widescreen")
     x.add_argument("--scale", type=int, default=3); x.add_argument("--recipe")
@@ -325,6 +344,9 @@ def main(argv=None):
     sg = s.add_subparsers(dest="action", required=True)
     x = sg.add_parser("backends"); x.set_defaults(fn=lambda a: out(audio.backends()))
     x = sg.add_parser("scan"); x.add_argument("dir"); x.set_defaults(fn=lambda a: out(audio.scan(a.dir)))
+    x = sg.add_parser("midi-classify", help="brani ed effetti tra i MIDI estratti (durata e numero di note)")
+    x.add_argument("dir"); x.add_argument("--min-seconds", type=float, default=20.0); x.add_argument("--min-notes", type=int, default=80)
+    x.set_defaults(fn=lambda a: out(audio.midi_classify(a.dir, a.min_seconds, a.min_notes)))
     x = sg.add_parser("render-midi"); x.add_argument("mid"); x.add_argument("--soundfont", required=True); x.add_argument("--out", required=True)
     x.set_defaults(fn=lambda a: out({"written": audio.render_midi(a.mid, a.soundfont, a.out)}))
     x = sg.add_parser("master", help="un file a un livello fisso (per prove); per il gioco usa normalize + mix")
@@ -380,6 +402,12 @@ def main(argv=None):
     x.set_defaults(fn=lambda a: out(voice.reencode(a.script, a.cast, a.out, audio.load_mix(_mix_source(a))[0]["voice"])))
     x = sg.add_parser("check"); x.add_argument("script"); x.add_argument("dir")
     x.set_defaults(fn=lambda a: out(voice.check(a.script, a.dir)))
+    x = sg.add_parser("estimate", help="stima gratuita dei crediti: testi unici e lunghezza nella lingua di arrivo")
+    x.add_argument("source", help="text.jsonl del dump o catalogo .tsv")
+    x.add_argument("--dedupe", action=argparse.BooleanOptionalAction, default=True, help="ogni testo una volta (default)")
+    x.add_argument("--expand", type=float, default=1.0, help="lunghezza della lingua di arrivo (it su en ≈ 1.12)")
+    x.add_argument("--retake", type=float, default=1.15); x.add_argument("--codepage", default="cp850")
+    x.set_defaults(fn=lambda a: out(voice.estimate(a.source, a.dedupe, a.expand, a.retake, a.codepage)))
     x = sg.add_parser("transcribe", help="trascrizione locale e gratuita delle battute (faster-whisper o whisper.cpp)")
     x.add_argument("dir"); x.add_argument("--lang", required=True); x.add_argument("--out", default="qa/trascrizioni.json")
     x.add_argument("--model", default="small", help="faster-whisper: tiny/base/small/medium; whisper.cpp: file ggml")
@@ -409,6 +437,10 @@ def main(argv=None):
     sg = s.add_subparsers(dest="action", required=True)
     x = sg.add_parser("check"); x.add_argument("md"); x.add_argument("--codepage")
     x.set_defaults(fn=lambda a: out(manual.check(a.md, a.codepage)))
+    x = sg.add_parser("ocr", help="testo di un PDF (manuale, guida agli indizi); OCR se il PDF è solo immagini")
+    x.add_argument("pdf"); x.add_argument("--out", required=True); x.add_argument("--dpi", type=int, default=250)
+    x.add_argument("--lang", default="eng", help="lingue di tesseract, es. eng o ita+eng")
+    x.set_defaults(fn=lambda a: out(manual.ocr(a.pdf, a.out, a.dpi, a.lang)))
     x = sg.add_parser("html"); x.add_argument("md"); x.add_argument("--out", required=True)
     x.add_argument("--colors", help="JSON {bg, panel, text, accent} o i ruoli di `ui palette`"); x.add_argument("--lang", default="it")
     x.set_defaults(fn=lambda a: out(manual.to_html(a.md, a.out, colors=_json(a.colors) if a.colors else None, lang=a.lang)))
@@ -451,6 +483,7 @@ def main(argv=None):
             x.add_argument("--register", action="store_true", help="scrive i pacchetti in remaster.json")
         if name == "table":
             x.add_argument("--parallel", type=int, default=3, help="sotto-sessioni contemporanee")
+            x.add_argument("--detail", action="store_true", help="una riga per lotto (default: lotti raggruppati)")
         x.set_defaults(fn=cmd_plan)
     x = sg.add_parser("status", help="pacchetti in corso, fermi, falliti, da riavviare o fermare")
     x.add_argument("--stale-min", type=int, default=30, help="minuti senza avanzamento = fermo")
@@ -544,8 +577,7 @@ def cmd_video_upscale(a):
 def cmd_fal_estimate(a):
     n = a.scenes
     if n is None:
-        plan = _json(a.plan)
-        n = sum(1 for s in plan["scenes"] if s["class"] in ("open-static", "scroll-narrow"))
+        n = widescreen.count_inventable(_json(a.plan))
     out(falai.estimate(n, a.attempts, a.price))
 
 

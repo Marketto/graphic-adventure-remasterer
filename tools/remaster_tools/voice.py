@@ -265,3 +265,40 @@ def check_transcripts(script_path, transcripts_path):
             flagged.append({"key": r["key"], "similarity": round(ratio, 2), "missing_words": missing,
                             "tag_read_aloud": read_tag, "expected": r.get("recita") or r["text"], "heard": h})
     return {"lines": len(rows), "flagged": flagged}
+
+
+def estimate(path, dedupe=True, expand=1.0, retake=1.15, codepage="cp850", protagonist=""):
+    """Free estimate of the ElevenLabs credits from the dump (`text.jsonl`) or the catalog (.tsv).
+
+    dedupe: count every spoken TEXT once (the original clips often repeat the same line: the
+    dub records it once and the engine reuses the file). expand: length of the target language
+    relative to the source (Italian on English ≈ 1.10-1.15). Only spoken kinds count (see
+    SPOKEN_KINDS: `choice` = a dialogue choice without voice, never recorded)."""
+    if path.endswith(".jsonl"):
+        rows = [{"key": d["key"], "source": d["text"], "kind": d.get("kind", ""), "speaker": d.get("speaker", "")}
+                for d in textmod.read_dump(path, codepage)]
+    else:
+        rows = textmod.read_catalog(path)
+    clips, seen, chars, per = 0, set(), 0, {}
+    for r in rows:
+        if r.get("kind", "") not in SPOKEN_KINDS:
+            continue
+        raw = r.get("text") or r.get("source") or ""
+        if SKIP_RE.search(raw) or not re.search(r"[A-Za-zÀ-ÿ]", raw):
+            continue
+        t = clean(raw)
+        if not t:
+            continue
+        clips += 1
+        if dedupe and r["key"] in seen:
+            continue
+        seen.add(r["key"])
+        chars += len(t)
+        spk = r.get("speaker") or protagonist or "NARRATORE"
+        per[spk] = per.get(spk, 0) + len(t)
+    target = chars * expand
+    credits = target * CREDITS_PER_CHAR * retake
+    return {"rows_spoken": clips, "texts_unique": len(seen), "chars_source": chars, "expand": expand,
+            "chars_target": round(target), "credits_per_char": CREDITS_PER_CHAR, "retake": retake,
+            "credits": round(credits), "speakers": len(per),
+            "note": "stima gratuita; il preventivo vero si fa con un lotto di prova"}

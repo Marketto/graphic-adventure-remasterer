@@ -93,12 +93,22 @@ Nessuna domanda all'utente: si verifica tutto. Lancia in parallelo (in backgroun
   editore, anno, piattaforme, motore; se ci sono omonimi chiedi quale, è l'unica domanda
   ammessa), **compatibilità** (motore, supporto in ScummVM, AGS o altro interprete open source,
   versioni, problemi noti; se nessuno lo supporta serve una reimplementazione: dillo e chiedi
-  se procedere), `rstool.py engine detect <cartella>` sui file dell'utente, **lavoro esistente**
+  se procedere), `rstool.py engine detect <cartella>` sui file dell'utente (se segnala
+  `third_party_links`, collegamenti a siti di terze parti tra i file, chiedi all'utente di
+  confermare che i file vengono dalla sua copia: regola «copia propria»), **lavoro esistente**
   (supporto upstream, fork, fan-patch, traduzioni amatoriali, pack HD, i lavori dell'utente nei
   suoi repository privati, documenti e chat; il lavoro di terzi si riusa solo se la licenza lo
   consente), **lingue** ufficiali e amatoriali (`game.languages_original`, `languages.available`,
   `languages.existing_translations`) e **voci esistenti per lingua** (`voice.existing`, es.
-  `{"en": true, "it": false}`); poi estrazione e **inventario** (`rstool.py assets inventory`) e
+  `{"en": true, "it": false}`). Per ogni lingua registra in `languages.available` **cosa esiste
+  davvero per l'edizione dell'utente**, meglio in forma strutturata
+  (`{"text": "official"|"fan", "voice": false, "edition": "same"|"other", "user_owns": true}`):
+  un testo ufficiale solo in un'altra edizione (es. floppy senza voci) o una traduzione
+  amatoriale **non** tolgono la traduzione dal piano. Poi estrazione: col dump del Layer se il
+  motore è già agganciato, altrimenti **senza Layer** con l'adattatore del repository privato
+  (`rstool.py engine extract --adapter <script> --game <cartella> --out analysis/dump`, che valida
+  il dump; formato in `tools/remaster_tools/extract.py`, tecnica in
+  `references/conoscenza/motore-e-test.md` §0), **inventario** (`rstool.py assets inventory`) e
   **piattaforma di riferimento** (`rstool.py engine reference --platform <piattaforma>`);
 - `style-analyst` (skill `style-bible`): stile, palette, autori, ispirazioni, riferimenti
   dell'epoca, `analysis/style-bible.md` e prompt di stile (gli attori servono come riferimento
@@ -110,8 +120,10 @@ Nessuna domanda all'utente: si verifica tutto. Lancia in parallelo (in backgroun
 
 Poi scrivi i **conteggi** in `analysis/conti.json` (campi: `backgrounds`, `bg_pixels`,
 `sprite_frames`, `text_lines`, `text_chars`, `voice_lines`, `voice_chars`, `music_tracks`,
-`sfx`, `scenes_by_class`, `manual_pages`, `translate_languages`, `original_voices`,
-`dub_exists`; i mancanti valgono zero) e calcola le stime:
+`sfx`, `scenes_by_class` (con `scroll-narrow-open`), `manual_pages`, `voice_chars_unique`,
+`voice_clips`, `lipsync`, `screen`, `playfield_h`, `pixel_aspect`, `layer_hooked`,
+`translate_languages`, `original_voices`, `dub_exists`; i mancanti valgono zero; lingue,
+proporzione dei pixel e aggancio del Layer, se mancano, li legge da `remaster.json`) e calcola le stime:
 `rstool.py plan estimate analysis/conti.json --record` (tempi, costi e token per voce di lavoro;
 coefficienti in `tools/remaster_tools/plan.py`, sovrascrivibili con `--coeffs`). Applica i
 default della lingua: se l'utente non ha il gioco nella sua lingua, `languages.translate` la
@@ -139,8 +151,13 @@ quando il tetto è superato (allora ci si ferma e si chiede).
 ## Fase 1c — Piano tabellare e approvazione
 Genera i pacchetti e la tabella: `rstool.py plan table analysis/conti.json` (le parti a
 pagamento entrano se scelte; `--paid all` per mostrarle tutte come preventivo). Una riga per
-pacchetto: emoji, cosa, agente, dipendenze e gruppo parallelo, tempo stimato, costo, token
-stimati; gratuito e a pagamento separati, totali in fondo. Aggiungi sotto la tabella cosa
+voce di lavoro (i lotti della stessa voce, es. 20 lotti di doppiaggio, stanno in una riga;
+`--detail` per una riga per lotto): emoji, cosa, agente, dipendenze e gruppo parallelo, tempo
+stimato, costo, token stimati; gratuito e a pagamento separati, totali in fondo. L'analisi aggiunge
+da sola i pacchetti che rende necessari: aggancio del Layer a un motore nuovo (`engine-hook`),
+scala verticale per i pixel non quadrati (`pixel-aspect`), barra dell'interfaccia sotto l'area di
+gioco (`ui-bar`), importazione del testo ufficiale da un'altra edizione (`text-import-<lingua>`),
+restauro delle voci originali (`voice-restore`), sincronia labiale per le voci nuove (`lipsync`). Aggiungi sotto la tabella cosa
 resta com'era e i rischi. Chiedi: **approvi, o togli qualcosa?** Ciò che l'utente toglie va in
 `project set` (es. `extras.manual false`) e la tabella si rigenera. Approvato:
 `rstool.py plan packages analysis/conti.json --register` (registro in `remaster.json`),

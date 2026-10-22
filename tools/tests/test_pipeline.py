@@ -84,6 +84,7 @@ def dump(tmp_path):
     room[:, 100:102] = 0
     room[:, 220:222] = 0
     room[:150:6, :] = 12             # wallpaper stripes
+    room[160:] = np.where(rng.random((40, 320)) > 0.9, 14, 13)   # floor with a little grain
     write_bg(bg / "chiusa.raw", room)
     # wide scrolling scene
     wide = np.tile(out, (1, 2))[:, :720]
