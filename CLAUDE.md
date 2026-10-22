@@ -8,8 +8,12 @@ rimasterizzare avventure grafiche 2D. Lingua di lavoro: italiano.
   proprietari; mai testi, immagini, suoni, script o dati di un gioco, neanche come esempio nei
   test o nella documentazione (usa esempi inventati). Si possono citare strumenti e servizi open
   source o commerciali (ScummVM, AGS, DOSBox, ffmpeg, ElevenLabs, fal.ai...).
-- Prima di ogni commit: `python3 tools/ip_guard.py --staged` deve passare (hook in `.githooks/`,
-  attivalo con `git config core.hooksPath .githooks`). Se lavorando su un gioco emergono nuovi nomi
+- Prima di ogni commit: `python3 tools/ip_guard.py --staged` deve passare (hook `pre-commit` e
+  `commit-msg` in `.githooks/`, attivali con `git config core.hooksPath .githooks`; la CI rifà gli
+  stessi controlli). Il controllo blocca: termini protetti (lista di hash), file multimediali e
+  binari, file grandi, **segreti** (chiavi API, token, chiavi private), **e-mail personali**, e i
+  **testi del gioco**: elenca le cartelle dei testi privati (catalogo, OCR del manuale...) in
+  `<.git>/ipguard-private`, una per riga, e il controllo li usa da solo, mai committati. Se lavorando su un gioco emergono nuovi nomi
   da proteggere, aggiungili con `python3 tools/ip_guard.py --add "<termine>"` (salvati come hash).
 - Il lavoro su un gioco specifico vive in un **repository privato** del gioco, mai qui. Qui si
   portano solo tecniche e regole generalizzate (in `references/conoscenza/`, nelle skill, nel codice).
