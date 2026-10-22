@@ -84,9 +84,9 @@ def test_spending_cap_and_readme(tmp_path):
     from remaster_tools import project
     data = project.init("Avventura di prova", str(tmp_path))
     project.set_key(data, "voice.enabled", True)
-    assert "tetto di spesa del progetto" in project.missing_answers(data)
+    assert "tetto di spesa del progetto" in project.paid_followups(data)
     project.set_key(data, "budget.cap_usd", 10)
-    assert "tetto di spesa del progetto" not in project.missing_answers(data)
+    assert "tetto di spesa del progetto" not in project.paid_followups(data)
     assert project.spend(data, "fal.ai", 6, "usd", "lotto 1")["over_cap"] == []
     r = project.spend(data, "fal.ai", 5, "usd", "lotto 2")
     assert r["usd"] == 11 and r["over_cap"]

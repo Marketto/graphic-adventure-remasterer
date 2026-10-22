@@ -111,10 +111,9 @@ def dump(tmp_path):
 def test_project_flow(tmp_path):
     data = project.init("Avventura di prova", str(tmp_path))
     assert "file di gioco" in project.missing_answers(data)
-    project.set_key(data, "graphics.enabled", True)
-    assert "formato 16:9" in project.missing_answers(data)
+    assert data["graphics"]["enabled"] and data["graphics"]["widescreen"]["enabled"]  # free: on by default
     project.set_key(data, "voice.enabled", project.parse_value("true"))
-    assert "conferma licenza ElevenLabs" in project.missing_answers(data)
+    assert "conferma licenza ElevenLabs" in project.paid_followups(data)
     project.set_phase(data, "analysis")
     project.save(data, str(tmp_path))
     again = project.load(str(tmp_path))

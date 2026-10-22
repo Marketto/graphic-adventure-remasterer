@@ -3,7 +3,7 @@
 
 Run `rstool.py <group> -h` for the commands of a group:
   project, engine, key, assets, style, gfx, font, widescreen, video, review, text, audio, voice, ui,
-  hint, manual, recipe, release
+  hint, manual, recipe, release, plan
 """
 import argparse
 import json
@@ -13,7 +13,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from remaster_tools import (assets, audio, controls, detect, falai, font, gfx, hints, keys,  # noqa: E402
-                            manual, platforms, project, rawframe, recipe, release, review, style,
+                            manual, plan, platforms, project, rawframe, recipe, release, review, style,
                             text, theme, timing, transcribe, video, voice, widescreen)
 
 
@@ -42,6 +42,7 @@ def cmd_project(a):
         data = need_project(wd)
         for pair in zip(a.args[0::2], a.args[1::2]):
             project.set_key(data, pair[0], project.parse_value(pair[1]))
+        project.apply_defaults(data)
         project.save(data, wd)
         out({"ok": True})
     elif a.action == "get":
@@ -65,6 +66,75 @@ def cmd_project(a):
         res = project.spend(data, a.args[0], float(a.args[1]), a.unit, a.note)
         project.save(data, wd)
         out(res)
+
+
+def _paid(a):
+    """--paid: auto (choices in remaster.json), none, all, or a list like fal,voice."""
+    v = a.paid.strip().lower()
+    if v == "none":
+        return set()
+    if v == "all":
+        return {"fal", "voice"}
+    if v == "auto":
+        data = project.load(a.workdir) or {}
+        got = set()
+        if (data.get("graphics", {}).get("widescreen") or {}).get("fal_ai"):
+            got.add("fal")
+        if (data.get("voice") or {}).get("enabled"):
+            got.add("voice")
+        return got
+    got = {x.strip() for x in v.split(",") if x.strip()}
+    if got - {"fal", "voice"}:
+        sys.exit(f"--paid: valori validi auto, none, all, fal, voice (ricevuto «{a.paid}»)")
+    return got
+
+
+def _plan_packages(a):
+    with open(a.counts, encoding="utf-8") as f:
+        counts = json.load(f)
+    c = plan.load_coeffs(a.coeffs)
+    data = project.load(a.workdir)
+    budget = a.budget or ((data or {}).get("plan") or {}).get("token_budget") or 200000
+    return plan.packages(plan.estimate(counts, c), _paid(a), budget, c)
+
+
+def cmd_plan(a):
+    if a.action == "estimate":
+        with open(a.counts, encoding="utf-8") as f:
+            counts = json.load(f)
+        est = plan.estimate(counts, plan.load_coeffs(a.coeffs))
+        if a.record:
+            data = need_project(a.workdir)
+            project.set_key(data, "analysis.counts", os.path.abspath(a.counts))
+            project.set_key(data, "analysis.done", True)
+            project.save(data, a.workdir)
+        if a.out:
+            with open(a.out, "w", encoding="utf-8") as f:
+                json.dump(est, f, ensure_ascii=False, indent=2)
+        out(est)
+    elif a.action == "packages":
+        pk = _plan_packages(a)
+        if a.register:
+            data = need_project(a.workdir)
+            project.register_packages(data, pk["packages"], budget=pk["budget"])
+            project.save(data, a.workdir)
+        if a.out:
+            with open(a.out, "w", encoding="utf-8") as f:
+                json.dump(pk, f, ensure_ascii=False, indent=2)
+        out(pk)
+    elif a.action == "table":
+        text = plan.table(_plan_packages(a), a.parallel)
+        if a.out:
+            with open(a.out, "w", encoding="utf-8") as f:
+                f.write(text)
+        print(text, end="")
+    elif a.action == "status":
+        out(plan.status(need_project(a.workdir), a.stale_min, a.max_attempts))
+    elif a.action == "update":
+        data = need_project(a.workdir)
+        pk = project.update_package(data, a.id, a.status, a.tokens_used, a.note, a.task_id)
+        project.save(data, a.workdir)
+        out(pk)
 
 
 def main(argv=None):
@@ -362,6 +432,37 @@ def main(argv=None):
     x.set_defaults(fn=lambda a: out(release.budget(a.remaster, tuple(a.targets))))
     x = sg.add_parser("verify"); x.add_argument("root"); x.add_argument("--game-md5")
     x.set_defaults(fn=lambda a: out(release.verify(a.root, a.game_md5)))
+
+    s = g.add_parser("plan", help="piano: stime, pacchetti di lavoro per sotto-sessioni, tabella, stato")
+    sg = s.add_subparsers(dest="action", required=True)
+    for name, hlp in (("estimate", "tempi, costi e token dai conteggi dell'analisi"),
+                      ("packages", "pacchetti sotto il budget di token, dipendenze e gruppi paralleli"),
+                      ("table", "tabella markdown con emoji, tempi, costi, token e totali")):
+        x = sg.add_parser(name, help=hlp)
+        x.add_argument("counts", help="JSON dei conteggi dell'analisi")
+        x.add_argument("--coeffs", help="JSON che sovrascrive i coefficienti di plan.COEFFS")
+        x.add_argument("--out")
+        if name == "estimate":
+            x.add_argument("--record", action="store_true", help="segna l'analisi come fatta in remaster.json")
+        else:
+            x.add_argument("--paid", default="auto", help="auto (dal progetto), none, all, fal, voice, fal,voice")
+            x.add_argument("--budget", type=int, help="token per sotto-sessione (default dal progetto, 200000)")
+        if name == "packages":
+            x.add_argument("--register", action="store_true", help="scrive i pacchetti in remaster.json")
+        if name == "table":
+            x.add_argument("--parallel", type=int, default=3, help="sotto-sessioni contemporanee")
+        x.set_defaults(fn=cmd_plan)
+    x = sg.add_parser("status", help="pacchetti in corso, fermi, falliti, da riavviare o fermare")
+    x.add_argument("--stale-min", type=int, default=30, help="minuti senza avanzamento = fermo")
+    x.add_argument("--max-attempts", type=int, default=3)
+    x.set_defaults(fn=cmd_plan)
+    x = sg.add_parser("update", help="aggiorna un pacchetto nel registro (stato, token usati, nota)")
+    x.add_argument("id")
+    x.add_argument("--status", choices=project.PACKAGE_STATES)
+    x.add_argument("--tokens-used", type=int)
+    x.add_argument("--note")
+    x.add_argument("--task-id")
+    x.set_defaults(fn=cmd_plan)
 
     a = p.parse_args(argv)
     return a.fn(a)
