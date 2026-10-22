@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""rstool — command line of the Remaster Studio pipeline. Every command prints JSON.
+"""rstool — command line of the graphic-adventure-remasterer pipeline. Every command prints JSON.
 
 Run `rstool.py <group> -h` for the commands of a group:
-  project, engine, key, assets, style, gfx, font, widescreen, review, text, audio, voice, ui, hint,
-  manual, recipe, release
+  project, engine, key, assets, style, gfx, font, widescreen, video, review, text, audio, voice, ui,
+  hint, manual, recipe, release
 """
 import argparse
 import json
@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from remaster_tools import (assets, audio, controls, detect, falai, font, gfx, hints, keys,  # noqa: E402
                             manual, platforms, project, rawframe, recipe, release, review, style,
-                            text, theme, timing, voice, widescreen)
+                            text, theme, timing, transcribe, video, voice, widescreen)
 
 
 def out(obj):
@@ -58,6 +58,13 @@ def cmd_project(a):
         out({"phase": a.args[0]})
     elif a.action == "missing":
         out(project.missing_answers(need_project(wd)))
+    elif a.action == "spend":
+        data = need_project(wd)
+        if len(a.args) != 2:
+            sys.exit("uso: project spend <servizio> <importo> --unit usd|credits --note \"...\"")
+        res = project.spend(data, a.args[0], float(a.args[1]), a.unit, a.note)
+        project.save(data, wd)
+        out(res)
 
 
 def main(argv=None):
@@ -66,9 +73,12 @@ def main(argv=None):
     g = p.add_subparsers(dest="group", required=True)
 
     s = g.add_parser("project", help="stato del progetto (remaster.json)")
-    s.add_argument("action", choices=["init", "show", "set", "get", "decide", "phase", "missing"])
+    s.add_argument("action", choices=["init", "show", "set", "get", "decide", "phase", "missing", "spend"],
+                   help="spend <servizio> <importo> --unit usd|credits --note ...: registra una spesa e controlla il tetto")
     s.add_argument("args", nargs="*")
     s.add_argument("--force", action="store_true")
+    s.add_argument("--unit", choices=["usd", "credits"], default="usd", help="per spend")
+    s.add_argument("--note", default="", help="per spend")
     s.set_defaults(fn=cmd_project)
 
     s = g.add_parser("engine", help="riconoscimento motore e MD5 dei file")
@@ -123,13 +133,22 @@ def main(argv=None):
     x = sg.add_parser("backends"); x.set_defaults(fn=lambda a: out(gfx.backends()))
     x = sg.add_parser("bg"); x.add_argument("src"); x.add_argument("--out", required=True)
     x.add_argument("--scale", type=int, default=3); x.add_argument("--recipe"); x.add_argument("--seed", type=int, default=1234)
+    x.add_argument("--model", help="pesi spandrel (.pth/.safetensors, es. APISR RRDB) o nome modello ncnn; "
+                                   "default REMASTER_MODEL_BG")
     x.add_argument("--no-ai", action="store_true"); x.add_argument("--format", choices=["png", "jpg"], default="png")
-    x.set_defaults(fn=lambda a: out(gfx.batch_backgrounds(a.src, a.out, a.scale, a.recipe, a.seed, not a.no_ai, a.format)))
-    x = sg.add_parser("sprites"); x.add_argument("dump"); x.add_argument("--out", required=True)
+    x.add_argument("--no-resume", action="store_true", help="rifai anche le scene già fatte con lo stesso modello")
+    x.set_defaults(fn=lambda a: out(gfx.batch_backgrounds(a.src, a.out, a.scale, a.recipe, a.seed, not a.no_ai, a.format,
+                                                          a.model, not a.no_resume)))
+    x = sg.add_parser("sprites", help="pipeline deterministica: upscaler, sagoma smussata, inchiostro, colori di bordo")
+    x.add_argument("dump"); x.add_argument("--out", required=True)
     x.add_argument("--scale", type=int, default=3); x.add_argument("--recipe"); x.add_argument("--seed", type=int, default=1234)
+    x.add_argument("--model", help="pesi spandrel (es. APISR GRL) o nome modello ncnn; default REMASTER_MODEL_SPR")
+    x.add_argument("--no-ink", action="store_true", help="senza la fascia d'inchiostro sul contorno scuro")
+    x.add_argument("--format", choices=["png", "jpg"], default="png", help="png (default, con alpha: usala col Layer comune); jpg solo se il motore ricostruisce l'alpha")
     x.add_argument("--ai", action="store_true", help="img2img per fotogramma: sconsigliato sulle animazioni (sfarfallio)")
     x.add_argument("--tag", default="RSPR")
-    x.set_defaults(fn=lambda a: out(gfx.batch_sprites(a.dump, a.out, a.scale, a.recipe, a.seed, a.ai, a.tag.encode())))
+    x.set_defaults(fn=lambda a: out(gfx.batch_sprites(a.dump, a.out, a.scale, a.recipe, a.seed, a.ai, a.tag.encode(),
+                                                      a.model, not a.no_ink, a.format)))
     x = sg.add_parser("index"); x.add_argument("dump"); x.add_argument("hd"); x.add_argument("--out", required=True)
     x.add_argument("--scale", type=int, default=3); x.add_argument("--tag", default="RSPR")
     x.set_defaults(fn=lambda a: out(rawframe.build_index_from_dump(a.dump, a.hd, a.out, a.scale, a.tag.encode())))
@@ -173,6 +192,7 @@ def main(argv=None):
     x.add_argument("--only", nargs="*", help="solo queste scene")
     x.add_argument("--fal", action="store_true", help="aggiungi la variante fal.ai (a pagamento)")
     x.add_argument("--approved-images", type=int, default=0, help="immagini fal.ai approvate dall'utente per questo lotto")
+    x.add_argument("--model", help="upscaler delle bande, lo stesso dei fondali (default REMASTER_MODEL_BG)")
     x.set_defaults(fn=cmd_ws_extend)
     x = sg.add_parser("fal-estimate", help="preventivo gratuito delle bande con fal.ai")
     x.add_argument("--plan", default="analysis/widescreen-plan.json"); x.add_argument("--scenes", type=int)
@@ -185,11 +205,35 @@ def main(argv=None):
     x.add_argument("--variants", default="review/widescreen"); x.add_argument("--out", default="remaster/gfx/bg")
     x.set_defaults(fn=lambda a: out(widescreen.apply_decisions(a.plan, a.decisions, a.variants, a.out)))
 
+    s = g.add_parser("video", help="filmati: analisi, upscale fotogramma per fotogramma, ricodifica")
+    sg = s.add_subparsers(dest="action", required=True)
+    x = sg.add_parser("probe", help="formato, risoluzione, fps, durata, audio (ffprobe) e stima dei tempi su CPU")
+    x.add_argument("file"); x.set_defaults(fn=lambda a: out(video.probe(a.file)))
+    x = sg.add_parser("upscale", help="fotogrammi 1:1, upscale deterministico con riuso dei fotogrammi identici, "
+                                      "ricodifica con l'audio originale")
+    x.add_argument("src", help="file video letto da ffmpeg, oppure cartella di PNG numerati (dump del motore)")
+    x.add_argument("--out", required=True, help=".mkv / .mp4 (H.264) oppure .ogv (Theora)")
+    x.add_argument("--scale", type=int, default=3)
+    x.add_argument("--model", help="pesi spandrel o modello ncnn; default REMASTER_MODEL_BG (come i fondali)")
+    x.add_argument("--fps", help="obbligatorio per una cartella di PNG (es. 15 o 30000/1001)")
+    x.add_argument("--audio", help="file audio separato (cartella di PNG) o sostitutivo")
+    x.add_argument("--work", help="cartella di lavoro (default <out>.work): ripartibile")
+    x.add_argument("--crf", type=int, default=12); x.add_argument("--pix-fmt", default="yuv420p",
+                                                                 choices=["yuv444p", "yuv420p"])
+    x.add_argument("--max-frames", type=int, help="solo i primi N fotogrammi (prova)")
+    x.add_argument("--clean", action="store_true", help="cancella la cartella di lavoro alla fine")
+    x.add_argument("--interpolate", action="store_true", help=argparse.SUPPRESS)
+    x.set_defaults(fn=cmd_video_upscale)
+
     s = g.add_parser("review", help="pagine HTML di revisione")
     sg = s.add_subparsers(dest="action", required=True)
     x = sg.add_parser("gallery"); x.add_argument("--widescreen", required=True); x.add_argument("--variants", default="review/widescreen")
     x.add_argument("--out", default="review/widescreen.html"); x.add_argument("--title", default="Revisione 16:9")
     x.set_defaults(fn=lambda a: out(review.widescreen_gallery(a.widescreen, a.variants, a.out, a.title)))
+    x = sg.add_parser("diff", help="regressione visiva: schermate con lo stesso nome in due passate")
+    x.add_argument("before"); x.add_argument("after"); x.add_argument("--out", default="review/diff.html")
+    x.add_argument("--threshold", type=float, default=0.002)
+    x.set_defaults(fn=lambda a: out(review.diff_dirs(a.before, a.after, a.out, a.threshold)))
     x = sg.add_parser("compare"); x.add_argument("orig"); x.add_argument("hd"); x.add_argument("--out", default="review/compare.html")
     x.set_defaults(fn=cmd_review_compare)
 
@@ -245,6 +289,10 @@ def main(argv=None):
     x.add_argument("--default-rate", type=int, default=11025); x.add_argument("--raw-format", default="u8")
     x.add_argument("--lossless", action="store_true", help="FLAC da livellare poi con normalize + mix")
     x.set_defaults(fn=lambda a: out(audio.sfx_batch(a.dir, a.out, a.rates, a.default_rate, a.raw_format, lossless=a.lossless)))
+    x = sg.add_parser("restore-speech", help="restauro del parlato ORIGINALE (giochi già parlati): FLAC da livellare poi")
+    x.add_argument("dir"); x.add_argument("--out", default="audio/clean/voice")
+    x.add_argument("--model", choices=["deepfilternet"], help="modello locale di pulizia della voce, se installato")
+    x.set_defaults(fn=lambda a: out(audio.restore_speech_batch(a.dir, a.out, a.model)))
 
     s = g.add_parser("voice", help="doppiaggio ElevenLabs")
     sg = s.add_subparsers(dest="action", required=True)
@@ -262,6 +310,11 @@ def main(argv=None):
     x.set_defaults(fn=lambda a: out(voice.reencode(a.script, a.cast, a.out, audio.load_mix(_mix_source(a))[0]["voice"])))
     x = sg.add_parser("check"); x.add_argument("script"); x.add_argument("dir")
     x.set_defaults(fn=lambda a: out(voice.check(a.script, a.dir)))
+    x = sg.add_parser("transcribe", help="trascrizione locale e gratuita delle battute (faster-whisper o whisper.cpp)")
+    x.add_argument("dir"); x.add_argument("--lang", required=True); x.add_argument("--out", default="qa/trascrizioni.json")
+    x.add_argument("--model", default="small", help="faster-whisper: tiny/base/small/medium; whisper.cpp: file ggml")
+    x.add_argument("--backend", choices=["faster-whisper", "whisper.cpp"])
+    x.set_defaults(fn=lambda a: out(transcribe.transcribe_dir(a.dir, a.out, a.lang, a.model, a.backend)))
     x = sg.add_parser("transcripts", help="confronta le trascrizioni automatiche ({chiave: testo}) col copione")
     x.add_argument("script"); x.add_argument("transcripts")
     x.set_defaults(fn=lambda a: out(voice.check_transcripts(a.script, a.transcripts)))
@@ -303,6 +356,10 @@ def main(argv=None):
     x.add_argument("--licenses"); x.add_argument("--version", default="1.0.0")
     x.set_defaults(fn=lambda a: out({"package": release.package(need_project(a.workdir), a.out, a.game_md5, a.patches, a.engines,
                                                                 a.remaster, a.recipes, a.licenses, a.version)}))
+    x = sg.add_parser("budget", help="peso del pacchetto e memoria per desktop, Android, web")
+    x.add_argument("remaster"); x.add_argument("--targets", nargs="+", default=list(release.TARGETS),
+                                               choices=list(release.TARGETS))
+    x.set_defaults(fn=lambda a: out(release.budget(a.remaster, tuple(a.targets))))
     x = sg.add_parser("verify"); x.add_argument("root"); x.add_argument("--game-md5")
     x.set_defaults(fn=lambda a: out(release.verify(a.root, a.game_md5)))
 
@@ -367,11 +424,20 @@ def cmd_ws_extend(a):
         paid = falai.fill_function(budget)
     plan = widescreen.make_extensions(a.plan, a.hd, a.out, a.scale, rec, lama=a.lama, quilting=not a.no_quilt,
                                       sharpen=not a.no_sharpen, paid_fill=paid,
-                                      recipes=_json(a.recipes) if a.recipes else None, only=a.only)
+                                      recipes=_json(a.recipes) if a.recipes else None, only=a.only,
+                                      model=a.model)
     res = {"scenes_with_variants": sum(1 for s in plan["scenes"] if s.get("variants")), "variants_dir": a.out}
     if paid is not None:
         res["fal_images_used"] = budget.used
     out(res)
+
+
+def cmd_video_upscale(a):
+    if a.interpolate:
+        sys.exit("--interpolate non è implementato: l'interpolazione (RIFE) cambia il ritmo dell'animatore; "
+                 "va proposta su 2-3 filmati di prova e approvata (skills/hd-graphics)")
+    out(video.upscale(a.src, a.out, a.scale, a.model, a.fps, a.audio, a.work, a.crf, a.pix_fmt, a.max_frames,
+                      keep_work=not a.clean, log=lambda m: print(m, file=sys.stderr)))
 
 
 def cmd_fal_estimate(a):

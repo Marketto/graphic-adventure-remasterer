@@ -68,6 +68,12 @@ release/
   macOS ne consuma 10 volte tanto: lanciala solo quando serve.
 
 ## Controlli finali
-Esegui `rstool.py release verify release/<cartella>`: nessun file con MD5 uguale a un file
+Prima del pacchetto: `rstool.py release budget remaster` (peso per cartella, immagini più
+pesanti da decodificare, limiti per desktop, Android e web; i fondali PNG grandi diventano JPEG
+q90 4:4:4). La pagina HTML del manuale (`remaster/manual/<lang>.html` con `img/`) va copiata
+anche accanto agli eseguibili, e la configurazione distribuita imposta `gui_theme`/`themepath`
+sul tema del remaster. In modalità `recipe` nessun logo o manuale dei titolari (vedi
+`${CLAUDE_PLUGIN_ROOT}/references/legal-distribution.md`).
+Poi `rstool.py release verify release/<cartella>`: nessun file con MD5 uguale a un file
 originale, licenze presenti, checksum validi, manifest RAC coerente. Poi riepilogo
 all'utente: una riga per artefatto.

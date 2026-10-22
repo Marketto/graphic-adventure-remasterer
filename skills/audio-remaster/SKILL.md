@@ -83,6 +83,15 @@ approvare un campione prima del lotto.
 Il toggle originale/remaster commuta anche l'audio (opzione `remaster_audio_follow_toggle`):
 la musica riparte dallo stesso punto nel formato originale.
 
+## Voci originali (giochi già parlati)
+Il parlato registrato d'epoca (spesso 8 bit, 11-22 kHz, fruscio e clic) si **restaura**, non si
+sostituisce: `rstool.py audio restore-speech <cartella> --out audio/clean/voice [--model
+deepfilternet]` toglie rombo e continua, ripara i clic, riduce il fruscio di quantizzazione e
+ricampiona a 44,1 kHz senza inventare banda; il modello locale DeepFilterNet (gratuito, se
+installato) pulisce di più ma va ascoltato su 5-10 battute prima del lotto (a volte "impasta"
+le consonanti). Poi gruppo `voice` delle due fasi. Il doppiaggio nuovo (skill `voice-dubbing`)
+si propone solo per le lingue senza voci originali o se l'utente lo chiede.
+
 ## Voci
 Le battute generate (skill `voice-dubbing`) sono il gruppo `voice`: la regola è per file, quindi
 `voice generate` fa fase 1 e 2 in un solo passaggio, dalla MP3 originale (conservata in

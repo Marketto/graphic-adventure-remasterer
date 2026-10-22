@@ -75,12 +75,27 @@ def coverage(dump_dir, pack_dir, lang=None):
                 keys = {ln.split("\t", 1)[0] for ln in f if "\t" in ln and not ln.startswith("#")}
         rep[f"text/{lg}"] = _cov(seen_text, keys)
         rep[f"voice/{lg}"] = _cov(seen_text, _keys_in(os.path.join(pack_dir, "voice", lg), (".ogg",)), partial=True)
-    rep["gfx/bg"] = _cov(_keys_in(os.path.join(dump_dir, "bg"), (".raw",)),
-                         _keys_in(os.path.join(pack_dir, "gfx", "bg"), (".png", ".jpg")))
+    seen_bg = _keys_in(os.path.join(dump_dir, "bg"), (".raw",))
+    rep["gfx/bg"] = _cov(seen_bg, _keys_in(os.path.join(pack_dir, "gfx", "bg"), (".png", ".jpg")))
+    # localized backgrounds <scene>.<lang>[.wide].png: the scene must exist and the language be known
+    bgd = os.path.join(pack_dir, "gfx", "bg")
+    known = set(langs) | ({lang} if lang else set())
+    loc_bad = []
+    if os.path.isdir(bgd):
+        for n in sorted(os.listdir(bgd)):
+            parts = os.path.splitext(n)[0].split(".")
+            if len(parts) >= 2 and parts[1] != "wide":
+                scene, lg = parts[0], parts[1]
+                if scene not in seen_bg:
+                    loc_bad.append(f"{n}: scena mai richiesta dal motore")
+                elif known and lg not in known:
+                    loc_bad.append(f"{n}: lingua «{lg}» senza text/{lg}.tsv")
+    rep["gfx/bg localizzati"] = {"problems": loc_bad}
     rep["gfx/spr"] = _cov(_keys_in(os.path.join(dump_dir, "spr"), (".raw",)),
                           _keys_in(os.path.join(pack_dir, "gfx", "spr"), (".png", ".jpg")))
     problems = [f"{k}: {v['orphans']} voci del pacchetto mai richieste dal motore (es. {', '.join(v['orphan_examples'])})"
-                for k, v in rep.items() if v["orphans"]]
+                for k, v in rep.items() if v.get("orphans")]
+    problems += rep["gfx/bg localizzati"]["problems"]
     return {"coverage": rep, "problems": problems,
             "note": "un orfano indica un percorso del motore che non passa dal Layer (hook mancante) o una "
                     "parte non raggiunta dal dump: rifai il passaggio fuzz/sweep prima di concludere"}

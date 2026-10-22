@@ -39,6 +39,7 @@ if (_remaster) _remaster->setPalette(rgb, 0, n); else g_system->getPaletteManage
 
 // nuovo fondale (Screen::setRoomImage) — chiave scena = percorso della risorsa
 // ("part1/bg/room" → remaster/gfx/bg/part1_bg_room.png)
+// (con part1_bg_room.<lang>.png presente, per quella lingua si usa il fondale localizzato)
 if (_remaster) _remaster->setBackground(roomPath, bg8, rgb, bgX, bgY);
 
 // inizio frame (Screen::beginFrame, prima di disegnare gli oggetti)
@@ -84,7 +85,7 @@ if (!_remaster || !_remaster->playVoice(original)) showSubtitle(...);
 | `remaster_widescreen` | true | viewport 16:9 |
 | `remaster_smooth` | true | scorrimento interpolato tra i tick |
 | `remaster_voices` | true | voci registrate |
-| `remaster_language` | lingua ScummVM | testi/voci da `text/<lang>.tsv`, `voice/<lang>/` |
+| `remaster_language` | lingua ScummVM | testi/voci da `text/<lang>.tsv`, `voice/<lang>/`; fondali localizzati `gfx/bg/<scena>.<lang>[.wide].png` se presenti |
 | `remaster_dump` | — | cartella dove scrivere `bg/` (chiave scena con `_`), `spr/`, `text.jsonl` per la pipeline |
 
 ## Driver di test: comandi per i controlli

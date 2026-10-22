@@ -16,8 +16,12 @@ remaster/
   gfx/bg/<scene>.png|jpg   fondali HD (multiplo intero dell'originale)
   gfx/bg/<scene>.wide.json 16:9: {"left","right" (px a scala originale), "camera": "clamp"|"center"}
   gfx/bg/<scene>.wide.png  fondale esteso (stessa scala del fondale HD); senza: bande nere
+  gfx/bg/<scene>.<lang>.png|jpg       fondale localizzato (testi dipinti tradotti): per la
+                           lingua del Layer vince su <scene>.png; se manca si usa quello normale
+  gfx/bg/<scene>.<lang>.wide.png|jpg  idem per il fondale esteso (la geometria resta in
+                           <scene>.wide.json, unica per tutte le lingue)
   gfx/spr/index.dat        indice sprite (formato RSPR, sotto)
-  gfx/spr/<key>.png|jpg    frame HD, key = frameKey
+  gfx/spr/<key>.png|jpg    frame HD, key = frameKey (PNG con alpha; un JPEG è opaco nei blocchi originali)
   fonts/<font>.dat|png     atlante font HD (formato RFNT, sotto)
   text/<lang>.tsv          testi corretti/tradotti: "<textKey>\t<testo UTF-8>"
   voice/<lang>/<textKey>.ogg   battute doppiate
@@ -29,6 +33,9 @@ remaster/
                            ne mette una copia anche accanto all'eseguibile
   hint/<lang>.txt          aiuti in gioco (tasto H), formato in tools/remaster_tools/hints.py [hook per motore]
   theme/<gioco>.zip        tema GUI di ScummVM nello stile del gioco (stesso commit del fork)
+  video/<nome>.mkv         filmato rimasterizzato (H.264, fps e durata originali, audio originale);
+                           <nome> = file originale in minuscolo senza estensione; `.ogv` (Theora)
+                           se il fork usa il decoder Theora di ScummVM; senza file: originale [hook per motore]
   gfx/inbetween/<key>.png  frame intermedi delle animazioni                       [riservato]
   fonts/<font>.<lang>.dat  atlante per lingue oltre la codepage del gioco          [riservato]
 ```
@@ -43,7 +50,9 @@ remaster/
   la chiave. Esadecimale minuscolo a 8 cifre.
 - **scene** (fondali): definita dal motore, di solito `<parte>/<nome risorsa>`. Nei nomi
   dei file `/` e `\\` diventano `_` (`part1/bg/room` → `gfx/bg/part1_bg_room.png`): il dump
-  del Layer, gli strumenti e `AssetPack` usano la stessa regola.
+  del Layer, gli strumenti e `AssetPack` usano la stessa regola. Il fondale localizzato aggiunge
+  la lingua dopo il nome (`gfx/bg/part1_bg_room.it.png`, `gfx/bg/part1_bg_room.it.wide.png`);
+  la lingua è quella del Layer (`remaster_language`, altrimenti la lingua di ScummVM).
 - Le voci marcate `[hook per motore]` le legge il codice del singolo motore,
   non il Layer comune; quelle `[riservato]` non sono ancora implementate.
 
@@ -84,7 +93,7 @@ Per alfabeti oltre i 256 codici è previsto `fonts/<font>.<lang>.dat` con la cod
 {
   "rac": 1, "game": "<id>-dos-cd", "pack": "1.0.0", "scale": 3,
   "aspect": "16:9", "languages": ["it", "en"],
-  "contents": ["bg", "spr", "fonts", "text", "music", "sfx", "voice"],
+  "contents": ["bg", "spr", "fonts", "text", "music", "sfx", "voice", "video"],
   "recipe": {"file": "recipe.json", "hash": "sha256:..."}
 }
 ```

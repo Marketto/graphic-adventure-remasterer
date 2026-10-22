@@ -52,12 +52,12 @@ Variabili: `ANTHROPIC_API_KEY` (o login del CLI), `ELEVENLABS_API_KEY` per il do
 | `skills/` | orchestratore + 10 skill (motore, style bible, grafica HD, 16:9, localizzazione, audio, doppiaggio, integrazione nel motore, manuale e aiuti, rilascio) |
 | `agents/` | 10 subagenti specializzati, tra cui un QA indipendente e un revisore |
 | `commands/remaster.md` | comando `/remaster` |
-| `tools/rstool.py` | pipeline a riga di comando: progetto, rilevamento, emulatore di riferimento, misura dei tempi, fluidità dei controlli, chiavi e copertura degli asset, pacchetto canary, stile, grafica, font, proporzione dei pixel, 16:9 (LaMa, quilting, ricette, controlli, fal.ai opzionale), gallerie di revisione, testi, audio (gruppi e mix), voci, tema GUI, aiuti, manuale, ricette, rilascio |
+| `tools/rstool.py` | pipeline a riga di comando: progetto (con tetto e registro delle spese), rilevamento, emulatore di riferimento, misura dei tempi, fluidità dei controlli, chiavi e copertura degli asset, pacchetto canary, stile, grafica (upscaler APISR/Real-ESRGAN su CPU, sprite con contorno e inchiostro), filmati, font, proporzione dei pixel, 16:9 (LaMa, quilting, ricette, controlli, fal.ai opzionale), gallerie di revisione e regressione visiva, testi, audio (gruppi e mix, restauro del parlato originale), voci (trascrizione locale), tema GUI, aiuti, manuale, ricette (esempio in `references/recipe.example.json`), rilascio e peso del pacchetto |
 | `tools/ip_guard.py` | controllo che il repository resti privo di contenuti e riferimenti a giochi |
 | `engine/scummvm-remaster-layer/` | patch per ScummVM (`engines/remaster/`) + guida di integrazione |
 | `ci/` | workflow GitHub Actions multipiattaforma, librerie Android, build locale |
 | `app/` | app standalone con Claude Agent SDK |
-| `references/` | contratto degli asset (RAC v1), distribuzione lecita, modello di richiesta di permesso, `conoscenza/` (tecniche del banco di prova) |
+| `references/` | contratto degli asset (RAC v1), ricetta di stile d'esempio, distribuzione lecita, modello di richiesta di permesso, `conoscenza/` (tecniche del banco di prova) |
 
 ## Conoscenza dal banco di prova
 | Nota | Contenuto |
@@ -68,16 +68,21 @@ Variabili: `ANTHROPIC_API_KEY` (o login del CLI), `ELEVENLABS_API_KEY` per il do
 
 ## Requisiti sul tuo PC
 Python 3.10+ con `numpy` e `Pillow`; `ffmpeg`; `git` e toolchain C++ per ScummVM.
-Opzionali: `torch` + `spandrel` per gli upscaler (APISR, Real-ESRGAN) e LaMa su CPU,
-`fluidsynth` + soundfont, munt (MT-32) con le tue ROM, una GPU con ComfyUI, chiavi ElevenLabs e
+Consigliati per la grafica: `torch` (build CPU) + `spandrel` per gli upscaler (APISR,
+Real-ESRGAN) e LaMa, tutto su CPU (2 core e 7 GB di RAM bastano; pesi scaricati fuori dal
+repository, scelti con `REMASTER_MODEL_BG` / `REMASTER_MODEL_SPR`). Opzionali:
+`realesrgan-ncnn-vulkan`, `fluidsynth` + soundfont, munt (MT-32) con le tue ROM, una GPU con
+ComfyUI (solo per l'img2img), chiavi ElevenLabs e
 fal.ai (solo se scegli l'outpainting a pagamento), l'emulatore o la VM della piattaforma
 originale (DOSBox, 86Box/PCem, QEMU, Wine, WinUAE/FS-UAE, Hatari...) con ROM e sistemi tuoi,
-Xvfb + `xdotool` per le misure automatiche.
+Xvfb + `xdotool` per le misure automatiche, `faster-whisper` per la trascrizione locale delle
+voci, DeepFilterNet per il restauro del parlato originale.
 
 ## Stato delle verifiche
-- `tools/`: test automatici su dati sintetici (`python -m pytest tools/tests`), tutti verdi.
-- Remaster Layer: si applica su ScummVM `5d13ee16`, compila, collega, 410/410 test di `make test`
-  verdi (4 nuovi: chiavi, composizione, 16:9/mouse, scorrimento sub-pixel).
+- `tools/`: test automatici su dati sintetici (`python -m pytest tools/tests`), tutti verdi; un
+  test controlla anche che skill, agenti e documenti citino solo comandi, opzioni e file esistenti.
+- Remaster Layer: si applica su ScummVM `5d13ee16`, compila, collega, 411/411 test di `make test`
+  verdi (5 nuovi: chiavi, composizione, 16:9/mouse, scorrimento sub-pixel, fondali localizzati).
 - Build Linux in modalità release verificata; Windows, macOS, Web e Android da provare al primo
   giro di CI.
 - Non ancora provati con questo codice su un gioco vero: generazione grafica, ElevenLabs via API,

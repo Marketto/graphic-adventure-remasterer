@@ -11,3 +11,5 @@ __pycache__/
 *.ccd
 *.iso
 *.img
+# copie di lavoro temporanee degli agenti
+/.claude/worktrees/

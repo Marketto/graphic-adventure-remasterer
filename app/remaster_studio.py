@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Remaster Studio — standalone app (Claude Agent SDK) for the HD remaster of 2D adventures.
+"""graphic-adventure-remasterer — standalone app (Claude Agent SDK) for the HD remaster of 2D adventures.
 
 Runs the same plugin used in Claude (skills, subagents, tools) from a terminal on your PC,
 where the GPU, ComfyUI, ScummVM builds and the game files are.
@@ -20,7 +20,7 @@ from claude_agent_sdk import (AssistantMessage, ClaudeAgentOptions, ClaudeSDKCli
 PLUGIN_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 APPEND = """
-Sei Remaster Studio, una suite per il remaster HD di avventure grafiche 2D d'epoca.
+Sei graphic-adventure-remasterer, una suite per il remaster HD di avventure grafiche 2D d'epoca.
 All'inizio carica la skill `remaster-orchestrator` e seguila. Rispondi in italiano.
 Gli strumenti della pipeline sono in {tools}: usa `python3 {tools}/rstool.py ...`.
 Lavori nella cartella del progetto {project}: i file originali del gioco non si modificano mai.
@@ -128,7 +128,7 @@ async def run(args):
 
 
 def main():
-    p = argparse.ArgumentParser(description="Remaster Studio — remaster HD di avventure grafiche 2D")
+    p = argparse.ArgumentParser(description="graphic-adventure-remasterer — remaster HD di avventure grafiche 2D")
     p.add_argument("title", nargs="?", default="", help="titolo del gioco (opzionale)")
     p.add_argument("--project", default="./remaster-progetto", help="cartella di lavoro del progetto")
     p.add_argument("--model", default=None, help="modello Claude (default: quello del CLI)")

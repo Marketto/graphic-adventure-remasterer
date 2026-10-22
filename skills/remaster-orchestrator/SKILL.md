@@ -3,7 +3,7 @@ name: remaster-orchestrator
 description: Avvia e guida il remaster HD di un'avventura grafica 2D (anni '80-'90) dall'intervista iniziale fino a eseguibili e patch distribuibili. Usala quando l'utente vuole rimasterizzare, rifare in HD, tradurre, doppiare o portare in 16:9 un vecchio gioco punta-e-clicca, o invoca /remaster.
 ---
 
-# Remaster Studio — orchestratore
+# graphic-adventure-remasterer — orchestratore
 
 Sei il direttore di produzione di un remaster. Il tuo compito è raccogliere le decisioni,
 far lavorare i subagenti specializzati e fermarti ai cancelli di conferma. Non improvvisare
@@ -59,9 +59,19 @@ deve sempre poter tornare all'originale in tempo reale (tasto di toggle, default
 All'avvio esegui `rstool.py project show`. Se esiste un progetto, riassumi in una riga fase e
 decisioni e chiedi se proseguire. Altrimenti parti dalla Fase 0.
 
-## Fase 0 — Intervista (una domanda alla volta, con AskUserQuestion quando ci sono opzioni)
+## Fase 0 — Intervista
 
-Registra ogni risposta con `rstool.py project set <chiave> <valore>` subito dopo averla avuta.
+L'utente risponde spesso dal telefono: poche schermate, non dieci messaggi. Con AskUserQuestion
+(fino a 4 domande per chiamata) raggruppa così, nell'ordine:
+- **schermata A** (dopo i punti 1-3, che richiedono ricerche): grafica e parti, 16:9, fal.ai,
+  framerate (punto 4);
+- **schermata B**: lingue, audio, doppiaggio, manuale e aiuti (punti 5-8);
+- **schermata C**: piattaforme, distribuzione, tetto di spesa (punto 9 e sotto).
+Le domande di approfondimento (lingue da tradurre, licenza ElevenLabs) vanno nella schermata
+successiva solo se servono. Senza AskUserQuestion: una domanda alla volta.
+
+Registra ogni risposta con `rstool.py project set <chiave> <valore>` subito dopo averla avuta;
+`rstool.py project missing` dice cosa manca.
 
 1. **Nome del gioco.** Chiedi il titolo (e, se lo sa, anno, piattaforma, versione floppy/CD,
    lingua della sua copia) e crea il progetto con `rstool.py project init "<titolo>"`. Identifica il gioco con una ricerca web: sviluppatore, editore,
@@ -108,7 +118,12 @@ Registra ogni risposta con `rstool.py project set <chiave> <valore>` subito dopo
    tradotto e leggibile dal menu, e gli aiuti in gioco col tasto H (skill `manual-hints`).
    Chiedi se ha il manuale stampato o in PDF (servirà la sua copia). Registra `extras.manual`
    ed `extras.hints`.
-9. **Piattaforme e distribuzione.** Default: Windows, Linux, macOS, Android, Web.
+9. **Piattaforme, distribuzione e spesa.** Default: Windows, Linux, macOS, Android, Web.
+   Se il progetto prevede spese (doppiaggio, fal.ai) chiedi un **tetto di spesa totale**
+   (`budget.cap_usd`, `budget.cap_credits`), oltre al preventivo per ogni lotto: ogni spesa
+   reale si registra con `rstool.py project spend <servizio> <importo> --unit usd|credits --note
+   "<lotto>"`, che
+   avvisa quando il tetto è superato (allora ci si ferma e si chiede).
    Chiedi la modalità di distribuzione degli asset (vedi `${CLAUDE_PLUGIN_ROOT}/references/legal-distribution.md`):
    - `recipe` (consigliata senza permessi): la patch contiene motore, strumenti e "ricette";
      gli asset HD si rigenerano sul PC dell'utente dalla sua copia originale;
@@ -155,7 +170,7 @@ Subagente `build-engineer` con skill `engine-integration`:
    originale, 2-3 varianti da far scegliere.
 
 ## Fase 3 — Asset (in parallelo dove possibile)
-- `graphics-artist` → skill `hd-graphics` (fondali, sprite, UI, font HD);
+- `graphics-artist` → skill `hd-graphics` (fondali, sprite, UI, font HD, filmati);
 - `widescreen-planner` → skill `widescreen` (estensioni; **cancello**: galleria di conferma);
 - `localizer` → skill `localization` (testi corretti, traduzioni, font con glifi);
 - `audio-engineer` → skill `audio-remaster` (fase 1: normalizzazione per gruppo; fase 2: mix);
@@ -175,6 +190,8 @@ la direzione presto.
   `audio mix` su tutto (skill `audio-remaster`).
 
 ## Fase 4 — QA (subagente `qa-tester`)
+Regressione visiva tra una passata e l'altra (`review diff`) e peso del pacchetto per telefono e
+web (`release budget`) fanno parte della QA.
 Percorso completo con il driver automatico, screenshot affiancati, test del toggle in ogni
 schermata tipo, salva/carica in ogni parte, controllo testi (troncamenti, glifi mancanti),
 sincronia voci, fluidità di mouse e tasti (`engine controls`), menu nel tema del gioco, manuale

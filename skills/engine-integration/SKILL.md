@@ -104,6 +104,15 @@ dall'eseguibile, input e rendering. Questo tiene il codice GPL pubblicabile e i 
 - Salvataggi con miniatura dallo schermo di gioco (non dal menu), formato originale invariato
   con intestazione estesa in coda; versione della patch nel menu.
 - Sottotitoli in basso con fascia; attese delle voci sempre interrompibili da clic o tasto.
+- **Evidenziare i punti cliccabili** (tasto, es. Tab, e pulsante sul telefono): contorno o icona
+  sulle zone attive della stanza, letto dalle zone del motore (non dipinto negli sfondi).
+- **Accessibilità**: dimensione dei sottotitoli e dei testi regolabile, fascia più scura,
+  sottotitoli sempre attivi con le voci, cursore più grande, nessuna azione legata al tempo di
+  reazione se l'originale non lo richiede.
+- **Accelerare ciò che è già noto**: battute già lette saltabili in blocco, doppio clic su
+  un'uscita per cambiare stanza subito, velocità di camminata regolabile (solo resa: la logica
+  resta al passo originale, quindi con cautela sugli script a tempo).
+Tutte disattivabili nel menu "Opzioni remaster"; in modalità originale (F8) spente.
 
 ## 1f. Motore patchabile: testi, voci, immagini (requisito)
 Il motore (ScummVM o un altro) va adeguato perché **ogni** contenuto mostrato o suonato passi
@@ -113,7 +122,7 @@ da un punto in cui la patch può sostituirlo, senza toccare i file originali:
 | testi (fumetti, risposte, etichette, menu, titoli) | `Layer::text()` prima del disegno | `text/<lang>.tsv` |
 | voci | `Layer::playVoice()` quando la battuta appare; attesa dello script legata alla voce | `voice/<lang>/<textKey>.ogg` |
 | fondali, sprite, cursori, interfaccia | `setBackground`, `beginSprite`/`mark`, copie con `clearArea` | `gfx/bg`, `gfx/spr` |
-| testi dentro le immagini | fondale localizzato (da aggiungere ad `AssetPack`: oggi non letto) | `gfx/bg/<scena>.<lang>.png` [riservato] |
+| testi dentro le immagini | fondale localizzato: `setBackground` lo sceglie da solo per la lingua del Layer, altrimenti il fondale normale | `gfx/bg/<scena>.<lang>.png`, `gfx/bg/<scena>.<lang>.wide.png` |
 | font | `addText` con atlante HD | `fonts/` |
 | musica ed effetti | hook nel driver audio del motore | `music/`, `sfx/` |
 | manuale e aiuti | lettori generici nel motore del gioco | `manual/`, `hint/` |

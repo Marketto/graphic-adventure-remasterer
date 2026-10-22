@@ -1,4 +1,4 @@
-From 8c752d01a622c5e81c621afb1176ead263302db0 Mon Sep 17 00:00:00 2001
+From 1b99da2278bbbcc5ffdc4178cd04f00bb6d34d8c Mon Sep 17 00:00:00 2001
 From: Marketto <Marketto@users.noreply.github.com>
 Date: Wed, 21 Oct 2026 14:59:36 +0200
 Subject: [PATCH] ENGINES: Add Remaster Layer (HD, 16:9, smooth scrolling,
@@ -7,8 +7,9 @@ Subject: [PATCH] ENGINES: Add Remaster Layer (HD, 16:9, smooth scrolling,
 Engine independent helper for remastering 8-bit adventure engines:
 
 - AssetPack: remaster/ pack in the game folder: manifest,
-  HD backgrounds, 16:9 side extensions, sprite index (RSPR), font
-  atlases (RFNT), corrected/translated texts and recorded voices
+  HD backgrounds (localized ones first), 16:9 side extensions, sprite
+  index (RSPR), font atlases (RFNT), corrected/translated texts and
+  recorded voices
 - Compositor: true colour frame at 2x/3x from the engine's 8-bit back
   buffer; HD background where the original pixel is untouched, remastered
   sprite frames through a per-pixel id buffer filled by the engine's own
@@ -25,17 +26,17 @@ Engine independent helper for remastering 8-bit adventure engines:
 Assisted-by: Claude:claude-opus-5-5
 ---
  engines/module.mk               |   4 +
- engines/remaster/assetpack.cpp  | 261 +++++++++++++
- engines/remaster/assetpack.h    | 109 ++++++
+ engines/remaster/assetpack.cpp  | 279 ++++++++++++++
+ engines/remaster/assetpack.h    | 119 ++++++
  engines/remaster/compositor.cpp | 635 ++++++++++++++++++++++++++++++++
  engines/remaster/compositor.h   | 171 +++++++++
  engines/remaster/keys.cpp       |  77 ++++
  engines/remaster/keys.h         |  45 +++
- engines/remaster/layer.cpp      | 337 +++++++++++++++++
+ engines/remaster/layer.cpp      | 338 +++++++++++++++++
  engines/remaster/layer.h        | 148 ++++++++
- test/graphics/remaster.h        | 103 ++++++
- test/module.mk                  |   5 +-
- 11 files changed, 1893 insertions(+), 2 deletions(-)
+ test/graphics/remaster.h        | 158 ++++++++
+ test/module.mk                  |   6 +-
+ 11 files changed, 1978 insertions(+), 2 deletions(-)
  create mode 100644 engines/remaster/assetpack.cpp
  create mode 100644 engines/remaster/assetpack.h
  create mode 100644 engines/remaster/compositor.cpp
@@ -59,10 +60,10 @@ index d79c5a7d..86ec4b4b 100644
  	savestate.o
 diff --git a/engines/remaster/assetpack.cpp b/engines/remaster/assetpack.cpp
 new file mode 100644
-index 00000000..d184bdbe
+index 00000000..2a943272
 --- /dev/null
 +++ b/engines/remaster/assetpack.cpp
-@@ -0,0 +1,261 @@
+@@ -0,0 +1,279 @@
 +/* ScummVM - Graphic Adventure Engine
 + *
 + * ScummVM is the legal property of its developers, whose names
@@ -205,9 +206,26 @@ index 00000000..d184bdbe
 +	return "gfx/bg/" + s;
 +}
 +
-+Graphics::Surface *AssetPack::loadBackground(const Common::String &scene, int origW, int origH, int &scale) const {
++bool AssetPack::hasImage(const Common::String &relPathNoExt) const {
++	return exists(relPathNoExt + ".png") || exists(relPathNoExt + ".jpg");
++}
++
++Common::String AssetPack::backgroundPath(const Common::String &scene, bool wide) const {
 +	Common::String base = sceneFile(scene);
-+	Graphics::Surface *s = loadImage(base);
++	Common::String suffix = wide ? ".wide" : "";
++	// localized background (painted texts translated) first
++	if (!_lang.empty() && hasImage(base + "." + _lang + suffix))
++		return base + "." + _lang + suffix;
++	if (hasImage(base + suffix))
++		return base + suffix;
++	return Common::String();
++}
++
++Graphics::Surface *AssetPack::loadBackground(const Common::String &scene, int origW, int origH, int &scale) const {
++	Common::String path = backgroundPath(scene);
++	if (path.empty())
++		return nullptr;
++	Graphics::Surface *s = loadImage(path);
 +	if (!s)
 +		return nullptr;
 +	if (origW <= 0 || origH <= 0 || s->w % origW || s->h % origH || s->w / origW != s->h / origH) {
@@ -240,12 +258,13 @@ index 00000000..d184bdbe
 +			wi.pillarbox = true;
 +	}
 +	delete v;
-+	wi.hasImage = exists(sceneFile(scene) + ".wide.png") || exists(sceneFile(scene) + ".wide.jpg");
++	wi.hasImage = !backgroundPath(scene, true).empty();
 +	return wi;
 +}
 +
 +Graphics::Surface *AssetPack::loadWideBackground(const Common::String &scene) const {
-+	return loadImage(sceneFile(scene) + ".wide");
++	Common::String path = backgroundPath(scene, true);
++	return path.empty() ? nullptr : loadImage(path);
 +}
 +
 +void AssetPack::loadSpriteIndex() {
@@ -316,7 +335,7 @@ index 00000000..d184bdbe
 +Common::String AssetPack::voicePath(uint32 key, const Common::String &lang) const {
 +	static const char *const exts[] = { ".ogg", ".flac", ".mp3", ".wav" };
 +	Common::String base = Common::String::format("voice/%s/%08x", lang.c_str(), key);
-+	for (int i = 0; i < ARRAYSIZE(exts); i++) {
++	for (uint i = 0; i < ARRAYSIZE(exts); i++) {
 +		if (exists(base + exts[i]))
 +			return base;
 +	}
@@ -326,10 +345,10 @@ index 00000000..d184bdbe
 +} // End of namespace Remaster
 diff --git a/engines/remaster/assetpack.h b/engines/remaster/assetpack.h
 new file mode 100644
-index 00000000..8895d7d3
+index 00000000..e939d171
 --- /dev/null
 +++ b/engines/remaster/assetpack.h
-@@ -0,0 +1,109 @@
+@@ -0,0 +1,119 @@
 +/* ScummVM - Graphic Adventure Engine
 + *
 + * ScummVM is the legal property of its developers, whose names
@@ -369,7 +388,7 @@ index 00000000..8895d7d3
 +	int left = 0, right = 0;		///< pixels added on each side, at the original scale
 +	bool clampCamera = false;		///< scrolling scene: show more of the existing background
 +	bool pillarbox = false;			///< keep 4:3, black bars
-+	bool hasImage = false;			///< <scene>.wide.png exists
++	bool hasImage = false;			///< <scene>.wide.png (or its localized version) exists
 +};
 +
 +struct SpriteEntry {
@@ -403,6 +422,14 @@ index 00000000..8895d7d3
 +	 */
 +	Graphics::Surface *loadImage(const Common::String &relPathNoExt) const;
 +
++	/** Language of the localized backgrounds (painted texts translated), empty for none */
++	void setLanguage(const Common::String &lang) { _lang = lang; }
++	/**
++	 * Background picture of a scene without extension: gfx/bg/<scene>.<lang>[.wide]
++	 * when present, else gfx/bg/<scene>[.wide]; empty when there is none.
++	 */
++	Common::String backgroundPath(const Common::String &scene, bool wide = false) const;
++
 +	/** HD background of a scene; 'scale' receives the integer factor of the picture. */
 +	Graphics::Surface *loadBackground(const Common::String &scene, int origW, int origH, int &scale) const;
 +	WideInfo wideInfo(const Common::String &scene) const;
@@ -426,12 +453,14 @@ index 00000000..8895d7d3
 +	int _scale;
 +	int _spriteScale;
 +	Common::String _gameId;
++	Common::String _lang;
 +	Common::FSNode _root;
 +	Common::HashMap<uint32, SpriteEntry> _sprites;
 +	Common::Array<byte> _spritePalettes;
 +	Common::HashMap<uint32, Common::String> _texts;
 +
 +	Common::FSNode node(const Common::String &relPath) const;
++	bool hasImage(const Common::String &relPathNoExt) const;
 +	void loadManifest();
 +	void loadSpriteIndex();
 +};
@@ -1393,10 +1422,10 @@ index 00000000..abc295b3
 +#endif
 diff --git a/engines/remaster/layer.cpp b/engines/remaster/layer.cpp
 new file mode 100644
-index 00000000..aa8a6d02
+index 00000000..4872b3a0
 --- /dev/null
 +++ b/engines/remaster/layer.cpp
-@@ -0,0 +1,337 @@
+@@ -0,0 +1,338 @@
 +/* ScummVM - Graphic Adventure Engine
 + *
 + * ScummVM is the legal property of its developers, whose names
@@ -1495,6 +1524,7 @@ index 00000000..aa8a6d02
 +		_lang = ConfMan.get("remaster_language");
 +	if (!_lang.empty())
 +		_pack->loadTexts(_lang);
++	_pack->setLanguage(_lang);
 +
 +	if (ConfMan.hasKey("remaster_dump"))
 +		_dumpDir = ConfMan.get("remaster_dump");
@@ -1736,7 +1766,7 @@ index 00000000..aa8a6d02
 +} // End of namespace Remaster
 diff --git a/engines/remaster/layer.h b/engines/remaster/layer.h
 new file mode 100644
-index 00000000..0e725a29
+index 00000000..ef7871f5
 --- /dev/null
 +++ b/engines/remaster/layer.h
 @@ -0,0 +1,148 @@
@@ -1890,21 +1920,31 @@ index 00000000..0e725a29
 +#endif
 diff --git a/test/graphics/remaster.h b/test/graphics/remaster.h
 new file mode 100644
-index 00000000..96e74b56
+index 00000000..714d8464
 --- /dev/null
 +++ b/test/graphics/remaster.h
-@@ -0,0 +1,103 @@
+@@ -0,0 +1,158 @@
 +#include <cxxtest/TestSuite.h>
++
++#include "common/config-manager.h"
++#include "common/fs.h"
 +
 +#include "engines/remaster/compositor.h"
 +#include "engines/remaster/keys.h"
 +
++#include "../system/null_osystem.h"
++
 +// Remaster Layer: keys must match the pipeline tools (Python zlib.crc32),
-+// the compositor must reproduce the original frame and map the mouse back.
++// the compositor must reproduce the original frame and map the mouse back,
++// localized backgrounds must win over the plain ones.
 +class RemasterTestSuite : public CxxTest::TestSuite {
 +	static const Graphics::PixelFormat argb() { return Graphics::PixelFormat(4, 8, 8, 8, 8, 16, 8, 0, 24); }
 +
 +	static uint32 px(const Graphics::Surface &s, int x, int y) { return *(const uint32 *)s.getBasePtr(x, y); }
++
++	static void touch(const Common::FSNode &dir, const char *name) {
++		delete dir.getChild(name).createWriteStream(false);
++	}
 +
 +	void makePalette(byte *pal) {
 +		for (int i = 0; i < 256; i++) {
@@ -1978,6 +2018,51 @@ index 00000000..96e74b56
 +		bb.free();
 +	}
 +
++	void test_localized_backgrounds() {
++#if NULL_OSYSTEM_IS_AVAILABLE
++		Common::install_null_g_system();
++		// pack in the build tree (test/remaster.tmp/remaster/gfx/bg), empty files are enough
++		Common::FSNode game(Common::Path("test/remaster.tmp"));
++		Common::FSNode dir = game;
++		const char *const sub[] = { "remaster", "gfx", "bg" };
++		for (uint i = 0; i <= ARRAYSIZE(sub); i++) {
++			if (!dir.exists())
++				dir.createDirectory();
++			if (i < ARRAYSIZE(sub))
++				dir = dir.getChild(sub[i]);
++		}
++		const char *const files[] = {
++			"part1_room.png", "part1_room.it.png", "part1_room.wide.png", "part1_room.it.wide.jpg",
++			"hall.jpg", "hall.wide.png", "yard.png", "yard.wide.json", "yard.it.wide.png"
++		};
++		for (uint i = 0; i < ARRAYSIZE(files); i++)
++			touch(dir, files[i]);
++		ConfMan.setPath("path", game.getPath(), Common::ConfigManager::kTransientDomain);
++		{
++			Remaster::AssetPack pack;
++			TS_ASSERT(pack.open());
++			TS_ASSERT_EQUALS(pack.backgroundPath("part1/room"), "gfx/bg/part1_room");
++			TS_ASSERT_EQUALS(pack.backgroundPath("part1/room", true), "gfx/bg/part1_room.wide");
++			TS_ASSERT(!pack.wideInfo("yard").hasImage);
++			pack.setLanguage("it");
++			TS_ASSERT_EQUALS(pack.backgroundPath("part1/room"), "gfx/bg/part1_room.it");
++			TS_ASSERT_EQUALS(pack.backgroundPath("part1/room", true), "gfx/bg/part1_room.it.wide");
++			// no localized version: the plain one
++			TS_ASSERT_EQUALS(pack.backgroundPath("hall"), "gfx/bg/hall");
++			TS_ASSERT_EQUALS(pack.backgroundPath("hall", true), "gfx/bg/hall.wide");
++			TS_ASSERT_EQUALS(pack.backgroundPath("yard"), "gfx/bg/yard");
++			TS_ASSERT(pack.wideInfo("yard").hasImage);
++			TS_ASSERT(pack.backgroundPath("cellar").empty());
++			pack.setLanguage("fr");
++			TS_ASSERT_EQUALS(pack.backgroundPath("part1/room"), "gfx/bg/part1_room");
++			TS_ASSERT_EQUALS(pack.backgroundPath("part1/room", true), "gfx/bg/part1_room.wide");
++			TS_ASSERT(pack.backgroundPath("yard", true).empty());
++		}
++		ConfMan.removeKey("path", Common::ConfigManager::kTransientDomain);
++		Common::uninstall_null_g_system();
++#endif
++	}
++
 +	void test_smooth_scroll_subpixel() {
 +		Remaster::AssetPack pack;
 +		Remaster::Compositor comp(pack, 3, 2, 1, argb());
@@ -1998,7 +2083,7 @@ index 00000000..96e74b56
 +	}
 +};
 diff --git a/test/module.mk b/test/module.mk
-index 171ac91a..1ff9c460 100644
+index 171ac91a..25ecb680 100644
 --- a/test/module.mk
 +++ b/test/module.mk
 @@ -12,3 +12,4 @@ TESTS        := $(srcdir)/test/common/*.h \
@@ -2011,6 +2096,10 @@ index 171ac91a..1ff9c460 100644
  # libcommon needs libformats and libformats needs libcommon: so libcommon is put twice
 -TEST_LIBS +=	audio/libaudio.a math/libmath.a common/libcommon.a common/formats/libformats.a common/compression/libcompression.a common/libcommon.a image/libimage.a graphics/libgraphics.a
 +TEST_LIBS +=	engines/libengines.a audio/libaudio.a math/libmath.a common/libcommon.a common/formats/libformats.a common/compression/libcompression.a common/libcommon.a image/libimage.a graphics/libgraphics.a
+ 
+@@ -97,2 +98,3 @@ clean-test:
+ 	-rmdir test/engine-data
++	-$(RM_REC) test/remaster.tmp
  
 -- 
 2.43.0

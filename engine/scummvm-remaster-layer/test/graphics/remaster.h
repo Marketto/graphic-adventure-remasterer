@@ -1,14 +1,24 @@
 #include <cxxtest/TestSuite.h>
 
+#include "common/config-manager.h"
+#include "common/fs.h"
+
 #include "engines/remaster/compositor.h"
 #include "engines/remaster/keys.h"
 
+#include "../system/null_osystem.h"
+
 // Remaster Layer: keys must match the pipeline tools (Python zlib.crc32),
-// the compositor must reproduce the original frame and map the mouse back.
+// the compositor must reproduce the original frame and map the mouse back,
+// localized backgrounds must win over the plain ones.
 class RemasterTestSuite : public CxxTest::TestSuite {
 	static const Graphics::PixelFormat argb() { return Graphics::PixelFormat(4, 8, 8, 8, 8, 16, 8, 0, 24); }
 
 	static uint32 px(const Graphics::Surface &s, int x, int y) { return *(const uint32 *)s.getBasePtr(x, y); }
+
+	static void touch(const Common::FSNode &dir, const char *name) {
+		delete dir.getChild(name).createWriteStream(false);
+	}
 
 	void makePalette(byte *pal) {
 		for (int i = 0; i < 256; i++) {
@@ -80,6 +90,51 @@ public:
 		TS_ASSERT_EQUALS(comp.toGame(Common::Point(0, 0), 0).x, 0);
 		TS_ASSERT_EQUALS(comp.toGame(Common::Point(17, 0), 0).x, 3);
 		bb.free();
+	}
+
+	void test_localized_backgrounds() {
+#if NULL_OSYSTEM_IS_AVAILABLE
+		Common::install_null_g_system();
+		// pack in the build tree (test/remaster.tmp/remaster/gfx/bg), empty files are enough
+		Common::FSNode game(Common::Path("test/remaster.tmp"));
+		Common::FSNode dir = game;
+		const char *const sub[] = { "remaster", "gfx", "bg" };
+		for (uint i = 0; i <= ARRAYSIZE(sub); i++) {
+			if (!dir.exists())
+				dir.createDirectory();
+			if (i < ARRAYSIZE(sub))
+				dir = dir.getChild(sub[i]);
+		}
+		const char *const files[] = {
+			"part1_room.png", "part1_room.it.png", "part1_room.wide.png", "part1_room.it.wide.jpg",
+			"hall.jpg", "hall.wide.png", "yard.png", "yard.wide.json", "yard.it.wide.png"
+		};
+		for (uint i = 0; i < ARRAYSIZE(files); i++)
+			touch(dir, files[i]);
+		ConfMan.setPath("path", game.getPath(), Common::ConfigManager::kTransientDomain);
+		{
+			Remaster::AssetPack pack;
+			TS_ASSERT(pack.open());
+			TS_ASSERT_EQUALS(pack.backgroundPath("part1/room"), "gfx/bg/part1_room");
+			TS_ASSERT_EQUALS(pack.backgroundPath("part1/room", true), "gfx/bg/part1_room.wide");
+			TS_ASSERT(!pack.wideInfo("yard").hasImage);
+			pack.setLanguage("it");
+			TS_ASSERT_EQUALS(pack.backgroundPath("part1/room"), "gfx/bg/part1_room.it");
+			TS_ASSERT_EQUALS(pack.backgroundPath("part1/room", true), "gfx/bg/part1_room.it.wide");
+			// no localized version: the plain one
+			TS_ASSERT_EQUALS(pack.backgroundPath("hall"), "gfx/bg/hall");
+			TS_ASSERT_EQUALS(pack.backgroundPath("hall", true), "gfx/bg/hall.wide");
+			TS_ASSERT_EQUALS(pack.backgroundPath("yard"), "gfx/bg/yard");
+			TS_ASSERT(pack.wideInfo("yard").hasImage);
+			TS_ASSERT(pack.backgroundPath("cellar").empty());
+			pack.setLanguage("fr");
+			TS_ASSERT_EQUALS(pack.backgroundPath("part1/room"), "gfx/bg/part1_room");
+			TS_ASSERT_EQUALS(pack.backgroundPath("part1/room", true), "gfx/bg/part1_room.wide");
+			TS_ASSERT(pack.backgroundPath("yard", true).empty());
+		}
+		ConfMan.removeKey("path", Common::ConfigManager::kTransientDomain);
+		Common::uninstall_null_g_system();
+#endif
 	}
 
 	void test_smooth_scroll_subpixel() {
