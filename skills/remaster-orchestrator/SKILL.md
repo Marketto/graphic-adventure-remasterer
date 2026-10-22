@@ -53,6 +53,12 @@ deve sempre poter tornare all'originale in tempo reale (tasto di toggle, default
   patch in un file unico + volumi da 29 MB, pulsanti a schermo per Menu e HD ⇄ Classica.
 - **Si decide guardando e ascoltando**: per ogni scelta di stile (sprite, font, voci, musica,
   16:9) prepara 2-4 varianti affiancate e lascia scegliere; poi il valore scelto vale per tutto.
+- **Musica MIDI a comando dinamico** (il motore salta, ripete e cambia i volumi delle parti per
+  ordine degli script): nella proposta del piano raccomanda la strategia **"orchestra"** — il
+  MIDI resta al motore, SoundFont orchestrale composito da ricetta con le correzioni dei timbri
+  e della curva di velocità, variante leggera per web/telefono — con prove d'ascolto a pari
+  volume (originale, GM semplice, orchestra, leggera). Niente rendering in file né generatori
+  di musica (skill `audio-remaster`).
 - Prima di chiedere un test all'utente, **provalo tu** (motore e pagina web) e di' cosa non hai
   potuto verificare (es. l'audio, se il browser di prova non lo ha).
 

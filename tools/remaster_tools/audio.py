@@ -12,8 +12,50 @@ MUSIC_EXT = {".mid": "midi", ".midi": "midi", ".xmi": "xmidi", ".mus": "mus",
              ".ogg": "ogg", ".mp3": "mp3", ".flac": "flac"}
 
 
+def _libfluidsynth():
+    """Path of the fluidsynth shared library, if installed (the engine links it: the command line
+    program is not needed to play the music in game)."""
+    import ctypes.util
+    name = ctypes.util.find_library("fluidsynth")
+    if not name:
+        return None
+    if os.path.isabs(name):
+        return name
+    for d in ("/usr/lib", "/usr/lib64", "/usr/local/lib", "/opt/homebrew/lib", "/usr/lib/x86_64-linux-gnu",
+              "/usr/lib/aarch64-linux-gnu"):
+        if os.path.exists(os.path.join(d, name)):
+            return os.path.join(d, name)
+    return name
+
+
+def fluidsynth_sf3(lib=None):
+    """Can this fluidsynth read sf3 (Ogg Vorbis compressed SoundFont)? It needs libsndfile with
+    Vorbis. True/False from the libraries linked by the shared library, None if unknown (static
+    builds such as web or Android: check the build configuration)."""
+    lib = lib or _libfluidsynth()
+    ldd = shutil.which("ldd") or shutil.which("otool")
+    if not lib or not os.path.isabs(lib) or not ldd:
+        return None
+    args = [ldd, lib] if ldd.endswith("ldd") else [ldd, "-L", lib]
+    try:
+        res = subprocess.run(args, capture_output=True, text=True, timeout=20).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return "libsndfile" in res
+
+
 def backends():
-    return {k: bool(shutil.which(k)) for k in ("ffmpeg", "ffprobe", "fluidsynth", "mt32emu-smf2wav", "audiosr")}
+    out = {k: bool(shutil.which(k)) for k in ("ffmpeg", "ffprobe", "fluidsynth", "mt32emu-smf2wav", "audiosr",
+                                              "sf3convert")}
+    lib = _libfluidsynth()
+    out["fluidsynth_cli"] = out["fluidsynth"]
+    out["libfluidsynth"] = lib
+    out["fluidsynth"] = out["fluidsynth_cli"] or bool(lib)   # the library alone is enough for the engine
+    out["fluidsynth_sf3"] = fluidsynth_sf3(lib) if lib else None
+    if lib and not out["fluidsynth_cli"]:
+        out["note"] = ("libreria fluidsynth presente, eseguibile assente: basta al motore; per i "
+                       "rendering di prova installa il programma (pacchetto fluidsynth)")
+    return out
 
 
 def scan(root):
@@ -117,8 +159,33 @@ def _percentile(vals, q):
     return v[lo] + (v[hi] - v[lo]) * (k - lo)
 
 
+def loudness_concat(paths, repeat=4):
+    """Loudness of clips too short for the integrated measure (EBU R128 gates on 400 ms blocks:
+    a 300 ms clip reads -70 LUFS), measured on their concatenation, each repeated `repeat` times."""
+    exe = shutil.which("ffmpeg")
+    if not exe:
+        raise RuntimeError("ffmpeg non trovato")
+    paths = list(paths)
+    if len(paths) > 200:   # command line limits: an even sample of the group
+        paths = [paths[round(k * (len(paths) - 1) / 199)] for k in range(200)]
+    ins, graph = [], []
+    for k, p in enumerate(paths):
+        ins += ["-i", p]
+        # every input is used `repeat` times: resample, then split
+        graph.append(f"[{k}:a]aresample=44100,aformat=sample_fmts=fltp:channel_layouts=mono,"
+                     f"asplit={repeat}" + "".join(f"[a{k}_{r}]" for r in range(repeat)))
+    seq = "".join(f"[a{k}_{r}]" for r in range(repeat) for k in range(len(paths)))
+    graph.append(f"{seq}concat=n={len(paths) * repeat}:v=0:a=1,ebur128=framelog=quiet[out]")
+    res = subprocess.run([exe, "-hide_banner", "-nostats", *ins, "-filter_complex", ";".join(graph),
+                          "-map", "[out]", "-f", "null", "-"], capture_output=True, text=True)
+    vals = re.findall(r"I:\s*(-?[\d.]+) LUFS", res.stderr)
+    if not vals:
+        raise RuntimeError("loudness non misurabile sulla concatenazione")
+    return float(vals[-1])
+
+
 def normalize_group(group, paths, out_path=None, reference=REFERENCE_LUFS, policy=None, measure=loudness,
-                    root=None, declip=(), loops=None):
+                    root=None, declip=(), loops=None, measure_concat=loudness_concat):
     """Stage 1: measure a group and compute the normalization gain of every file (nothing is
     encoded here). Writes/updates a JSON plan {group: {policy, reference, files: [...]}}.
     declip: names (or substrings) of tracks already clipped in the original; loops:
@@ -134,18 +201,33 @@ def normalize_group(group, paths, out_path=None, reference=REFERENCE_LUFS, polic
             measured.append((f, measure(f)))
         except RuntimeError:
             measured.append((f, None))  # silence or too short: left as is
-    vals = [l for _f, l in measured if l is not None and l > -70]
-    anchor = _percentile(vals, 90) if vals else None
+    # clips below 400 ms (or unreadable by the integrated measure): one gain for all of them,
+    # measured on their concatenation, instead of gain 0 and then the mix offset up to the limiter
+    short = [f for f, l in measured if l is None or l <= -70]
+    short_lufs = None
+    if short and measure_concat:
+        try:
+            short_lufs = measure_concat(short)
+        except (RuntimeError, OSError, subprocess.SubprocessError):
+            short_lufs = None
+        if short_lufs is not None and short_lufs <= -70:
+            short_lufs = None   # really silent
+    if short_lufs is not None:
+        measured = [(f, short_lufs if f in short else l) for f, l in measured]
+    vals = [l for f, l in measured if l is not None and l > -70 and f not in short]
+    anchor = _percentile(vals, 90) if vals else short_lufs
     entries = []
     for f, l in measured:
         if l is None or l <= -70:
             gain = 0.0
-        elif policy == "file":
+        elif policy == "file" or anchor is None:
             gain = reference - l
         else:
             gain = reference - anchor
         rel = os.path.relpath(f, root) if root else os.path.basename(f)
         e = {"src": f, "name": rel, "lufs": None if l is None else round(l, 2), "norm_gain": round(gain, 2)}
+        if f in short and short_lufs is not None:
+            e["short"] = True   # lufs = concatenation of the short clips of the group
         if any(d and d in rel for d in declip):
             e["declip"] = True
         loop = (loops or {}).get(rel) or (loops or {}).get(os.path.basename(f))
@@ -154,7 +236,8 @@ def normalize_group(group, paths, out_path=None, reference=REFERENCE_LUFS, polic
         entries.append(e)
     info = {"policy": policy, "reference": reference, "files": entries,
             "measured": {"count": len(vals), "min": min(vals) if vals else None, "max": max(vals) if vals else None,
-                         "p90": None if anchor is None else round(anchor, 2)}}
+                         "p90": None if anchor is None else round(anchor, 2),
+                         "short": len(short), "short_lufs": None if short_lufs is None else round(short_lufs, 2)}}
     if out_path:
         plan = {}
         if os.path.exists(out_path):
@@ -302,13 +385,29 @@ def raw_to_wav(src, dst, rate, fmt="u8", channels=1):
     return dst
 
 
+def _rate_list(name, v):
+    """{"name": 11025}, {"name": [11025, 22050]} or {"name": "11025"} -> list of int."""
+    vals = v if isinstance(v, (list, tuple)) else [v]
+    try:
+        return [int(float(x)) for x in vals]
+    except (TypeError, ValueError):
+        raise ValueError(f"frequenze di {name}: {v!r} (servono numeri, es. 11025 o [11025, 22050])") from None
+
+
 def sfx_batch(src_dir, out_dir, rates_json=None, default_rate=11025, raw_fmt="u8", denoise=True, lossless=False):
     """Raw/WAV effects -> 44.1 kHz files named <name>_<rate>.ogg (rate = playback rate in the scripts).
     lossless=True writes .flac, to level them afterwards with normalize_group + apply_mix."""
     rates = {}
-    if rates_json and os.path.exists(rates_json):
+    if isinstance(rates_json, dict):
+        rates = rates_json
+    elif rates_json and os.path.exists(rates_json):
         with open(rates_json, encoding="utf-8") as f:
-            rates = json.load(f)  # {"name": [11025, 22050]}
+            rates = json.load(f)  # {"name": [11025, 22050]} or {"name": 11025}
+    elif rates_json and str(rates_json).strip().isdigit():
+        default_rate = int(rates_json)   # --rates 11025: one rate for every file
+    elif rates_json:
+        raise ValueError(f"--rates: {rates_json} non è un file JSON né una frequenza")
+    rates = {str(k).lower(): _rate_list(k, v) for k, v in rates.items()}
     os.makedirs(out_dir, exist_ok=True)
     done = []
     for name in sorted(os.listdir(src_dir)):
