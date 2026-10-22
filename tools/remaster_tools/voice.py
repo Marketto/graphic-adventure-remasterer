@@ -98,15 +98,51 @@ def _tts(api_key, voice_id, text, model, settings, lang, previous_text=None, nex
         return r.read()
 
 
-def generate(script_path, cast_path, out_dir, lang, api_key=None, limit=None, dry_run=False, lufs=None):
+def model_for(speaker, c, project_voice=None):
+    """Model of one character: voice.cast[speaker].model of the project, then the cast.json entry,
+    then voice.model_secondary for secondary characters, then voice.model_main, then DEFAULT_MODEL.
+    A main character (not marked secondary) must use a model that acts the audio tags."""
+    pv = project_voice or {}
+    pc = (pv.get("cast") or {}).get(speaker) or {}
+    secondary = bool(pc.get("secondary") or pc.get("secondario") or c.get("secondary") or c.get("secondario"))
+    model = pc.get("model") or c.get("model") or (secondary and pv.get("model_secondary")) \
+        or pv.get("model_main") or DEFAULT_MODEL
+    if not secondary and not model.startswith(TAG_MODELS):
+        raise ValueError(f"{speaker}: personaggio principale con modello «{model}» che non recita i tag "
+                         f"(usa {' o '.join(TAG_MODELS)}, oppure segnalo secondario nel progetto)")
+    return model
+
+
+def apply_direction(rows, direction):
+    """Tag and recited text from a reviewed regia.tsv over the script (by key)."""
+    for r in rows:
+        d = direction.get(r["key"])
+        if d is None:
+            continue
+        r["tag"] = d["tag"]
+        if d.get("recita"):
+            r["recita"] = d["recita"]
+    return rows
+
+
+def generate(script_path, cast_path, out_dir, lang, api_key=None, limit=None, dry_run=False, lufs=None,
+             direction=None, project_voice=None):
     """Generate missing lines only (never regenerates an existing file). lufs: level of the
-    `voice` group in the mix (default audio.MIX["voice"])."""
+    `voice` group in the mix (default audio.MIX["voice"]). direction: reviewed regia.tsv of
+    `voice direct` (its `tag` column wins over the script's). project_voice: the `voice` section
+    of remaster.json (model_main, model_secondary, cast[...].model)."""
     api_key = api_key or os.environ.get("ELEVENLABS_API_KEY")
     with open(cast_path, encoding="utf-8") as f:
         cast = json.load(f)
     cast = cast.get("voci", cast)   # nested layout: {"modello", "voci": {...}, "scartate": {...}}
     with open(script_path, encoding="utf-8", newline="") as f:
         rows = list(csv.DictReader(f, delimiter="\t"))
+    if direction:
+        from . import regia
+        apply_direction(rows, regia.read_direction(direction))
+    multi = [r["key"] for r in rows if len(re.findall(r"\[[^\]]*\]", r.get("tag") or "")) > 1]
+    if multi:
+        raise ValueError("al massimo un tag per battuta; da rivedere: " + ", ".join(multi[:10]))
     os.makedirs(out_dir, exist_ok=True)
     for i, r in enumerate(rows):
         r["_prev"], r["_next"] = context_of(rows, i)
@@ -114,12 +150,14 @@ def generate(script_path, cast_path, out_dir, lang, api_key=None, limit=None, dr
     missing_cast = sorted({r["speaker"] for r in todo if r["speaker"] not in cast})
     if missing_cast:
         raise KeyError("personaggi senza voce nel cast: " + ", ".join(missing_cast))
+    models = {s: model_for(s, cast[s], project_voice) for s in {r["speaker"] for r in todo}}
     if limit:
         todo = todo[:limit]
     if dry_run:
-        chars = sum(len(spoken(r)) for r in todo)
+        chars = sum(len(spoken(r, models[r["speaker"]])) for r in todo)
         return {"would_generate": len(todo), "characters": chars,
-                "estimated_credits": round(chars * CREDITS_PER_CHAR)}
+                "estimated_credits": round(chars * CREDITS_PER_CHAR),
+                "models": dict(sorted(models.items()))}
     if not api_key:
         raise RuntimeError("ELEVENLABS_API_KEY non impostata")
     keep = os.path.join(out_dir, "originali")
@@ -131,7 +169,7 @@ def generate(script_path, cast_path, out_dir, lang, api_key=None, limit=None, dr
         if not os.path.exists(mp3_path):
             # every paid call is made once: on an error stop and say why (never retry, never change voice)
             try:
-                model = c.get("model", DEFAULT_MODEL)
+                model = models[r["speaker"]]
                 mp3 = _tts(api_key, c["voice_id"], spoken(r, model), model, voice_settings(c), lang,
                            r["_prev"], r["_next"])
             except Exception as e:  # noqa: BLE001

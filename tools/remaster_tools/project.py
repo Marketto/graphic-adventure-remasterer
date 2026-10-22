@@ -56,7 +56,10 @@ DEFAULT = {
     # the credits are not enough. The lines outside the scope keep the original behaviour.
     "voice": {"enabled": None, "provider": "elevenlabs", "license_confirmed": False,
               "languages": [], "existing": {}, "credits_available": None,
-              "scope": {"mode": "tutto", "parts": []}},
+              "scope": {"mode": "tutto", "parts": []},
+              # models: main characters always with the model that acts the audio tags; secondary
+              # ones (cast[name].secondary true) may use a cheaper one when the credits ask for it
+              "model_main": "eleven_v4", "model_secondary": None, "cast": {}},
     "platforms": ["windows", "linux", "macos", "android", "web"],
     "distribution": {"mode": "recipe", "rights_confirmed": False},
     "toggle_key": "F8",

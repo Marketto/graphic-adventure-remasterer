@@ -1,6 +1,6 @@
 ---
 name: voice-dubbing
-description: Doppia un'avventura d'epoca con voci sintetiche ElevenLabs — censimento di chi parla (dallo script, mai dal nome della stanza), cast fisso con provini approvati, regia per battuta, tempi e pause, generazione per capitolo con stima dei crediti, verifica dopo la generazione. Usala quando l'utente vuole il doppiaggio nel remaster.
+description: Doppia un'avventura d'epoca con voci sintetiche ElevenLabs — censimento di chi parla (dallo script, mai dal nome della stanza), cast fisso con provini su battute vere, regia per battuta ricavata dal contesto (`voice direct`), modello che recita i tag per i protagonisti, tempi e pause, generazione per capitolo con stima dei crediti, verifica dopo la generazione. Usala quando l'utente vuole il doppiaggio nel remaster.
 ---
 
 # Doppiaggio (ElevenLabs)
@@ -13,12 +13,18 @@ Accesso: connettore ElevenLabs in chat (`creative_list_voices`, `creative_design
 `creative_save_designed_voice`, `creative_generate_speech`, `creative_get_flow_run_status`;
 un flow per progetto, annotato in `remaster.json`) oppure API (`rstool.py voice generate`,
 chiave `ELEVENLABS_API_KEY`, anche da una GitHub Action con secret). Il piano gratuito non
-permette le voci della Voice Library via API (errore 402).
+permette le voci della Voice Library via API (errore 402). Il connettore può **non esporre
+stabilità, stile e velocità**: va bene per esplorare voci e ascoltare anteprime, ma provini
+definitivi e lotti veri si fanno con l'API diretta (`rstool.py voice generate`, chiave nei
+segreti d'ambiente), così le impostazioni del cast arrivano davvero.
 
 ## 0. Regole fisse
 - **Una voce per personaggio**, sempre con le stesse impostazioni (`voice/cast.json`),
-  coerente con età e genere; una volta approvata non cambia più. Default: modello
-  `eleven_v4` (riserva `eleven_multilingual_v2`), similarità 0,8, stabilità 0,25-0,3,
+  coerente con età e genere; una volta approvata non cambia più. Modello: i **personaggi
+  principali sempre con il modello che recita gli audio tag** (`voice.model_main`, oggi
+  `eleven_v4`), mai con un modello "piatto"; i secondari possono usare un modello più economico
+  solo se i crediti lo chiedono, scelta registrata nel progetto (`voice.model_secondary` e
+  `voice.cast.<nome>.secondary true`; il generatore rifiuta un principale con un modello senza tag), similarità 0,8, stabilità 0,25-0,3,
   stile 0,6-0,85. La velocità si regola **nella voce** (es. 0,92-0,95 per narratori), mai
   accelerando l'audio dopo.
 - **Recitazione, non lettura**: niente sussurri né voci "inquietanti", anche nelle battute
@@ -60,7 +66,14 @@ stesso personaggio, oggetti parlanti, personaggi in più capitoli → stessa voc
 
 ## 2. Casting
 - Per ogni personaggio nuovo una scheda (età, timbro, accento voluto, ruolo comico) e
-  **2-3 voci** proposte con una battuta vera del personaggio; sceglie l'utente.
+  **2-3 voci** proposte; sceglie l'utente.
+- **Provini con battute vere** del gioco (2-3), nel **registro tipico** del personaggio: per un
+  personaggio ironico battute ironiche, per un burbero battute burbere; mai frasi inventate o
+  neutre, che non dicono come la voce regge il ruolo. Con il modello e le impostazioni che
+  userà il lotto (API diretta, §intro) e con la regia ricavata come al §3.
+- **Altezza**: si preferisce una voce che sta già nel registro giusto. Al massimo una rifinitura
+  di ≤ 2 semitoni con formanti preservate (filtro ffmpeg `rubberband=pitch=…:formant=preserved`
+  nel cast); **mai vocoder tipo WORLD** né spostamenti più grandi: suonano robotici.
 - **Personaggio riconoscibile di un film, una serie o un cartone** (`source_work.characters`) con
   `imitate_voice` true: le candidate si scelgono misurando il riferimento (§2b); con false o
   null si fa il casting normale dalla scheda.
@@ -149,15 +162,31 @@ Procedura:
    (cercane altre prima di scegliere).
 5. **Raffina** sulle 2-3 migliori: stability, similarity, style, speed (§0 per i limiti) e
    **toni interpretativi** dal modo di recitare nei riferimenti (ritmo, ironia, pause, attacchi),
-   scritti come audio tag e note di regia in `voice/regia.json` (§3), mai citando la persona.
+   annotati nella scheda del personaggio come guida per la regia per battuta (§3), mai citando la persona.
 6. **Provini** come al §2: 2-3 voci con una battuta vera, sceglie l'utente; solo voci della
    libreria, nessuna voce progettata "a somiglianza" con Voice Design partendo dal materiale.
 
 ## 3. Regia
-- Un **audio tag** in inglese per personaggio (es. `[cocky, ironic]`), quello del provino
-  approvato, adattato alla scena quando serve; scelto dal contesto, **non copiato** dal doppiaggio
+- **Per battuta, non per personaggio**: il tono si ricava dal testo e dal contesto (scena,
+  battuta prima e dopo, interlocutore, situazione, carattere del personaggio dalla scheda); mai
+  un tag fisso uguale per tutte le battute di un personaggio, mai copiato dal doppiaggio
   originale (per i personaggi del §2b i toni vengono dai riferimenti dell'opera d'origine,
-  descritti senza citare la persona). Salva in `voice/regia.json`.
+  descritti senza citare la persona).
+- Scheda di contesto e proposta: `rstool.py voice direct voice/copione.tsv --out voice/regia.tsv
+  --context 2 --cast voice/cast.json [--rules voice/regole-regia.json]`. Per ogni battuta:
+  chiave, personaggio, scena, le N battute prima/dopo con chi parla, interlocutore, durata
+  stimata e limite (colonna `limit_s` del copione, se c'è) e un `tag` proposto da euristiche
+  semplici (puntini, domande, esclamazioni, parole chiave per lingua nel file di regole) con il
+  motivo. È solo un punto di partenza: il voice-director **rivede ogni riga** leggendo il
+  contesto, toglie i tag inutili e corregge quelli sbagliati. I tag scritti a mano restano
+  (`--retag` per riproporli).
+- **Tag sobri, al massimo uno per battuta** (il generatore rifiuta righe con più tag); nessun
+  tag se la battuta si recita bene da sola. Per le **voci gravi** (`"register": "deep"` nel
+  cast) niente tag che alzano energia o registro (`[excited]`, `[shouting]`...) salvo che il
+  contesto lo richieda davvero: lo strumento non li propone e lo scrive nel motivo.
+- Generazione: `rstool.py voice generate voice/copione.tsv --cast voice/cast.json --direction
+  voice/regia.tsv ...` legge colonne `tag` e `recita` della regia e il modello per personaggio
+  dal progetto (`--dry-run` mostra crediti e modelli).
 - **Testo recitato ≠ sottotitolo** dove la sintesi sbaglierebbe: sigle ("ONU" → "o enne u", "TV" → "tivù"), simboli ("Rossi & Figli" → "Rossi e Figli"),
   numeri, codici ("007" → "zero zero sette"), ore, numeri romani, unità, nomi stranieri in grafia
 fonetica, parole tutte maiuscole (la sintesi le compita); punteggiatura pensata per

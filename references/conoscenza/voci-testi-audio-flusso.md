@@ -25,7 +25,9 @@
 ### 1.2 Casting e provini
 
 - **Una voce per personaggio, fissa per sempre**, coerente con età e genere. Voce e impostazioni stanno in un file di cast versionato (`cast.json`). La regia per battuta sta in un file separato.
-- **Provini.** Per ogni nuovo personaggio si propongono 2-3 voci con una battuta di prova. Sceglie l'utente, all'orecchio.
+- **Provini.** Per ogni nuovo personaggio si propongono 2-3 voci con 2-3 battute vere del gioco nel registro tipico del personaggio (ironiche per un ironico), non frasi inventate: una frase neutra non dice se la voce regge il ruolo. Sceglie l'utente, all'orecchio.
+- **Altezza.** Meglio una voce che sta già nel registro giusto. Le rifiniture con vocoder tipo WORLD suonano robotiche; al massimo un pitch-shift di 2 semitoni con formanti preservate (rubberband).
+- **Connettore e API.** Il connettore MCP può non esporre stabilità, stile e velocità: serve per esplorare; provini definitivi e lotti si fanno con l'API diretta, con la chiave nei segreti d'ambiente.
 - **Lista delle voci scartate**, con il motivo, da controllare prima di ogni proposta. I motivi tipici sono "stanza piccola", "riverbero da chiesa" e "non usabile via API".
 - **Le misure automatiche del riverbero non sono affidabili.** Una voce con riverbero evidente era passata. È meglio preferire voci di studi professionali già approvati e far decidere l'orecchio dell'utente.
 - **Limiti della piattaforma.**
@@ -89,6 +91,7 @@
 ### 1.3 Impostazioni
 
 - Modello multilingue recente (`eleven_v3`/`eleven_v4`), `language_code` italiano, similarità 0,8 per tutti.
+- I personaggi principali usano sempre il modello che recita i tag; un modello più economico solo per i secondari e solo se i crediti lo chiedono, con la scelta registrata nel progetto.
 - Stabilità 0,25-0,3 e stile 0,6-0,85 per una recitazione espressiva.
 - La velocità si imposta nella voce: 0,92 per il narratore e 0,95 per un personaggio enfatico, perché a 1,0 l'utente le trovava veloci.
 - **Nessuna accelerazione o rallentamento dopo la generazione**: produce artefatti e un ritmo innaturale.
@@ -97,6 +100,7 @@
 ### 1.4 Audio tag e regia
 
 - **Recitazione, non lettura.** Ogni battuta ha un'indicazione in inglese tra parentesi quadre, per personaggio o per battuta, scelta dal contesto della scena. Esempi: `[cocky, ironic]`, `[bored cashier, sing-song]`. Non si copia dal doppiaggio originale.
+- **Regia per battuta, generata dal contesto.** Un tag fisso per personaggio appiattisce la recitazione: lo stesso tono su una battuta triste e su una ironica. Per ogni battuta si guarda testo, scena, battute vicine con chi parla, interlocutore e carattere; uno strumento prepara la scheda e propone un tag da punteggiatura e parole chiave (regole per lingua), poi chi dirige rivede. Al massimo un tag sobrio per battuta, spesso nessuno. Sulle voci gravi i tag che alzano energia (eccitato, urlato) spingono la voce in un registro che non è il suo: si evitano salvo scene che lo chiedono.
 - **I tag si mandano solo ai modelli che li recitano (v3/v4).** I modelli precedenti li leggono ad alta voce. La trascrizione di controllo rileva i tag letti.
 - **Niente sussurri né voci "inquietanti"**: anche le battute misteriose vanno a voce piena, perché i sussurri escono male e sotto la musica non si sentono.
 - Accenti e parlate volute (es. un personaggio che dice "L" al posto di "R") si segnano nella regia. Il trascrittore poi "corregge" la parola, quindi in quei casi l'avviso del controllo non conta.
