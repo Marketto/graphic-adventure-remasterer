@@ -144,8 +144,16 @@ Una schermata, solo se servono (`rstool.py project missing` le elenca solo a sti
 - **doppiaggio ElevenLabs** solo se **non esiste** il doppiaggio nella lingua dell'utente:
   caratteri del copione, crediti (~0,43 a carattere più i rifacimenti), costo indicativo e piano
   necessario; serve un account con **licenza commerciale** (`voice.license_confirmed`), il piano
-  gratuito non usa la Voice Library via API; niente cloni di doppiatori reali; si procede un
-  capitolo alla volta → `voice.enabled` true/false;
+  gratuito non usa la Voice Library via API; niente cloni di doppiatori reali; si procede una
+  parte alla volta → `voice.enabled` true/false. **Sempre anche l'opzione per parti**: se
+  l'analisi conosce le parti del gioco (`voice.parts` nei conti: capitoli, atti, dischi,
+  percorsi; come trovarle in `voice-dubbing` §5a) mostra il costo di **ciascuna parte** e i
+  cumulati; chiedi i crediti disponibili (`voice.credits_available`, letti con la modalità
+  `verifica` gratuita) e, se non bastano per tutto, proponi: piano superiore, modello economico per
+  le comparse, oppure solo le prime parti che stanno nei crediti (in ordine di gioco) → scelta in
+  `voice.scope` (`{"mode": "tutto"}` o `{"mode": "parti", "parts": [...]}`). Le righe delle parti
+  escluse restano originali in gioco (clip originale o sottotitolo). Parti ignote: si dice che il
+  doppiaggio si spezza per lotti e che per doppiarne solo una parte va prima fatta la ricerca;
 - **proporzione dei pixel** solo se `aspect-auto` ha lasciato un dubbio (`decided_by: "ask"`:
   `project missing` la elenca con la proposta, i dubbi e il foglio `review/aspect.png` da mostrare);
   se ha deciso da solo non si chiede;
@@ -165,7 +173,9 @@ quando il tetto è superato (allora ci si ferma e si chiede).
 ## Fase 1c — Piano tabellare e approvazione
 Genera i pacchetti e la tabella: `rstool.py plan table analysis/conti.json` (le parti a
 pagamento entrano se scelte; `--paid all` per mostrarle tutte come preventivo). Una riga per
-voce di lavoro (i lotti della stessa voce, es. 20 lotti di doppiaggio, stanno in una riga;
+voce di lavoro (i lotti della stessa voce stanno in una riga; il doppiaggio ha una riga per parte
+del gioco con "✅ nei crediti" / "⏸️ oltre i crediti" e le parti fuori da `voice.scope` come
+"⏸️ esclusa", non generate e registrate `deferred`;
 `--detail` per una riga per lotto): emoji, cosa, agente, dipendenze e gruppo parallelo, tempo
 stimato, costo, token stimati; gratuito e a pagamento separati, totali in fondo. L'analisi aggiunge
 da sola i pacchetti che rende necessari: aggancio del Layer a un motore nuovo (`engine-hook`),

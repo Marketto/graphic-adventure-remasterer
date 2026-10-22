@@ -151,6 +151,12 @@ Le correzioni di pronuncia sono una lista ordinata di (espressione regolare → 
 
 - **Costo reale: circa 0,4 crediti a carattere**, tag compresi. Per esempio, 45.000 caratteri sono costati ~19.200 crediti; un rifacimento di 232 caratteri ne è costato 92. Il preventivo si fa con (caratteri + tag) × ~0,43. Il "1 carattere = 1 credito" della documentazione generale sovrastima.
 - **Effetti sonori: ~10 crediti al secondo.**
+- **Crediti che non bastano: doppiaggio per parti.** Invece di "tutto o niente" si doppiano solo
+  le prime parti del gioco (capitoli, atti, dischi, percorsi) che stanno nei crediti, in ordine di
+  gioco; le altre restano con il comportamento originale (clip originale o sottotitolo), perché il
+  motore sceglie riga per riga dalla presenza del file della voce nuova. Le parti si ricavano dalla
+  struttura degli script e delle stanze, dai salti di capitolo, dai titoli di parte e dalla guida
+  agli indizi; una battuta ripetuta si conta nella prima parte in cui compare.
 - **Preventivo prima di spendere, approvazione esplicita dell'utente.** Le stime e i controlli gratuiti si possono fare senza chiedere.
 - **Ogni spesa si registra**: id del run, caratteri, crediti spesi, crediti rimasti su quelli totali del mese.
   *Problema:* senza un registro non si sa quanto resta prima del capitolo successivo.

@@ -78,6 +78,26 @@ if (_remaster) _remaster->warpMouse(x, y); else g_system->warpMouse(x, y);
 if (!_remaster || !_remaster->playVoice(original)) showSubtitle(...);
 ```
 
+## Doppiaggio parziale (solo alcune parti del gioco)
+
+Il pacchetto può contenere le voci nuove solo per una o più parti del gioco (capitoli, atti,
+dischi, percorsi: `voice.scope` nel progetto, quando i crediti non bastano per tutto). Il motore
+non sa nulla delle parti e non deve saperlo: decide **riga per riga** dalla presenza del file.
+`Layer::playVoice()` restituisce `false` quando `voice/<lang>/<textKey>.ogg` non esiste (oltre che
+con le voci spente, in modalità classica o senza lingua), e allora il gancio segue **il percorso
+originale del gioco**:
+
+- gioco parlato: parte la clip originale (quella restaurata, se il gioco la carica al suo posto),
+  con i suoi dati originali di movimento della bocca;
+- gioco solo testo: resta il fumetto/sottotitolo, come prima.
+
+Per questo il gancio va scritto sempre nella forma «prima il Layer, se dice no l'originale»
+(`if (!_remaster || !_remaster->playVoice(original)) <percorso originale>`), mai «se c'è il Layer
+salta l'originale». Nella stessa scena possono quindi convivere righe doppiate e righe originali;
+la sincronia labiale nuova (`.lip.json`) vale solo per le righe con la voce nuova. Verifica del
+gancio: un pacchetto con le voci di una sola parte, si gioca l'inizio di una parte esclusa e ogni
+riga deve comportarsi come senza remaster (clip originale o sottotitolo, nessun silenzio).
+
 ## Opzioni (ScummVM .ini o menu del gioco)
 | chiave | default | effetto |
 |---|---|---|
