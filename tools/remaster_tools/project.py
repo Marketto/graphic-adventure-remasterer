@@ -303,12 +303,23 @@ def source_work_problems(data):
         out.append(f"tipo dell'opera d'origine non valido ({', '.join(SOURCE_TYPES)})")
     if not sw.get("sources"):
         out.append("opera d'origine senza fonti")
-    langs = set((data.get("voice") or {}).get("languages") or [])
+    v = data.get("voice") or {}
+    langs = set(v.get("languages") or [])
+    if not langs and v.get("enabled"):
+        user = (data.get("languages") or {}).get("user")
+        langs = {user} if user else set()
+
+    def found(val):
+        # a placeholder ("da verificare", "?", "") means the period voice was not found yet
+        name = val.get("name") if isinstance(val, dict) else val
+        return bool(name) and not str(name).strip().lower().startswith(("da verificare", "?", "sconosciut", "n/d"))
     for c in sw.get("characters") or []:
         if not c.get("sources"):
             out.append(f"{c.get('name')}: senza fonti")
-        for lg in sorted(langs - set((c.get("voices") or {}).keys())):
-            out.append(f"{c.get('name')}: voce dell'epoca in «{lg}» non cercata")
+        voices = c.get("voices") or {}
+        for lg in sorted(langs):
+            if not found(voices.get(lg)):
+                out.append(f"{c.get('name')}: voce dell'epoca in «{lg}» non trovata o da verificare")
     return out
 
 
