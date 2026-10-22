@@ -62,7 +62,7 @@ Variabili: `ANTHROPIC_API_KEY` (o login del CLI), `ELEVENLABS_API_KEY` per il do
 | `skills/` | orchestratore + 10 skill (motore, style bible, grafica HD, 16:9, localizzazione, audio, doppiaggio, integrazione nel motore, manuale e aiuti, rilascio) |
 | `agents/` | 10 subagenti specializzati, tra cui un QA indipendente e un revisore |
 | `commands/remaster.md` | comando `/remaster` |
-| `tools/rstool.py` | pipeline a riga di comando: progetto (con tetto e registro delle spese e dei pacchetti di lavoro), piano (stime di tempi, costi e token, pacchetti per sotto-sessioni, tabella, stato), rilevamento (con avviso sui collegamenti a siti di terze parti), estrazione senza Layer con adattatore e validazione del dump, emulatore di riferimento, misura dei tempi, fluidità dei controlli, chiavi e copertura degli asset, pacchetto canary, stile, grafica (upscaler APISR/Real-ESRGAN su CPU, sprite con contorno e inchiostro), filmati, font, proporzione dei pixel (candidata e misurata), 16:9 (classificatore con nomi delle stanze e lati aperti/chiusi, LaMa, quilting, ricette, controlli, fal.ai opzionale), gallerie di revisione e regressione visiva, testi, audio (gruppi e mix, restauro del parlato originale, brani ed effetti tra i MIDI), voci (stima sui testi unici, trascrizione locale, misure di un parlato di riferimento e classifica delle voci esistenti più simili: `voice reference`, `voice match`), tema GUI, aiuti, manuale (con OCR dei PDF scansionati), ricette (esempio in `references/recipe.example.json`), rilascio e peso del pacchetto |
+| `tools/rstool.py` | pipeline a riga di comando: progetto (con tetto e registro delle spese e dei pacchetti di lavoro), piano (stime di tempi, costi e token, pacchetti per sotto-sessioni, tabella, stato), rilevamento (con avviso sui collegamenti a siti di terze parti), estrazione senza Layer con adattatore e validazione del dump, emulatore di riferimento, misura dei tempi, fluidità dei controlli, chiavi e copertura degli asset, pacchetto canary, stile, grafica (upscaler APISR/Real-ESRGAN su CPU, sprite con contorno e inchiostro), filmati, font, proporzione dei pixel (candidata e misurata), 16:9 (classificatore con nomi delle stanze e lati aperti/chiusi, LaMa, quilting, ricette, controlli, fal.ai opzionale), gallerie di revisione e regressione visiva, testi, audio (gruppi e mix, restauro del parlato originale, brani ed effetti tra i MIDI), voci (stima sui testi unici, trascrizione locale, tratti dei parlanti in file lunghi con trascrizione e impronte locali, misure di un parlato di riferimento, misure riusabili delle candidate e classifica delle voci esistenti più simili con controlli su musica, ottava ed età: `voice segments`, `voice reference`, `voice measure`, `voice match`), tema GUI, aiuti, manuale (con OCR dei PDF scansionati), ricette (esempio in `references/recipe.example.json`), rilascio e peso del pacchetto |
 | `tools/ip_guard.py` | controllo che il repository resti privo di contenuti e riferimenti a giochi |
 | `engine/scummvm-remaster-layer/` | patch per ScummVM (`engines/remaster/`) + guida di integrazione |
 | `ci/` | workflow GitHub Actions multipiattaforma, librerie Android, build locale |
@@ -86,7 +86,9 @@ ComfyUI (solo per l'img2img), chiavi ElevenLabs e
 fal.ai (solo se scegli l'outpainting a pagamento), l'emulatore o la VM della piattaforma
 originale (DOSBox, 86Box/PCem, QEMU, Wine, WinUAE/FS-UAE, Hatari...) con ROM e sistemi tuoi,
 Xvfb + `xdotool` per le misure automatiche, `faster-whisper` per la trascrizione locale delle
-voci, DeepFilterNet per il restauro del parlato originale.
+voci, `resemblyzer` (con `setuptools<81`) per le impronte vocali di `voice segments`, `yt-dlp`
+con un runtime JS (`node` e il pacchetto `yt-dlp-ejs`) per l'audio dei riferimenti dalle
+piattaforme video, DeepFilterNet per il restauro del parlato originale.
 
 ## Stato delle verifiche
 - `tools/`: test automatici su dati sintetici (`python -m pytest tools/tests`), tutti verdi; un

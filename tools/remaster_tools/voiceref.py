@@ -13,7 +13,20 @@ Measures (per file, then a weighted mean over the voiced time):
 - slope_db_khz: slope of the spectral envelope up to 4 kHz (more negative = darker, softer);
 - hnr_db: harmonics-to-noise ratio estimated from the YIN aperiodicity (low = rough, breathy);
 - rate_syl_s: syllable-like energy peaks per second of speech (speaking rate);
-- pause_ratio, pause_mean_s: share and mean length of the pauses inside the speech span.
+- pause_ratio, pause_mean_s: share and mean length of the pauses inside the speech span;
+- dyn_range_db: loud speech (95th percentile) minus the quiet frames (10th) inside the speech
+  span: low with a music or noise bed under the voice;
+- mfcc: 12 mean cepstral coefficients (c1..c12) of the long-term spectrum of the speech frames,
+  on 18 mel bands from 80 Hz to 4 kHz (the same limit as the slope, for band-limited copies):
+  the overall shape of the timbre, which centroid and slope alone summarise in two numbers.
+
+Checks in the shortlist (`match`):
+- a preview without pauses (pause_ratio < NO_PAUSE) has a bed of music or noise: it is flagged
+  and its pauses and roughness weigh BED_WEIGHT times less (the bed fills the pauses and lowers
+  the harmonics-to-noise ratio);
+- a median pitch outside PITCH_RANGE for the declared gender and age (voices.json, or the
+  reference) is flagged as a possible octave error of the pitch tracker or a wrong label;
+- fewer than MIN_SAME_AGE candidates of the right age: look for more.
 """
 import glob
 import json
@@ -43,6 +56,7 @@ AUDIO_EXT = (".wav", ".mp3", ".ogg", ".flac", ".m4a", ".opus", ".aac")
 FEATURES = {
     "f0_st":        (2.0, 3.0),    # median pitch, semitones
     "centroid_oct": (0.25, 2.0),   # brightness, octaves (log2 ratio)
+    "mfcc":         (3.0, 1.5),    # shape of the timbre: RMS difference of c1..c12, dB
     "hnr_db":       (4.0, 1.5),    # roughness
     "slope_db_khz": (2.0, 1.0),    # spectral tilt
     "f0_var_st":    (2.0, 1.0),    # pitch variability
@@ -50,6 +64,26 @@ FEATURES = {
     "pause_ratio":  (0.10, 0.5),   # share of pauses
 }
 SPEED_RANGE = (0.7, 1.2)          # what ElevenLabs accepts for `speed`
+NO_PAUSE = 0.02                   # below this share of pauses: music or noise under the voice
+BED_DYN_DB = 20.0                 # ...and with less dynamics than this, almost surely a bed
+BED_WEIGHT = 0.2                  # weight factor of pauses and roughness for such a preview
+BED_FEATURES = ("pause_ratio", "hnr_db")
+MIN_SAME_AGE = 5
+N_MEL, N_MFCC, MEL_LO, MEL_HI = 18, 12, 80.0, 4000.0
+# plausible median speaking pitch (Hz) by gender and age; None = age not declared
+PITCH_RANGE = {
+    ("male", "young"): (90, 180), ("male", "middle_aged"): (80, 170), ("male", "old"): (75, 180),
+    ("male", None): (75, 180),
+    ("female", "young"): (160, 300), ("female", "middle_aged"): (145, 270), ("female", "old"): (130, 260),
+    ("female", None): (130, 300),
+    (None, "child"): (200, 420),
+}
+AGES = {"young": "young", "giovane": "young", "middle_aged": "middle_aged", "middle aged": "middle_aged",
+        "middle-aged": "middle_aged", "adult": "middle_aged", "adulto": "middle_aged", "adulta": "middle_aged",
+        "old": "old", "elderly": "old", "anziano": "old", "anziana": "old", "vecchio": "old",
+        "child": "child", "kid": "child", "bambino": "child", "bambina": "child"}
+GENDERS = {"male": "male", "m": "male", "man": "male", "maschio": "male", "uomo": "male",
+           "female": "female", "f": "female", "woman": "female", "femmina": "female", "donna": "female"}
 
 
 # ---------------------------------------------------------------------------- audio input
@@ -172,6 +206,7 @@ def measure_signal(x):
             by.append(pdb[m].max())
     by = np.maximum(np.array(by), max(by) - 60)
     slope = float(np.polyfit(np.array(bx), by, 1)[0])
+    mfcc = _mfcc(p, f)
     apv = np.clip(ap[voiced], 1e-4, 0.999)
     hnr = float(np.median(10 * np.log10((1 - apv) / apv)))
     # pauses and rate, on a 10 ms envelope
@@ -191,6 +226,8 @@ def measure_signal(x):
                 pauses.append(run * HOP / SR)
             run = 0
     span_s = len(span) * HOP / SR
+    sdb = np.maximum(db[first:last + 1], loud - 80)
+    dyn = float(np.percentile(sdb, 95) - np.percentile(sdb, 10))
     pause_s = sum(pauses)
     speech_s = max(span_s - pause_s, 1e-3)
     # syllable nuclei: local maxima of the envelope within ±60 ms, at least 3 dB above the
@@ -215,11 +252,27 @@ def measure_signal(x):
             "hnr_db": round(hnr, 1), "rate_syl_s": round(peaks / speech_s, 2),
             "pause_ratio": round(pause_s / span_s, 3) if span_s else 0.0,
             "pause_mean_s": round(pause_s / len(pauses), 2) if pauses else 0.0,
+            "dyn_range_db": round(dyn, 1), "mfcc": [round(float(c), 2) for c in mfcc],
             "voiced_s": round(float(voiced.sum()) * HOP / SR, 2), "seconds": round(len(x) / SR, 2)}
 
 
+def _mfcc(power, freqs):
+    """Mean cepstrum of a long-term power spectrum: log mel energies (dB) -> DCT-II, c1..c12."""
+    mel = lambda hz: 2595.0 * np.log10(1.0 + hz / 700.0)
+    pts = 700.0 * (10 ** (np.linspace(mel(MEL_LO), mel(MEL_HI), N_MEL + 2) / 2595.0) - 1.0)
+    e = np.empty(N_MEL)
+    for i in range(N_MEL):
+        lo, c, hi = pts[i:i + 3]
+        w = np.clip(np.minimum((freqs - lo) / (c - lo), (hi - freqs) / (hi - c)), 0.0, None)
+        e[i] = (w * power).sum() / max(w.sum(), 1e-9)
+    ldb = 10 * np.log10(e + 1e-12)
+    n = np.arange(N_MEL)
+    k = np.arange(1, N_MFCC + 1)[:, None]
+    return math.sqrt(2.0 / N_MEL) * (ldb[None, :] * np.cos(np.pi * k * (2 * n + 1) / (2 * N_MEL))).sum(axis=1)
+
+
 MEAN_KEYS = ("f0_median_hz", "f0_p10_hz", "f0_p90_hz", "f0_var_st", "centroid_hz", "slope_db_khz",
-             "hnr_db", "rate_syl_s", "pause_ratio", "pause_mean_s")
+             "hnr_db", "rate_syl_s", "pause_ratio", "pause_mean_s", "dyn_range_db")
 
 
 def combine(measures):
@@ -228,26 +281,113 @@ def combine(measures):
     w = w / w.sum()
     out = {}
     for k in MEAN_KEYS:
+        if any(k not in m for m in measures):
+            continue
         v = np.array([m[k] for m in measures], dtype=float)
         if k.endswith("_hz") and k.startswith("f0"):
             out[k] = round(float(2 ** (w * np.log2(v)).sum()), 1)
         else:
             out[k] = round(float((w * v).sum()), 3)
+    if all("mfcc" in m for m in measures):
+        out["mfcc"] = [round(float(c), 2) for c in (w[:, None] * np.array([m["mfcc"] for m in measures])).sum(axis=0)]
     out["voiced_s"] = round(sum(m["voiced_s"] for m in measures), 2)
     out["seconds"] = round(sum(m["seconds"] for m in measures), 2)
     return out
 
 
-def reference(paths, out_path=None, start=None, end=None, delete_after=False):
-    """Measure the reference fragments. Only numbers are kept; with delete_after the fragments
-    are removed once measured (they must stay local and short-lived)."""
-    files = _expand(paths)
-    if not files:
-        raise ValueError("nessun file audio")
-    ms = [measure_signal(load(p, start, end)) for p in files]
-    res = {"kind": "voice-reference", "fragments": len(files), "measures": combine(ms),
-           "per_fragment": ms,
+def norm_gender(v):
+    return GENDERS.get(str(v).strip().lower()) if v else None
+
+
+def norm_age(v):
+    return AGES.get(str(v).strip().lower().replace("-", "_")) if v else None
+
+
+def read_segments(tsv, group=None, select=None):
+    """Rows of a `voice segments` TSV, filtered by group(s) and/or ids ("3,5-7")."""
+    base = os.path.dirname(os.path.abspath(tsv))
+    with open(tsv, encoding="utf-8") as f:
+        lines = [ln.rstrip("\n") for ln in f if ln.strip()]
+    if not lines:
+        raise ValueError(f"{tsv}: vuoto")
+    head = lines[0].split("\t")
+    for col in ("file", "inizio", "fine"):
+        if col not in head:
+            raise ValueError(f"{tsv}: manca la colonna «{col}» (serve id, file, inizio, fine, gruppo)")
+    rows = []
+    for i, ln in enumerate(lines[1:], 1):
+        r = dict(zip(head, ln.split("\t")))
+        r["id"] = r.get("id") or str(i)
+        r["path"] = r["file"] if os.path.isabs(r["file"]) else os.path.join(base, r["file"])
+        r["inizio"], r["fine"] = float(r["inizio"]), float(r["fine"])
+        rows.append(r)
+    if group:
+        groups = {g.strip() for g in str(group).split(",") if g.strip()}
+        rows = [r for r in rows if r.get("gruppo") in groups]
+    if select:
+        ids = set()
+        for part in str(select).split(","):
+            part = part.strip()
+            if "-" in part:
+                a, b = part.split("-", 1)
+                ids |= {str(n) for n in range(int(a), int(b) + 1)}
+            elif part:
+                ids.add(part)
+        rows = [r for r in rows if r["id"] in ids]
+    return rows
+
+
+def reference(paths, out_path=None, start=None, end=None, delete_after=False, segments=None, group=None,
+              select=None, gender=None, age=None):
+    """Measure the reference. Only numbers are kept; with delete_after the audio is removed once
+    measured (it must stay local and short-lived).
+
+    With `segments` (a TSV of `voice segments`) the stretches chosen by `group` and/or `select`
+    are measured straight from the long files, without cutting them first; the JSON then keeps
+    the sources (file name, interval, group, attribution confidence) so that the measure can be
+    redone or checked after the audio is gone."""
+    sources, errors = [], []
+    if segments:
+        if start is not None or end is not None:
+            raise ValueError("--start/--end non valgono con --segments (gli intervalli sono nel TSV)")
+        if not group and not select:
+            raise ValueError("con --segments indica --group o --select")
+        rows = read_segments(segments, group, select)
+        if not rows:
+            raise ValueError("nessun tratto corrisponde a --group/--select")
+        loaded, ms = {}, []
+        for r in rows:
+            if r["path"] not in loaded:
+                loaded[r["path"]] = load(r["path"])
+            x = loaded[r["path"]][int(r["inizio"] * SR):int(r["fine"] * SR)]
+            src = {"id": r["id"], "file": os.path.basename(r["file"]), "start": r["inizio"], "end": r["fine"],
+                   "group": r.get("gruppo"), "confidence": _num(r.get("sicurezza"))}
+            try:
+                ms.append(measure_signal(x))
+                sources.append(src)
+            except ValueError as e:
+                errors.append({**src, "error": str(e)})
+        if not ms:
+            raise ValueError("nessun tratto misurabile: " + "; ".join(e["error"] for e in errors))
+        files = sorted(loaded)
+    else:
+        files = _expand(paths)
+        if not files:
+            raise ValueError("nessun file audio (o usa --segments)")
+        ms = [measure_signal(load(p, start, end)) for p in files]
+    comb = combine(ms)
+    res = {"kind": "voice-reference", "fragments": len(ms), "measures": comb, "per_fragment": ms,
            "note": "solo misure: i frammenti non si caricano su nessun servizio e non servono a clonare"}
+    char = {k: v for k, v in (("gender", norm_gender(gender)), ("age", norm_age(age))) if v}
+    if char:
+        res["character"] = char
+    if sources:
+        res["sources"] = sources
+    if errors:
+        res["skipped"] = errors
+    warn = _checks(comb, char.get("gender"), char.get("age"), reference=True)
+    if warn:
+        res["warnings"] = warn
     if out_path:
         _write(out_path, res)
     if delete_after:
@@ -257,19 +397,63 @@ def reference(paths, out_path=None, start=None, end=None, delete_after=False):
     return res
 
 
+def _num(v):
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def _checks(m, gender=None, age=None, reference=False):
+    """Warnings on one set of measures: bed of music/noise, implausible pitch. For a reference
+    made of short stretches the lack of pauses is normal: only a low dynamics is flagged."""
+    out = []
+    nopause = m.get("pause_ratio", 1.0) < NO_PAUSE
+    flat = m.get("dyn_range_db", 99.0) < BED_DYN_DB
+    if nopause and flat:
+        out.append(f"nessuna pausa e dinamica bassa ({m.get('dyn_range_db', 0):.0f} dB): probabile musica o rumore "
+                   "sotto la voce" + ("; cerca tratti più puliti" if reference else ", pause e ruvidità pesano meno"))
+    elif nopause and not reference:
+        out.append(f"nessuna pausa (quota {m['pause_ratio']:.2f}): possibile musica o sottofondo, "
+                   "pause e ruvidità pesano meno")
+    rng = PITCH_RANGE.get((gender, age)) or PITCH_RANGE.get((None, age)) or PITCH_RANGE.get((gender, None))
+    f0 = m.get("f0_median_hz")
+    if rng and f0 and not rng[0] <= f0 <= rng[1]:
+        what = " ".join(x for x in (gender, age) if x)
+        msg = f"altezza {f0:.0f} Hz fuori dall'intervallo plausibile {rng[0]}-{rng[1]} Hz per {what}"
+        alt = [v for v in (f0 / 2, f0 * 2) if rng[0] <= v <= rng[1]]
+        if alt:
+            msg += f": possibile errore d'ottava (la metà o il doppio, {alt[0]:.0f} Hz, sarebbe plausibile)"
+        else:
+            msg += ": controlla l'etichetta o l'anteprima"
+        out.append(msg)
+    return out
+
+
 # ---------------------------------------------------------------------------- matching
 
 def _vec(m):
-    return {"f0_st": 12 * math.log2(max(m["f0_median_hz"], 1.0)),
-            "centroid_oct": math.log2(max(m["centroid_hz"], 1.0)),
-            "hnr_db": m["hnr_db"], "slope_db_khz": m["slope_db_khz"], "f0_var_st": m["f0_var_st"],
-            "rate_log2": math.log2(max(m["rate_syl_s"], 0.1)), "pause_ratio": m["pause_ratio"]}
+    v = {"f0_st": 12 * math.log2(max(m["f0_median_hz"], 1.0)),
+         "centroid_oct": math.log2(max(m["centroid_hz"], 1.0)),
+         "hnr_db": m["hnr_db"], "slope_db_khz": m["slope_db_khz"], "f0_var_st": m["f0_var_st"],
+         "rate_log2": math.log2(max(m["rate_syl_s"], 0.1)), "pause_ratio": m["pause_ratio"]}
+    if m.get("mfcc"):
+        v["mfcc"] = np.array(m["mfcc"], dtype=float)
+    return v
 
 
-def distance(ref, cand):
+def distance(ref, cand, weights=None):
+    """Weighted distance; features missing on either side (old measures without mfcc) are left
+    out, and the total is normalised by the weights actually used."""
     a, b = _vec(ref), _vec(cand)
-    parts = {k: w * ((a[k] - b[k]) / s) ** 2 for k, (s, w) in FEATURES.items()}
-    total = math.sqrt(sum(parts.values()) / sum(w for _, w in FEATURES.values()))
+    w = {k: (weights or {}).get(k, wt) for k, (_, wt) in FEATURES.items()}
+    parts = {}
+    for k, (s, _) in FEATURES.items():
+        if k not in a or k not in b:
+            continue
+        d = float(np.sqrt(np.mean((a[k] - b[k]) ** 2))) if k == "mfcc" else a[k] - b[k]
+        parts[k] = w[k] * (d / s) ** 2
+    total = math.sqrt(sum(parts.values()) / sum(w[k] for k in parts))
     return round(total, 3), {k: round(math.sqrt(v), 2) for k, v in parts.items()}
 
 
@@ -309,7 +493,7 @@ def suggest(ref, cand):
 
 
 def _candidates(src, cache):
-    if os.path.isdir(src):
+    if os.path.isdir(src) or (os.path.isfile(src) and src.lower().endswith(AUDIO_EXT)):
         return [{"voice_id": os.path.splitext(os.path.basename(p))[0],
                  "name": os.path.splitext(os.path.basename(p))[0], "file": p}
                 for p in sorted(_expand([src]))]
@@ -320,7 +504,10 @@ def _candidates(src, cache):
     base = os.path.dirname(os.path.abspath(src))
     out = []
     for v in data:
-        c = {"voice_id": v.get("voice_id") or v.get("id"), "name": v.get("name") or v.get("voice_id")}
+        labels = v.get("labels") or {}
+        c = {"voice_id": v.get("voice_id") or v.get("id"), "name": v.get("name") or v.get("voice_id"),
+             "gender": norm_gender(v.get("gender") or labels.get("gender")),
+             "age": norm_age(v.get("age") or labels.get("age"))}
         if v.get("file"):
             c["file"] = v["file"] if os.path.isabs(v["file"]) else os.path.join(base, v["file"])
         elif v.get("preview_url") or v.get("url"):
@@ -341,24 +528,92 @@ def _candidates(src, cache):
     return out
 
 
-def match(ref_path, candidates, top=5, out_path=None, cache=None):
-    with open(ref_path, encoding="utf-8") as f:
-        ref = json.load(f)
-    rm = ref.get("measures", ref)
-    cache = cache or os.path.join(os.path.dirname(os.path.abspath(out_path or ref_path)), "previews")
-    rows, errors = [], []
+def measure(candidates, out_path=None, cache=None, reuse=True):
+    """Measure the candidate previews once (folder, single file or voices.json) and keep the
+    numbers in out_path, to reuse across characters and sessions (`match --measured`). With
+    reuse, voices already in out_path are not measured again."""
+    cache = cache or os.path.join(os.path.dirname(os.path.abspath(out_path or candidates)), "previews")
+    done = {}
+    if reuse and out_path and os.path.exists(out_path):
+        with open(out_path, encoding="utf-8") as f:
+            done = {v["voice_id"]: v for v in json.load(f).get("voices", [])}
+    voices, errors, new = [], [], 0
     for c in _candidates(candidates, cache):
+        old = done.get(c["voice_id"])
+        if old and "mfcc" in old.get("measures", {}):
+            voices.append({**old, **{k: v for k, v in c.items() if k in ("name", "gender", "age") and v}})
+            continue
         try:
             m = measure_signal(load(c["file"]))
         except (RuntimeError, ValueError, OSError) as e:
             errors.append({"voice_id": c["voice_id"], "error": str(e)})
             continue
-        d, parts = distance(rm, m)
-        rows.append({"voice_id": c["voice_id"], "name": c["name"], "distance": d, "parts": parts,
-                     "measures": m, "settings": suggest(rm, m)})
+        new += 1
+        voices.append({"voice_id": c["voice_id"], "name": c["name"], "gender": c.get("gender"),
+                       "age": c.get("age"), "measures": m})
+    res = {"kind": "voice-measures", "voices": voices, "measured": new, "reused": len(voices) - new,
+           "errors": errors}
+    if out_path:
+        _write(out_path, res)
+    return res
+
+
+def match(ref_path, candidates=None, top=5, out_path=None, cache=None, measured=None, gender=None, age=None,
+          strict=False):
+    """Shortlist of the existing voices closest to the reference. Candidates come from a folder or
+    a voices.json (measured now) and/or from a `voice measure` file (measured before)."""
+    if not candidates and not measured:
+        raise ValueError("indica --candidates o --measured")
+    with open(ref_path, encoding="utf-8") as f:
+        ref = json.load(f)
+    rm = ref.get("measures", ref)
+    char = ref.get("character") or {}
+    gender = norm_gender(gender) or char.get("gender")
+    age = norm_age(age) or char.get("age")
+    pool, errors = [], []
+    if measured:
+        with open(measured, encoding="utf-8") as f:
+            pool += json.load(f).get("voices", [])
+    if candidates:
+        cache = cache or os.path.join(os.path.dirname(os.path.abspath(out_path or ref_path)), "previews")
+        got = measure(candidates, None, cache, reuse=False)
+        seen = {v["voice_id"] for v in pool}
+        pool += [v for v in got["voices"] if v["voice_id"] not in seen]
+        errors += got["errors"]
+    rows, excluded = [], []
+    for v in pool:
+        m = v["measures"]
+        vg, va = v.get("gender"), v.get("age")
+        mismatch = [x for x, want, have in (("genere", gender, vg), ("età", age, va)) if want and have and want != have]
+        if strict and mismatch:
+            excluded.append({"voice_id": v["voice_id"], "reason": " e ".join(mismatch) + " diversi"})
+            continue
+        warn = _checks(m, vg or gender, va or age)
+        bed = m.get("pause_ratio", 1.0) < NO_PAUSE
+        weights = {k: FEATURES[k][1] * BED_WEIGHT for k in BED_FEATURES} if bed else None
+        d, parts = distance(rm, m, weights)
+        if mismatch:
+            warn.append(" e ".join(mismatch) + " dichiarati diversi dal personaggio")
+        rows.append({"voice_id": v["voice_id"], "name": v.get("name"), "gender": vg, "age": va, "distance": d,
+                     "parts": parts, "measures": m, "settings": suggest(rm, m), "warnings": warn,
+                     "music_bed": bed})
     rows.sort(key=lambda r: r["distance"])
-    res = {"kind": "voice-shortlist", "reference": rm, "weights": {k: w for k, (_, w) in FEATURES.items()},
-           "shortlist": rows[:top], "measured": len(rows), "errors": errors}
+    warnings = _checks(rm, gender, age, reference=True)
+    warnings = ["riferimento: " + w for w in warnings]
+    if age:
+        same = sum(1 for r in rows if r["age"] == age)
+        if same < MIN_SAME_AGE:
+            warnings.append(f"solo {same} candidate dell'età giusta ({age}, servono almeno {MIN_SAME_AGE}): "
+                            "cercane altre nella libreria prima di scegliere")
+    flagged = sum(1 for r in rows if r["music_bed"])
+    if flagged:
+        warnings.append(f"{flagged} anteprime con musica o senza pause: pause e ruvidità pesate meno, "
+                        "ascoltale prima di fidarti della classifica")
+    res = {"kind": "voice-shortlist", "reference": rm, "character": {"gender": gender, "age": age},
+           "weights": {k: w for k, (_, w) in FEATURES.items()}, "shortlist": rows[:top], "measured": len(rows),
+           "errors": errors, "warnings": warnings}
+    if excluded:
+        res["excluded"] = excluded
     if out_path:
         _write(out_path, res)
     return res
