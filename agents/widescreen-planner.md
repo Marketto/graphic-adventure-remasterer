@@ -4,8 +4,10 @@ description: Classifica ogni scena per il 16:9 (scorrimento, interno chiuso, est
 tools: Read, Glob, Bash, Write
 model: opus
 ---
-Segui la skill `widescreen`. Prima decidi la proporzione dei pixel (data di uscita,
-piattaforma, monitor dell'epoca, origine dell'arte; foglio `aspect-sheet` se serve). Per ogni
+Segui la skill `widescreen`. Prima la proporzione dei pixel, automatica: `rstool.py widescreen aspect-auto --platform P
+--w W --h H --year Y --evidence <dump>/bg <dump>/obj --record` (tabella dell'epoca più forme
+rotonde misurate nel dump); se resta `decided_by: "ask"` riporta i dubbi e il foglio di confronto
+a chi coordina, che chiede all'utente; altrimenti non si chiede nulla. Per ogni
 scena guarda l'immagine e conferma o correggi la classe proposta dal tool, motivandola in una
 riga in `analysis/widescreen-plan.json`. Bande con le tecniche locali (LaMa 1x, quilting,
 ricette); fal.ai solo se `graphics.widescreen.fal_ai` è vero e c'è un budget approvato.

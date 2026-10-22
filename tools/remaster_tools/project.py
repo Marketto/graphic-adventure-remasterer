@@ -31,7 +31,9 @@ DEFAULT = {
                  "scale": 3,
                  # stretch 1.0 = square pixels; another value only if the game was made for a
                  # display that stretched its pixels (decided in the analysis, see platforms.py)
-                 "pixel_aspect": {"stretch": None, "reason": None},
+                 # decided_by: "auto" (`widescreen aspect-auto`: table and measured shapes agree),
+                 # "ask" (in doubt: asked with the comparison sheet), "user" (answered)
+                 "pixel_aspect": {"stretch": None, "reason": None, "decided_by": None},
                  # fill: local methods (LaMa 1x + quilting + recipes); fal_ai: paid outpainting,
                  # asked only after the analysis with the quote (None = not asked yet)
                  "widescreen": {"enabled": True, "aspect": "16:9", "fill": "local", "fal_ai": None},
@@ -268,6 +270,7 @@ def missing_answers(data):
         return ["analisi (fase 1) e stime"]
     out += ["opera d'origine: " + p for p in source_work_problems(data)]
     g = data.get("graphics", {})
+    out += pixel_aspect_question(data)
     ws = g.get("widescreen", {})
     if g.get("enabled") and ws.get("enabled") and ws.get("fal_ai") is None:
         out.append("fal.ai per le bande 16:9 (con preventivo)")
@@ -281,6 +284,19 @@ def missing_answers(data):
     if not out and not (data.get("plan") or {}).get("approved"):
         out.append("approvazione del piano")
     return out
+
+
+def pixel_aspect_question(data):
+    """The pixel aspect is decided automatically (`widescreen aspect-auto`); it is asked only
+    when the automatic check left a doubt (decided_by "ask"), with the comparison sheet."""
+    pa = (data.get("graphics") or {}).get("pixel_aspect") or {}
+    if pa.get("decided_by") != "ask" or pa.get("stretch") is not None:
+        return []
+    doubt = next((r[len("dubbi: "):] for r in pa.get("reasons") or [] if r.startswith("dubbi: ")), "")
+    q = f"proporzione dei pixel (proposta {pa.get('proposed')}"
+    if pa.get("sheet"):
+        q += f", foglio {pa['sheet']}"
+    return [q + (f"; dubbi: {doubt})" if doubt else ")")]
 
 
 SOURCE_TYPES = ("film", "series", "animation", "comic", "book", "other")
@@ -405,6 +421,12 @@ def summary(data):
         lines.append("Grafica: " + (", ".join(gr.get("parts") or []) or "sì")
                      + (" · 16:9" if gr["widescreen"].get("enabled") else "")
                      + (f" · {gr['framerate'].get('target')} fps" if gr["framerate"].get("enabled") else ""))
+    pa = gr.get("pixel_aspect") or {}
+    if pa.get("stretch") is not None:
+        how = {"auto": "decisa da sola", "user": "scelta dall'utente"}.get(pa.get("decided_by"), "")
+        proof = (pa.get("reasons") or [""])[-1] if pa.get("decided_by") == "auto" else (pa.get("reason") or "")
+        lines.append(f"Proporzione dei pixel: {pa['stretch']:g}" + (f" ({how})" if how else "")
+                     + (f" — {proof}" if proof else ""))
     lang = data["languages"]
     if lang.get("user"):
         lines.append(f"Lingua dell'utente: {lang['user']}")

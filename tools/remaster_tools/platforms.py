@@ -242,3 +242,365 @@ def aspect_measure(images, compose=None, box=None, color=None, tolerance=40, can
         vis.save(out_path)
         res["image"] = out_path
     return res
+
+
+# ---------------------------------------------------------------------------------------------
+# Automatic pixel aspect: table candidate + shapes measured on the dump + manual measures.
+# Rule of the suite: decide alone when the evidence is clear; ask the user only when in doubt.
+
+_IMG_EXT = (".png", ".bmp", ".gif", ".tga", ".jpg", ".jpeg", ".webp")
+CONF_RANK = {"bassa": 0, "media": 1, "alta": 2}
+
+
+def _image_paths(evidence, limit=2000):
+    paths = []
+    for e in evidence or []:
+        if os.path.isdir(e):
+            for root, _dirs, files in sorted(os.walk(e)):
+                paths += [os.path.join(root, f) for f in sorted(files) if f.lower().endswith(_IMG_EXT)]
+        elif os.path.isfile(e) and e.lower().endswith(_IMG_EXT):
+            paths.append(e)
+    return paths[:limit]
+
+
+def _rgb_array(path):
+    im = Image.open(path)
+    if im.mode in ("RGBA", "LA", "PA") or (im.mode == "P" and "transparency" in im.info):
+        rgba = np.asarray(im.convert("RGBA"))
+        return rgba[..., :3].astype(np.int32), rgba[..., 3] > 0
+    return np.asarray(im.convert("RGB")).astype(np.int32), None
+
+
+def _segmentations(rgb, opaque):
+    """Label maps of the picture: exact colours, and colours after a 3x3 median and a 12-colour
+    quantization (removes dithering and noise). Transparent pixels get their own label."""
+    from scipy import ndimage
+    flat = rgb[..., 0] * 65536 + rgb[..., 1] * 256 + rgb[..., 2]
+    maps = [flat]
+    sm = np.stack([ndimage.median_filter(rgb[..., k], size=3) for k in range(3)], axis=2).astype(np.uint8)
+    q = np.asarray(Image.fromarray(sm, "RGB").quantize(12, method=Image.Quantize.MEDIANCUT)).astype(np.int64)
+    maps.append(q)
+    if opaque is not None:
+        maps = [np.where(opaque, m, -1) for m in maps]
+        maps.append(opaque.astype(np.int64))  # the silhouette of a sprite
+    return maps
+
+
+def _ellipse_fit_closed(filled):
+    """IoU between a filled region and the axis-aligned ellipse with its second moments, the
+    w/h ratio of that ellipse, and the tilt (None when tilted)."""
+    yy, xx = np.nonzero(filled)
+    cy, cx = yy.mean(), xx.mean()
+    vy, vx = yy.var() + 1 / 12, xx.var() + 1 / 12
+    cxy = ((yy - cy) * (xx - cx)).mean()
+    if abs(cxy) > 0.08 * math.sqrt(vx * vy):
+        return None
+    ax, ay = 2 * math.sqrt(vx), 2 * math.sqrt(vy)
+    gy, gx = np.mgrid[0:filled.shape[0], 0:filled.shape[1]]
+    ell = ((gx - cx) / ax) ** 2 + ((gy - cy) / ay) ** 2 <= 1
+    iou = (ell & filled).sum() / max(1, (ell | filled).sum())
+    return iou, ax / ay
+
+
+def _conic_fit(x, y):
+    """Least squares axis-aligned ellipse A x² + C y² + D x + E y = 1 → (cx, cy, a, b) or None."""
+    M = np.stack([x * x, y * y, x, y], axis=1)
+    try:
+        p, *_ = np.linalg.lstsq(M, np.ones_like(x), rcond=None)
+    except np.linalg.LinAlgError:
+        return None
+    A, C, D, E = p
+    if A <= 0 or C <= 0:
+        return None
+    cx, cy = -D / (2 * A), -E / (2 * C)
+    F = 1 + D * D / (4 * A) + E * E / (4 * C)
+    if F <= 0:
+        return None
+    return cx, cy, math.sqrt(F / A), math.sqrt(F / C)
+
+
+def _arc_fit(xs, ys, W, H, rng, iters=150):
+    """RANSAC: the longest elliptic arc (axis aligned) in a boundary. Returns (ratio, inliers,
+    span in degrees, a, b) or None."""
+    n = len(xs)
+    if n < 40:
+        return None
+    best = None
+    lim = 1.6 * max(W, H)
+    for _ in range(iters):
+        idx = rng.choice(n, 5, replace=False)
+        f = _conic_fit(xs[idx], ys[idx])
+        if not f:
+            continue
+        cx, cy, a, b = f
+        if not (6 <= a <= lim and 6 <= b <= lim and 0.3 <= a / b <= 4):
+            continue
+        r = np.sqrt(((xs - cx) / a) ** 2 + ((ys - cy) / b) ** 2)
+        inl = np.abs(r - 1) * min(a, b) < 0.9
+        k = int(inl.sum())
+        if best is None or k > best[0]:
+            best = (k, inl)
+    if best is None or best[0] < 40:
+        return None
+    inl = best[1]
+    f = _conic_fit(xs[inl], ys[inl])
+    if not f:
+        return None
+    cx, cy, a, b = f
+    if not (6 <= a <= lim and 6 <= b <= lim):
+        return None
+    r = np.sqrt(((xs - cx) / a) ** 2 + ((ys - cy) / b) ** 2)
+    inl = np.abs(r - 1) * min(a, b) < 0.9
+    if inl.sum() < 40:
+        return None
+    ang = np.degrees(np.arctan2((ys[inl] - cy) / b, (xs[inl] - cx) / a)) % 360
+    bins = np.zeros(36, bool)
+    bins[(ang // 10).astype(int) % 36] = True
+    span = int(bins.sum()) * 10
+    if span < 80:
+        return None
+    return a / b, int(inl.sum()), span, a, b
+
+
+def find_round_shapes(evidence, min_size=10, limit=2000, seed=0):
+    """Shapes that look round in the dump (objects, icons, backgrounds), measured on the original
+    pixels. kind: "ellipse" (filled), "ring" (with a hole), "arc" (part of a large circle cut by the
+    picture edge, e.g. a map split between rooms). ratio = width/height: a circle drawn for a
+    display that stretched pixels by s measures ≈ s; a circle seen in perspective measures more."""
+    from scipy import ndimage
+    rng = np.random.default_rng(seed)
+    found = []
+    for p in _image_paths(evidence, limit):
+        try:
+            rgb, opaque = _rgb_array(p)
+        except OSError:
+            continue
+        H, W = rgb.shape[:2]
+        if H < min_size or W < min_size:
+            continue
+        mine = []
+        for lv, lab_src in enumerate(_segmentations(rgb, opaque)):
+            vals, cnts = np.unique(lab_src, return_counts=True)
+            for v in vals[cnts >= 40]:
+                if v < 0:
+                    continue
+                lab, n = ndimage.label(lab_src == v)
+                for i, sl in enumerate(ndimage.find_objects(lab)):
+                    ys, xs = sl
+                    bh, bw = ys.stop - ys.start, xs.stop - xs.start
+                    if bh < min_size or bw < min_size or (bw >= W - 1 and bh >= H - 1):
+                        continue
+                    comp = lab[sl] == (i + 1)
+                    area = int(comp.sum())
+                    if area < 40:
+                        continue
+                    border = ys.start == 0 or xs.start == 0 or ys.stop == H or xs.stop == W
+                    if not border and bw <= 0.9 * W and bh <= 0.9 * H:
+                        filled = ndimage.binary_fill_holes(comp)
+                        fit = _ellipse_fit_closed(filled)
+                        if fit and fit[0] >= 0.9:
+                            ratio = round((fit[1] + bw / bh) / 2, 3)
+                            mine.append({"file": p, "kind": "ring" if area < 0.8 * filled.sum() else "ellipse",
+                                         "box": [int(xs.start), int(ys.start), int(bw), int(bh)], "ratio": ratio,
+                                         "quality": round(float(fit[0]), 3), "size": int(min(bw, bh))})
+                            continue
+                    if area >= 200 and max(bw, bh) >= 30:
+                        edge = comp & ~ndimage.binary_erosion(comp)
+                        ey, ex = np.nonzero(edge)
+                        ex, ey = ex + xs.start, ey + ys.start
+                        keep = (ex > 0) & (ey > 0) & (ex < W - 1) & (ey < H - 1)
+                        ex, ey = ex[keep].astype(float), ey[keep].astype(float)
+                        arc = _arc_fit(ex, ey, W, H, rng)
+                        if arc:
+                            ratio, k, span, a, b = arc
+                            mine.append({"file": p, "kind": "arc", "box": [int(xs.start), int(ys.start), int(bw), int(bh)],
+                                         "ratio": round(float(ratio), 3), "quality": round(min(1.0, span / 180), 3),
+                                         "size": int(min(a, b)), "arc_deg": span, "axes": [round(2 * a), round(2 * b)]})
+        # the same shape found at several segmentation levels counts once
+        mine.sort(key=lambda s: -s["quality"])
+        for s in mine:
+            if not any(abs(s["box"][0] - t["box"][0]) <= 2 and abs(s["box"][1] - t["box"][1]) <= 2
+                       and abs(s["box"][2] - t["box"][2]) <= 3 and abs(s["box"][3] - t["box"][3]) <= 3
+                       for t in found if t["file"] == p):
+                found.append(s)
+    # animation frames and repeated objects: identical shapes count once
+    seen, uniq = set(), []
+    for s in found:
+        k = (s["kind"], s["box"][2], s["box"][3])
+        if k not in seen:
+            seen.add(k)
+            uniq.append(s)
+    return uniq
+
+
+def estimate_from_shapes(shapes, candidates, tol=0.045):
+    """Which candidate the measured shapes support. Wider than every candidate = probably seen in
+    perspective (a round thing on the floor); taller than every candidate = not round. Weighted
+    by quality and size (small shapes are quantized)."""
+    cands = sorted(set(round(float(c), 3) for c in candidates))
+    lo, hi = min(cands) / (1 + 2 * tol), max(cands) * (1 + 2 * tol)
+    support = {c: 0.0 for c in cands}
+    count = {c: 0 for c in cands}
+    persp = narrow = 0
+    vals, wts = [], []
+    for s in shapes:
+        r = s["ratio"]
+        w = s.get("quality", 1.0) * min(1.0, s.get("size", 20) / 20)
+        if r > hi:
+            persp += 1
+            continue
+        if r < lo:
+            narrow += 1
+            continue
+        vals.append(math.log(r))
+        wts.append(w)
+        for c in cands:
+            if abs(math.log(r / c)) <= tol:
+                support[c] += w
+                count[c] += 1
+    mode = None
+    if vals:
+        v, w = np.array(vals), np.array(wts)
+        grid = np.linspace(math.log(lo), math.log(hi), 200)
+        dens = (w[None, :] * np.exp(-0.5 * ((grid[:, None] - v[None, :]) / 0.025) ** 2)).sum(axis=1)
+        mode = round(float(math.exp(grid[int(np.argmax(dens))])), 3)
+    order = sorted(cands, key=lambda c: -support[c])
+    best = order[0]
+    second = support[order[1]] if len(order) > 1 else 0.0
+    if count[best] >= 3 and support[best] >= 2.0 and support[best] >= 2 * second and \
+            (mode is None or abs(math.log(mode / best)) <= 2 * tol):
+        verdict = "agree"
+    elif len(vals) >= 3:
+        verdict = "inconclusive"
+    else:
+        verdict = "none"
+    return {"verdict": verdict, "best": best if verdict == "agree" else None, "mode": mode,
+            "shapes": len(shapes), "in_window": len(vals), "perspective_or_wide": persp, "tall": narrow,
+            "support": {str(c): round(support[c], 2) for c in cands},
+            "count": {str(c): count[c] for c in cands}}
+
+
+def _from_measures(measures, candidates, tol=0.045):
+    """Manual `aspect-measure` results (dicts or JSON files): candidates they agree with."""
+    rows = []
+    for m in measures or []:
+        if isinstance(m, str):
+            import json
+            with open(m, encoding="utf-8") as f:
+                m = json.load(f)
+        for item in (m if isinstance(m, list) else [m]):
+            r = item.get("ratio")
+            if not r:
+                continue
+            near = [c for c in candidates if abs(math.log(r / c)) <= tol]
+            rows.append({"ratio": r, "closest": min(candidates, key=lambda c: abs(c - r)),
+                         "agrees": near[0] if len(near) == 1 else None,
+                         "ellipse_fill": item.get("ellipse_fill")})
+    agreed = {x["agrees"] for x in rows if x["agrees"] is not None}
+    best = agreed.pop() if len(agreed) == 1 and all(x["agrees"] is not None for x in rows) else None
+    return {"measures": rows, "best": best,
+            "verdict": "agree" if best is not None else ("conflict" if rows else "none")}
+
+
+def aspect_auto(platform, width, height, year=None, art=None, evidence=None, measures=None,
+                sheet_out="review/aspect.png", candidates=None):
+    """Decide the pixel aspect alone when it is clear, otherwise prepare the question.
+
+    decided_by "auto": the table is sure (alta) and the measured evidence does not contradict it,
+    or the measured evidence (shapes found in the dump, manual measures) clearly agrees with a
+    candidate that the table does not contradict. decided_by "ask": medium/low confidence without
+    concordant evidence, evidence against the table, digitized art without evidence; then the
+    comparison sheet is produced to show to the user."""
+    table = pixel_aspect(platform, width, height, year, art)
+    ts = round(float(table["stretch"]), 3)
+    cands = sorted(set([1.0, ts] + [float(c) for c in (candidates or [])]))
+    shapes = find_round_shapes(evidence) if evidence else []
+    auto_ev = estimate_from_shapes(shapes, cands) if evidence else {"verdict": "none", "best": None}
+    man = _from_measures(measures, cands)
+    reasons = [f"tabella: allungamento {ts:g} (confidenza {table['confidence']}) — " + "; ".join(table["reasons"])]
+
+    # what the evidence says, manual measures first (they were taken on purpose)
+    ev_best, ev_conflict = None, False
+    if man["verdict"] == "agree":
+        ev_best = man["best"]
+        reasons.append(f"misure manuali: {len(man['measures'])}, concordi con {ev_best:g}")
+    elif man["verdict"] == "conflict":
+        ev_conflict = True
+        reasons.append("misure manuali non concordi o lontane dai candidati: " +
+                       ", ".join(f"{x['ratio']:g}" for x in man["measures"]))
+    if auto_ev["verdict"] == "agree":
+        if ev_best is not None and ev_best != auto_ev["best"]:
+            ev_conflict = True
+            reasons.append(f"forme trovate nel dump: favoriscono {auto_ev['best']:g}, le misure manuali {ev_best:g}")
+        else:
+            ev_best = auto_ev["best"]
+            reasons.append(f"forme rotonde trovate nel dump: {auto_ev['count'][str(ev_best)]} vicine a {ev_best:g} "
+                           f"(moda {auto_ev['mode']:g}) su {auto_ev['in_window']} utili; "
+                           f"{auto_ev['perspective_or_wide']} più larghe (prospettiva)")
+    elif evidence:
+        reasons.append(f"forme trovate nel dump: {auto_ev.get('shapes', 0)}, {auto_ev.get('in_window', 0)} utili: "
+                       + ("non bastano a decidere" if auto_ev["verdict"] == "none" else
+                          f"distribuzione non netta (moda {auto_ev.get('mode')}, sostegno {auto_ev.get('support')})"))
+
+    conf = table["confidence"]
+    doubts = []
+    if ev_conflict:
+        doubts.append("le prove misurate non concordano tra loro")
+    if ev_best is not None and ev_best != ts:
+        doubts.append(f"prove ({ev_best:g}) e tabella ({ts:g}) si contraddicono")
+    if ev_best is None and conf != "alta":
+        doubts.append(f"confidenza {conf} della tabella senza prove misurate concordi")
+    if art == "digitized" and ts != 1.0 and ev_best is None:
+        doubts.append("arte digitalizzata o renderizzata senza prove misurate")
+
+    if not doubts:
+        stretch = ts
+        decided_by = "auto"
+        confidence = "alta" if (ev_best == ts or conf == "alta") else conf
+    else:
+        stretch = None
+        decided_by = "ask"
+        confidence = conf if ev_best is None else "media"
+    res = {"stretch": stretch, "decided_by": decided_by, "confidence": confidence,
+           "proposed": ev_best if ev_best is not None else ts, "candidates": cands,
+           "reasons": reasons + (["dubbi: " + "; ".join(doubts)] if doubts else []),
+           "evidence": {"table": {"stretch": ts, "confidence": conf, "mode": [width, height],
+                                  "platform": table["platform"]},
+                        "shapes": {k: v for k, v in auto_ev.items()} if evidence else None,
+                        "examples": [{k: s[k] for k in ("file", "kind", "box", "ratio")}
+                                     for s in sorted(shapes, key=lambda s: -s.get("size", 0))[:8]],
+                        "measures": man["measures"]}}
+    if decided_by == "ask":
+        imgs = []
+        ranked = sorted(shapes, key=lambda s: -s.get("size", 0))
+        for s in ranked:
+            if s["file"] not in imgs:
+                imgs.append(s["file"])
+            if len(imgs) == 4:
+                break
+        if not imgs:
+            imgs = [p for p in _image_paths(evidence, 40) if Image.open(p).width >= 160][:4]
+        if imgs:
+            res["sheet"] = aspect_sheet(imgs, sheet_out, tuple(sorted({1.0, ts, res["proposed"]})))["sheet"]
+        res["ask"] = ("proporzione dei pixel: mostra il foglio di confronto e i dubbi; "
+                      "se serve, misura una forma rotonda con `widescreen aspect-measure`")
+    return res
+
+
+def record_aspect(data, res):
+    """Write the result of `aspect_auto` in remaster.json (graphics.pixel_aspect) and, when
+    automatic, a dated decision."""
+    pa = {"stretch": res["stretch"], "decided_by": res["decided_by"], "confidence": res["confidence"],
+          "reasons": res["reasons"], "evidence": res["evidence"]}
+    if res.get("sheet"):
+        pa["sheet"] = res["sheet"]
+    if res["decided_by"] == "ask":
+        pa["proposed"] = res["proposed"]
+    data.setdefault("graphics", {})["pixel_aspect"] = pa
+    if res["decided_by"] == "auto":
+        import datetime as _dt
+        data.setdefault("decisions", []).append({
+            "date": _dt.datetime.now().replace(microsecond=0).isoformat(),
+            "decision": f"proporzione dei pixel {res['stretch']:g} (automatica)",
+            "why": "; ".join(res["reasons"])})
+    return pa

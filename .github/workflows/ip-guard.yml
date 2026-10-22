@@ -18,5 +18,5 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: sudo apt-get install -y ffmpeg fonts-dejavu-core
-      - run: pip install numpy Pillow pytest
+      - run: pip install numpy Pillow scipy pytest
       - run: python -m pytest -q tools/tests

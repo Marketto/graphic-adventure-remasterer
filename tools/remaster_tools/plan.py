@@ -16,7 +16,8 @@ optional (a missing one counts as 0 or as "not present"):
                                       "closed-static": n, "open-static": n, "ui-fixed": n, "skip": n}
                                      (widescreen classify; only open sides are invented)
     screen, playfield_h              screen [w, h] and height of the play area (bar below if lower)
-    pixel_aspect                     vertical stretch decided (or proposed) for the pixels
+    pixel_aspect                     vertical stretch decided (or proposed) for the pixels; without
+                                     it remaster.json graphics.pixel_aspect (stretch, else proposed)
     layer_hooked                     true when the Remaster Layer already works with this engine
     manual_pages                     pages of the manual
     translate_languages              languages to translate into (list or number); without it the
@@ -137,7 +138,9 @@ def _stretch(counts, project):
     if isinstance(v, dict):
         v = v.get("stretch")
     if v is None and project:
-        v = ((project.get("graphics") or {}).get("pixel_aspect") or {}).get("stretch")
+        pa = (project.get("graphics") or {}).get("pixel_aspect") or {}
+        # decided (automatically or by the user), otherwise the proposal still to confirm
+        v = pa.get("stretch") if pa.get("stretch") is not None else pa.get("proposed")
     try:
         return float(v) if v is not None else 1.0
     except (TypeError, ValueError):
