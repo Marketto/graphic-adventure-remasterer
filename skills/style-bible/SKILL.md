@@ -17,6 +17,32 @@ oggi. La style bible è il riferimento vincolante per `hd-graphics` e `widescree
   somigliano o fanno parodia, moda, auto, oggetti, fotografia e pubblicità di quegli anni.
   Usali per costumi, trucco, materiali, luce e inquadratura. **Non** per copiare volti:
   il personaggio resta quello disegnato dall'autore, mai il ritratto di una persona reale.
+- **Volti dei personaggi riconoscibili** (§1b): riferimento solo l'**artwork ufficiale dello
+  stesso gioco** (copertina, scatola, manuale, schermate di primo piano, ritratti dei dialoghi),
+  per tenere i lineamenti coerenti; **mai fotografie o fotogrammi della persona reale**.
+
+## 1b. Opera d'origine (sempre, anche quando sembra di no)
+Verifica **sempre** se il gioco è tratto da un film, una serie, un cartone o un'altra opera
+cinematografica o d'animazione (gioco su licenza, tie-in, seguito ufficiale, parodia dichiarata).
+Fonti: scatola e manuale dell'utente, crediti del gioco ("basato su", "su licenza di"),
+schede di database di giochi e di film, recensioni dell'epoca. Poi:
+- **personaggi riconoscibili**: quelli che sono lo stesso personaggio dell'opera (non le
+  somiglianze generiche o le parodie, che restano riferimenti d'epoca del §1);
+- per ciascuno: **interprete originale** (attore o voce del cartone) e, per **ogni lingua di
+  destinazione** del remaster, il **doppiatore dell'edizione di quell'epoca** (quella uscita
+  più vicina all'anno del gioco; se ce ne sono due, entrambe con l'anno), con le fonti;
+  "non trovato" è una risposta valida, inventare no.
+Registra tutto nel progetto (solo nel repository privato del gioco):
+```
+rstool.py project set source_work '{"checked": true, "type": "film", "title": "...", "year": 1990,
+  "sources": ["<url>"], "characters": [{"name": "...", "performer": "...",
+  "voices": {"en": {"name": "...", "sources": ["<url>"]}, "it": {"name": "...", "year": 1991, "sources": ["<url>"]}},
+  "sources": ["<url>"], "imitate_voice": null}]}'
+```
+`type`: film, series, animation, comic, book, other. Nessuna opera d'origine:
+`project set source_work.checked true` (resta senza titolo). `rstool.py project missing`
+segnala fonti mancanti e lingue doppiate senza la voce dell'epoca. Questi dati servono al
+casting (`voice-dubbing` §2b, solo se il doppiaggio è scelto) e ai volti in HD (`hd-graphics`).
 
 ## 2. Analisi degli asset (dai file dell'utente)
 `rstool.py style analyze <cartella dump>` (dump del Layer `.raw` o PNG di un'estrazione senza
@@ -32,7 +58,8 @@ pura, digitalizzato da acquerello/foto/plastilina), prospettive, proporzioni dei
 ## 3. Scrivi `analysis/style-bible.md`
 Sezioni: Identità (3 righe) · Autori e strumenti originali · Ispirazioni (con fonti) ·
 Riferimenti d'epoca · Palette e luce · Tratto e texture · Personaggi (scheda per ciascuno:
-silhouette, colori fissi, tratti da non cambiare mai) · Cosa NON fare (es. niente
+silhouette, colori fissi, tratti da non cambiare mai; per i personaggi riconoscibili del §1b,
+l'artwork ufficiale **dello stesso gioco** da cui prendere i lineamenti) · Cosa NON fare (es. niente
 fotorealismo, niente bloom moderno, niente contorni che l'originale non ha) ·
 Livelli di intervento consentiti (vedi sotto).
 

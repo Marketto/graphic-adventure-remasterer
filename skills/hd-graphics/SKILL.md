@@ -87,6 +87,11 @@ motore che l'HD sia stato caricato: un'edizione con dimensioni diverse lo fa sca
   approvata e poi **abbandonata**: creava ombre e macchie scure. Prima di cambiare modello,
   isola quale passo della pipeline causa il difetto (prova `--no-ink`, poi senza `--model`).
 - **Si decide guardando**: 3-4 personaggi affiancati per ogni variante; poi lo stesso valore per tutto.
+- **Personaggi riconoscibili** (opera d'origine in `remaster.json` → `source_work.characters`,
+  vedi `style-bible` §1b): per i lineamenti il riferimento è l'**artwork ufficiale dello stesso
+  gioco** (copertina, scatola, manuale, primi piani e ritratti dei dialoghi), mai fotografie o
+  fotogrammi della persona reale, né come immagine guida né come LoRA. Gli attori restano un
+  riferimento d'epoca (costumi, luce), mai un modello per i volti.
 - Sprite peggiorato dall'HD → toglilo dall'indice: il motore usa l'originale.
 - Copertura: il dump vede solo i fotogrammi disegnati; ripeti `fuzz` su ogni parte finché i
   fotogrammi nuovi si azzerano.

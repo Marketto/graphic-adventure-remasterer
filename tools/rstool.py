@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from remaster_tools import (assets, audio, controls, detect, extract, falai, font, gfx, hints, keys,  # noqa: E402
                             manual, plan, platforms, project, rawframe, recipe, release, review, style,
-                            text, theme, timing, transcribe, video, voice, widescreen)
+                            text, theme, timing, transcribe, video, voice, voiceref, widescreen)
 
 
 def out(obj):
@@ -416,6 +416,17 @@ def main(argv=None):
     x = sg.add_parser("transcripts", help="confronta le trascrizioni automatiche ({chiave: testo}) col copione")
     x.add_argument("script"); x.add_argument("transcripts")
     x.set_defaults(fn=lambda a: out(voice.check_transcripts(a.script, a.transcripts)))
+    x = sg.add_parser("reference", help="misure del parlato di riferimento (solo numeri; i frammenti restano locali)")
+    x.add_argument("audio", nargs="+", help="frammenti puliti del personaggio (file o cartelle)")
+    x.add_argument("--out", required=True); x.add_argument("--start", type=float); x.add_argument("--end", type=float)
+    x.add_argument("--delete-after", action="store_true", help="cancella i frammenti dopo la misura")
+    x.set_defaults(fn=lambda a: out(voiceref.reference(a.audio, a.out, a.start, a.end, a.delete_after)))
+    x = sg.add_parser("match", help="ordina le voci esistenti della libreria per somiglianza al riferimento")
+    x.add_argument("ref"); x.add_argument("--candidates", required=True,
+                                          help="cartella di anteprime audio o voices.json (voice_id, name, file o preview_url)")
+    x.add_argument("--top", type=int, default=5); x.add_argument("--out", required=True)
+    x.add_argument("--cache", help="dove scaricare le anteprime (default: previews/ accanto a --out)")
+    x.set_defaults(fn=lambda a: out(voiceref.match(a.ref, a.candidates, a.top, a.out, a.cache)))
 
     s = g.add_parser("ui", help="interfaccia del motore nello stile del gioco")
     sg = s.add_subparsers(dest="action", required=True)

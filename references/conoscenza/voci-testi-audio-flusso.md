@@ -36,6 +36,32 @@
 - **Filtri a valle (ffmpeg) per voci "speciali"**: robot, telefono, televisore. Sono deterministici e ripetibili, e non costano crediti.
 - **Nei provini una voce mancante salta le sue battute, non blocca il lotto.**
 
+### 1.2b Personaggi di un'opera d'origine (film, serie, cartoni)
+
+- **La verifica si fa sempre**, anche quando il gioco non sembra su licenza: scatola, manuale,
+  crediti ("basato su"), schede dei database. Per ogni personaggio riconoscibile si annotano
+  l'interprete originale e, per ogni lingua di destinazione, il doppiatore dell'edizione
+  dell'epoca del gioco, con le fonti. "Non trovato" è una risposta, inventare no.
+- **La domanda sulla voce simile arriva solo dopo che il doppiaggio è scelto**, una per
+  personaggio: chiederla prima allunga la Fase 1b senza motivo.
+- **Somiglianza senza clonazione.** Si misurano pochi secondi puliti del riferimento (trailer,
+  spot, clip ufficiali dello stesso periodo) in locale: altezza mediana e variabilità in
+  semitoni, centroide e pendenza dello spettro, rapporto armoniche/rumore come ruvidità,
+  velocità d'eloquio dai picchi d'energia sillabici, quota di pause. Le stesse misure sulle
+  anteprime delle voci della libreria danno una classifica; i frammenti si cancellano subito
+  dopo e non vengono caricati da nessuna parte.
+- **Pesare ciò che i parametri non cambiano.** Altezza e timbro pesano di più nella distanza,
+  perché stabilità, stile e velocità non li spostano; velocità e pause pesano poco, perché si
+  correggono con `speed` e con la regia (punteggiatura, pause, audio tag).
+- **Le misure scelgono la rosa, l'orecchio sceglie la voce.** Le anteprime della libreria sono
+  frasi diverse da quelle del riferimento e con un'altra recitazione: la classifica serve a
+  passare da centinaia di voci a 3-5 provini, non a decidere.
+- **Riferimenti d'epoca con banda stretta.** Le copie di trailer vecchi (VHS, TV) spesso tagliano
+  sopra i 4-5 kHz: la pendenza dello spettro si misura solo fino a 4 kHz e il centroide va letto
+  con prudenza.
+- **Toni interpretativi**: dal modo di recitare nei riferimenti (ritmo, ironia, pause, attacchi)
+  si ricavano gli audio tag e le note di regia, scritti senza citare la persona.
+
 ### 1.3 Impostazioni
 
 - Modello multilingue recente (`eleven_v3`/`eleven_v4`), `language_code` italiano, similarità 0,8 per tutti.

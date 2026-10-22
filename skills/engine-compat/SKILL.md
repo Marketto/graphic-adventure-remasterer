@@ -10,7 +10,9 @@ al momento, sul web e nei file dell'utente, e resta nella cartella privata del p
 
 ## 1. Identificare il gioco e il motore
 - Ricerca web: sviluppatore, anno, piattaforme, edizioni (floppy, CD, versione parlata, demo),
-  motore usato. Annota le fonti.
+  motore usato. Annota le fonti. Se il gioco risulta **su licenza** di un film, una serie o un
+  cartone, annotalo nel report: la verifica completa dell'opera d'origine e dei personaggi
+  riconoscibili la fa `style-bible` §1b.
 - File dell'utente: `python3 ${CLAUDE_PLUGIN_ROOT}/tools/rstool.py engine detect <cartella>`
   restituisce un inventario neutro (estensioni, file più grandi, eseguibili, immagini disco,
   stringhe di copyright/versione negli eseguibili) e, se `scummvm` è installato, l'esito di

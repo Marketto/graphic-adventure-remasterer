@@ -19,6 +19,12 @@ DEFAULT = {
                "base_commit": None, "patchable": True, "smooth_controls": True,
                # True once the Remaster Layer is hooked into this engine (dump, keys, HD, viewport)
                "layer_hooked": None},
+    # the film, series or animated work the game is based on (checked in phase 1, sources cited);
+    # characters: the recognisable ones, with the original performer and, per target language,
+    # the dubbing voice of the time the game came out. imitate_voice: None = not asked yet,
+    # asked only when the dub is chosen. Data only in the private repository of the game.
+    "source_work": {"checked": False, "type": None, "title": None, "year": None, "sources": [],
+                    "characters": []},
     "existing_work": [],
     "reuse_existing_work": True,
     "graphics": {"enabled": True, "parts": ["backgrounds", "sprites", "fonts", "ui", "cursors"],
@@ -260,6 +266,7 @@ def missing_answers(data):
     an = data.get("analysis") or {}
     if not (an.get("done") and an.get("counts")):
         return ["analisi (fase 1) e stime"]
+    out += ["opera d'origine: " + p for p in source_work_problems(data)]
     g = data.get("graphics", {})
     ws = g.get("widescreen", {})
     if g.get("enabled") and ws.get("enabled") and ws.get("fal_ai") is None:
@@ -268,9 +275,50 @@ def missing_answers(data):
     if v.get("enabled") is None and needs_dub_question(data):
         out.append("doppiaggio ElevenLabs (con preventivo)")
     out += paid_followups(data)
+    ask = voice_likeness_to_ask(data)
+    if ask:
+        out.append("voce simile all'opera d'origine per: " + ", ".join(ask))
     if not out and not (data.get("plan") or {}).get("approved"):
         out.append("approvazione del piano")
     return out
+
+
+SOURCE_TYPES = ("film", "series", "animation", "comic", "book", "other")
+
+
+def new_character(name, performer=None, voices=None, sources=None):
+    """A recognisable character of the source work. voices: {lang: {"name", "year", "sources"}}
+    (the original language holds the performer, the others the dubbing voice of the time)."""
+    return {"name": name, "performer": performer, "voices": voices or {}, "sources": sources or [],
+            "imitate_voice": None}
+
+
+def source_work_problems(data):
+    """What is missing in `source_work` once it has been checked (sources above all)."""
+    sw = data.get("source_work") or {}
+    if not sw.get("checked") or not sw.get("title"):
+        return []
+    out = []
+    if sw.get("type") not in SOURCE_TYPES:
+        out.append(f"tipo dell'opera d'origine non valido ({', '.join(SOURCE_TYPES)})")
+    if not sw.get("sources"):
+        out.append("opera d'origine senza fonti")
+    langs = set((data.get("voice") or {}).get("languages") or [])
+    for c in sw.get("characters") or []:
+        if not c.get("sources"):
+            out.append(f"{c.get('name')}: senza fonti")
+        for lg in sorted(langs - set((c.get("voices") or {}).keys())):
+            out.append(f"{c.get('name')}: voce dell'epoca in «{lg}» non cercata")
+    return out
+
+
+def voice_likeness_to_ask(data):
+    """Recognisable characters still without the "similar voice" answer — only when the dub has
+    been chosen (voice.enabled true)."""
+    if not (data.get("voice") or {}).get("enabled"):
+        return []
+    sw = data.get("source_work") or {}
+    return [c.get("name") or "?" for c in sw.get("characters") or [] if c.get("imitate_voice") is None]
 
 
 def paid_followups(data):
@@ -361,6 +409,12 @@ def summary(data):
         lines.append("Audio: rimasterizzato")
     if data["voice"].get("enabled"):
         lines.append("Doppiaggio: ElevenLabs" + ("" if data["voice"].get("license_confirmed") else " (licenza da confermare)"))
+    sw = data.get("source_work") or {}
+    if sw.get("title"):
+        lines.append(f"Opera d'origine: {sw['title']} ({sw.get('type') or '?'}, {sw.get('year') or '?'})"
+                     f" · personaggi riconoscibili: {len(sw.get('characters') or [])}")
+    elif sw.get("checked"):
+        lines.append("Opera d'origine: nessuna")
     lines.append("Piattaforme: " + ", ".join(data.get("platforms", [])))
     lines.append(f"Distribuzione: {data['distribution']['mode']}")
     miss = missing_answers(data)

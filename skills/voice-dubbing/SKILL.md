@@ -61,6 +61,9 @@ stesso personaggio, oggetti parlanti, personaggi in più capitoli → stessa voc
 ## 2. Casting
 - Per ogni personaggio nuovo una scheda (età, timbro, accento voluto, ruolo comico) e
   **2-3 voci** proposte con una battuta vera del personaggio; sceglie l'utente.
+- **Personaggio riconoscibile di un film, una serie o un cartone** (`source_work.characters`) con
+  `imitate_voice` true: le candidate si scelgono misurando il riferimento (§2b); con false o
+  null si fa il casting normale dalla scheda.
 - Prima di proporre controlla la **lista nera** (`cast.json` → `scartate`, con motivo).
   Motivi tipici: riverbero (stanzino, chiesa, grotta), voce non usabile via API.
   La misura automatica del riverbero non è affidabile: proponi voci di studi professionali e
@@ -69,10 +72,52 @@ stesso personaggio, oggetti parlanti, personaggi in più capitoli → stessa voc
   (formanti -10%, altezza -15%). Altri filtri fissi per personaggio: robot, telefono.
 - Gag volute (accenti, parlate) vanno recitate, non corrette (vedi `localization`).
 
+## 2b. Voce simile all'opera d'origine (solo personaggi con `imitate_voice` true)
+Vale solo se il doppiaggio è scelto e l'utente ha detto sì per quel personaggio
+(`source_work.characters` in `remaster.json`, vedi `style-bible` §1b). Riferimento: nella lingua
+originale l'interprete, nelle altre il doppiatore dell'edizione dell'epoca del gioco.
+**Paletti fissi** (nessuna eccezione, neanche se l'utente la chiede per comodità):
+- **nessuna clonazione**, né istantanea né professionale, da quel materiale;
+- i frammenti **non si caricano mai** su ElevenLabs o su altri servizi (niente trascrizione,
+  speech-to-speech, isolamento della voce in cloud): restano in locale, nella cartella di lavoro
+  privata, e **si cancellano dopo la misura** (`--delete-after`);
+- nessun nome di persona reale nel nome della voce, in `cast.json` o nei crediti come se fosse
+  la sua voce; mai presentare la voce come quella della persona ("voce ispirata al
+  personaggio", non "voce di <nome>");
+- per la distribuzione pubblica vale la nota sulla somiglianza in
+  `references/legal-distribution.md`.
+Procedura:
+1. **Materiale di riferimento** (lo cerchi tu): trailer, spot e clip ufficiali dello stesso
+   periodo dell'opera, nella lingua o nelle lingue target; fonti ufficiali prima (canali dello
+   studio o del distributore, edizioni home video). Se la rete dell'ambiente non permette di
+   scaricarli, chiedi all'utente i file o i link da aprire lui. Annota le fonti nel progetto.
+2. **Frammenti**: 3-6 pezzi puliti di 2-8 s del solo personaggio (niente musica, effetti o altre
+   voci sopra), tagliati in locale con ffmpeg; per un tratto di un file più lungo
+   `--start`/`--end`.
+3. **Misura** (solo numeri):
+   `rstool.py voice reference <frammenti...> --out voice/ref/<personaggio>-<lingua>.json --delete-after`
+   → altezza media e variabilità (semitoni), brillantezza e pendenza dello spettro, ruvidità
+   (rapporto armoniche/rumore), velocità d'eloquio, quota e durata delle pause.
+4. **Candidati**: voci **esistenti** della libreria ElevenLabs coerenti con età, genere e lingua
+   (connettore `creative_list_voices` o API della Voice Library), con le loro anteprime; salvale
+   come `voices.json` (`voice_id`, `name`, `file` o `preview_url`) o in una cartella.
+   `rstool.py voice match voice/ref/<...>.json --candidates voices.json --top 5 --out voice/ref/<...>-shortlist.json`
+   ordina per distanza pesata (pesi in `tools/remaster_tools/voiceref.py`: altezza e timbro
+   contano di più perché i parametri non li cambiano; velocità e pause di meno perché si
+   correggono con `speed` e con la regia) e propone le impostazioni di partenza (`speed` dal
+   rapporto delle velocità, stabilità più bassa e stile più alto se il riferimento è più mosso,
+   note su timbro e pause).
+5. **Raffina** sulle 2-3 migliori: stability, similarity, style, speed (§0 per i limiti) e
+   **toni interpretativi** dal modo di recitare nei riferimenti (ritmo, ironia, pause, attacchi),
+   scritti come audio tag e note di regia in `voice/regia.json` (§3), mai citando la persona.
+6. **Provini** come al §2: 2-3 voci con una battuta vera, sceglie l'utente; solo voci della
+   libreria, nessuna voce progettata "a somiglianza" con Voice Design partendo dal materiale.
+
 ## 3. Regia
 - Un **audio tag** in inglese per personaggio (es. `[cocky, ironic]`), quello del provino
   approvato, adattato alla scena quando serve; scelto dal contesto, **non copiato** dal doppiaggio
-  originale. Salva in `voice/regia.json`.
+  originale (per i personaggi del §2b i toni vengono dai riferimenti dell'opera d'origine,
+  descritti senza citare la persona). Salva in `voice/regia.json`.
 - **Testo recitato ≠ sottotitolo** dove la sintesi sbaglierebbe: sigle ("ONU" → "o enne u", "TV" → "tivù"), simboli ("Rossi & Figli" → "Rossi e Figli"),
   numeri, codici ("007" → "zero zero sette"), ore, numeri romani, unità, nomi stranieri in grafia
 fonetica, parole tutte maiuscole (la sintesi le compita); punteggiatura pensata per

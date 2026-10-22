@@ -113,6 +113,9 @@ Nessuna domanda all'utente: si verifica tutto. Lancia in parallelo (in backgroun
 - `style-analyst` (skill `style-bible`): stile, palette, autori, ispirazioni, riferimenti
   dell'epoca, `analysis/style-bible.md` e prompt di stile (gli attori servono come riferimento
   di look/epoca/illuminazione, **mai** per dare a un personaggio il volto di una persona reale);
+  **opera d'origine sempre verificata** (film, serie, animazione: `style-bible` §1b) con i
+  personaggi riconoscibili, l'interprete originale e il doppiatore dell'epoca per ogni lingua di
+  destinazione, fonti citate, in `source_work` di `remaster.json`;
 - `widescreen-planner` (skill `widescreen`): **proporzione dei pixel** (data di uscita,
   piattaforma, monitor dell'epoca; foglio di confronto solo se non sono pixel quadrati) e
   **classificazione 16:9** (`rstool.py widescreen classify ... --par <allungamento deciso>`):
@@ -140,7 +143,12 @@ Una schermata, solo se servono (`rstool.py project missing` le elenca solo a sti
   necessario; serve un account con **licenza commerciale** (`voice.license_confirmed`), il piano
   gratuito non usa la Voice Library via API; niente cloni di doppiatori reali; si procede un
   capitolo alla volta → `voice.enabled` true/false;
-- se almeno uno è sì: **tetto di spesa** totale (`budget.cap_usd`, `budget.cap_credits`).
+- se almeno uno è sì: **tetto di spesa** totale (`budget.cap_usd`, `budget.cap_credits`);
+- solo se il doppiaggio è sì e `source_work.characters` non è vuoto: per **ogni personaggio
+  riconoscibile**, «voce il più simile possibile a quella dell'opera d'origine?» (nella lingua
+  originale l'interprete, nelle altre il doppiatore dell'epoca) → `imitate_voice` true/false
+  (`project missing` lo chiede finché è null). Il sì significa: si scelgono e regolano voci
+  **esistenti** della libreria ElevenLabs, nessuna clonazione (`voice-dubbing` §2b).
 Nella stessa schermata, solo se l'analisi non l'ha trovato tra i file: la copia del **manuale**
 (PDF o foto) per il manuale nel remaster.
 Registra ogni risposta con `rstool.py project set <chiave> <valore>` e in `decisions[]`. Ogni
