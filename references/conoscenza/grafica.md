@@ -50,7 +50,7 @@ Scelta:
 **Regola generalizzata per la suite (decisa con l'utente, 21/10/2026).** Si parte sempre dalle
 tecniche locali collaudate qui (§4.2 LaMa a 1x, §4.3 quilting, §4.7 ricette, §4.9 nitidezza) e
 l'outpainting a pagamento (§4.5) si usa **solo se l'utente lo sceglie**, chiedendolo
-nell'intervista, con preventivo e approvazione per ogni lotto. Nel banco di prova fal.ai è
+dopo l'analisi, con preventivo e approvazione per ogni lotto. Nel banco di prova fal.ai è
 stato scelto per molte stanze; in un nuovo progetto è un'opzione, non il default.
 
 **Proporzione dei pixel.** Il banco di prova mostra i pixel quadrati (36 px per lato a 640x400)

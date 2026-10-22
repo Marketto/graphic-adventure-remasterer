@@ -1,7 +1,7 @@
 # graphic-adventure-remasterer
 
 Suite agentica (plugin per Claude Code + app con Claude Agent SDK) per il remaster HD delle
-avventure grafiche 2D uscite fino alla fine degli anni '90. Ti intervista, verifica il supporto
+avventure grafiche 2D uscite fino alla fine degli anni '90. Ti chiede titolo, file e lingua, verifica il supporto
 del motore in ScummVM o in altri interpreti open source, ricava lo stile del gioco, rifà
 grafica, testi, audio e voci, e produce eseguibili e una patch distribuibile che richiede la
 copia originale del giocatore. Un tasto (F8) passa in ogni momento dalla versione originale a
@@ -29,13 +29,17 @@ Variabili: `ANTHROPIC_API_KEY` (o login del CLI), `ELEVENLABS_API_KEY` per il do
 `FAL_KEY` per l'outpainting a pagamento, `COMFYUI_URL` se usi ComfyUI in locale.
 
 ## Il flusso
-1. **Intervista**: titolo → compatibilità del motore → riuso del lavoro esistente → grafica
-   (fondali, sprite, testi; 16:9 con tecniche locali, fal.ai solo se lo scegli; framerate) →
-   lingue (verifica, traduzione) → audio → doppiaggio ElevenLabs (licenza) → manuale e aiuti →
-   piattaforme e distribuzione → file di gioco dell'utente.
-2. **Analisi**: style bible, inventario degli asset, piattaforma di riferimento e proporzione
-   dei pixel (solo se il gioco era pensato per pixel non quadrati), classificazione delle scene
-   per il 16:9, piano con stime di tempo e costi → conferma.
+1. **Avvio**: titolo, file del gioco, lingua dell'utente. Tutto ciò che è gratuito è incluso di
+   default (grafica HD, 16:9 con metodi locali, framerate, audio, restauro delle voci originali,
+   manuale e aiuti, tema GUI, controlli fluidi, motore patchabile, build per tutte le
+   piattaforme, distribuzione a ricette) e, se il gioco non c'è nella tua lingua, la traduzione.
+2. **Analisi gratuita**: compatibilità, lavoro esistente, lingue e voci esistenti per lingua,
+   inventario, proporzione dei pixel, classificazione delle scene per il 16:9, conteggi e stime
+   (`plan estimate`). Poi **solo le domande a pagamento con il costo stimato** (fal.ai per le
+   bande, ElevenLabs se il doppiaggio nella tua lingua non esiste, tetto di spesa) e il **piano
+   in tabella** (emoji, agente, dipendenze, tempi, costi, token: `plan table`) da approvare o
+   sfoltire. Il lavoro procede a pacchetti in sotto-sessioni parallele sotto 200k token,
+   monitorate dalla sessione principale (`plan status`), che resta libera per darti lo stato.
 3. **Motore**: fork di ScummVM + Remaster Layer, gioco completabile, motore che accetta patch su
    testi, voci e immagini, tempi calibrati sull'originale nell'emulatore o nella VM della sua
    piattaforma (DOSBox, VM Windows d'epoca, Wine...), controlli fluidi, interfaccia nello stile
@@ -52,7 +56,7 @@ Variabili: `ANTHROPIC_API_KEY` (o login del CLI), `ELEVENLABS_API_KEY` per il do
 | `skills/` | orchestratore + 10 skill (motore, style bible, grafica HD, 16:9, localizzazione, audio, doppiaggio, integrazione nel motore, manuale e aiuti, rilascio) |
 | `agents/` | 10 subagenti specializzati, tra cui un QA indipendente e un revisore |
 | `commands/remaster.md` | comando `/remaster` |
-| `tools/rstool.py` | pipeline a riga di comando: progetto (con tetto e registro delle spese), rilevamento, emulatore di riferimento, misura dei tempi, fluidità dei controlli, chiavi e copertura degli asset, pacchetto canary, stile, grafica (upscaler APISR/Real-ESRGAN su CPU, sprite con contorno e inchiostro), filmati, font, proporzione dei pixel, 16:9 (LaMa, quilting, ricette, controlli, fal.ai opzionale), gallerie di revisione e regressione visiva, testi, audio (gruppi e mix, restauro del parlato originale), voci (trascrizione locale), tema GUI, aiuti, manuale, ricette (esempio in `references/recipe.example.json`), rilascio e peso del pacchetto |
+| `tools/rstool.py` | pipeline a riga di comando: progetto (con tetto e registro delle spese e dei pacchetti di lavoro), piano (stime di tempi, costi e token, pacchetti per sotto-sessioni, tabella, stato), rilevamento, emulatore di riferimento, misura dei tempi, fluidità dei controlli, chiavi e copertura degli asset, pacchetto canary, stile, grafica (upscaler APISR/Real-ESRGAN su CPU, sprite con contorno e inchiostro), filmati, font, proporzione dei pixel, 16:9 (LaMa, quilting, ricette, controlli, fal.ai opzionale), gallerie di revisione e regressione visiva, testi, audio (gruppi e mix, restauro del parlato originale), voci (trascrizione locale), tema GUI, aiuti, manuale, ricette (esempio in `references/recipe.example.json`), rilascio e peso del pacchetto |
 | `tools/ip_guard.py` | controllo che il repository resti privo di contenuti e riferimenti a giochi |
 | `engine/scummvm-remaster-layer/` | patch per ScummVM (`engines/remaster/`) + guida di integrazione |
 | `ci/` | workflow GitHub Actions multipiattaforma, librerie Android, build locale |

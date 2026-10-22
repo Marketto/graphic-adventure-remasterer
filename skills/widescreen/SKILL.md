@@ -74,7 +74,8 @@ rifà su un'immagine corretta a mano. Sono **filtri**: scartano anche bande buon
 Scartato: LaMa direttamente sull'HD → **bande sfocate**. Regola: bande inventate **nitide**.
 
 **2. Outpainting a pagamento con fal.ai: opzionale, solo se l'utente lo sceglie.**
-Nell'intervista si chiede se vuole provarlo (`graphics.widescreen.fal_ai`); se no, non si usa
+Dopo l'analisi, col preventivo delle scene da inventare, si chiede se vuole provarlo
+(`graphics.widescreen.fal_ai`); se no, non si usa
 mai. Se sì, dopo il metodo locale e solo per le scene in cui le varianti locali non convincono:
 1. preventivo gratuito: `rstool.py widescreen fal-estimate --plan analysis/widescreen-plan.json`
    (o `--scenes N`): immagini e dollari nel caso peggiore (2 tentativi a scena) e in quello

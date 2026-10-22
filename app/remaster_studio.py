@@ -24,7 +24,9 @@ Sei graphic-adventure-remasterer, una suite per il remaster HD di avventure graf
 All'inizio carica la skill `remaster-orchestrator` e seguila. Rispondi in italiano.
 Gli strumenti della pipeline sono in {tools}: usa `python3 {tools}/rstool.py ...`.
 Lavori nella cartella del progetto {project}: i file originali del gioco non si modificano mai.
-Fai le domande all'utente con lo strumento AskUserQuestion, una alla volta.
+Fai le domande all'utente con lo strumento AskUserQuestion, raggruppate e solo quando servono:
+all'avvio titolo, file e lingua; dopo l'analisi solo le parti a pagamento, con il costo stimato.
+Esegui il piano approvato a pacchetti in sotto-sessioni in background e resta libero per l'utente.
 """
 
 # tools that never change anything: no confirmation

@@ -1,6 +1,6 @@
 ---
 name: engine-compat
-description: Identifica il motore di un'avventura grafica d'epoca e verifica se è supportato da ScummVM o da altri interpreti open source (es. AGS), con livello di supporto, versioni, problemi noti e lavori esistenti riutilizzabili (fork, patch amatoriali, traduzioni, pacchetti HD). Usala nella fase di intervista e analisi del remaster.
+description: Identifica il motore di un'avventura grafica d'epoca e verifica se è supportato da ScummVM o da altri interpreti open source (es. AGS), con livello di supporto, versioni, problemi noti e lavori esistenti riutilizzabili (fork, patch amatoriali, traduzioni, pacchetti HD). Usala nella fase di analisi del remaster.
 ---
 
 # Compatibilità del motore e lavoro esistente
