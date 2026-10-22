@@ -12,7 +12,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from remaster_tools import (assets, audio, controls, detect, extract, falai, font, gfx, hints, keys,  # noqa: E402
+from remaster_tools import (assets, audio, audio_midi, audio_sf2, controls, detect, extract, falai, font, gfx, hints, keys,  # noqa: E402
                             manual, plan, platforms, project, rawframe, recipe, release, review, style,
                             text, theme, timing, transcribe, video, voice, voiceref, voiceseg,
                             widescreen)
@@ -408,6 +408,33 @@ def main(argv=None):
     x.add_argument("--default-rate", type=int, default=11025); x.add_argument("--raw-format", default="u8")
     x.add_argument("--lossless", action="store_true", help="FLAC da livellare poi con normalize + mix")
     x.set_defaults(fn=lambda a: out(audio.sfx_batch(a.dir, a.out, a.rates, a.default_rate, a.raw_format, lossless=a.lossless)))
+    x = sg.add_parser("midi-diagnose", help="musica MIDI dinamica: note e programmi per canale, confronto tra "
+                                            "versioni, distribuzione dell'energia per bande")
+    x.add_argument("midi", nargs="*", help="uno o più .mid (versioni dello stesso brano per --compare)")
+    x.add_argument("--table", help="JSON: tabella di conversione dei programmi del motore (128 voci o {src: gm})")
+    x.add_argument("--fixes", help='JSON {gm: gm}: correzioni da provare dopo la tabella')
+    x.add_argument("--compare", action="store_true", help="confronta le note per canale col primo MIDI")
+    x.add_argument("--audio", nargs="*", default=[], help="rendering o registrazioni dal motore da misurare per bande")
+    x.add_argument("--start", type=float, default=0.0); x.add_argument("--duration", type=float, default=30.0)
+    x.set_defaults(fn=lambda a: out(_friendly(audio_midi.diagnose, a.midi, a.table, _json(a.fixes) if a.fixes else None,
+                                              a.audio, a.compare, a.start, a.duration)))
+    x = sg.add_parser("midi-remap", help="riscrive un MIDI come lo suona il motore su un sintetizzatore GM "
+                                         "(solo per prove d'ascolto)")
+    x.add_argument("src"); x.add_argument("dst"); x.add_argument("--table", required=True)
+    x.add_argument("--fixes"); x.add_argument("--keep-sysex", action="store_true")
+    x.add_argument("--reverb-send", type=int, help="CC91 su ogni canale all'inizio (mandata del riverbero del motore)")
+    x.set_defaults(fn=lambda a: out(_friendly(audio_midi.remap, a.src, a.dst, a.table,
+                                              _json(a.fixes) if a.fixes else None, not a.keep_sysex, a.reverb_send)))
+    x = sg.add_parser("bands", help="baricentro, energia per bande, ottave gravi e nota dominante di registrazioni")
+    x.add_argument("files", nargs="+"); x.add_argument("--start", type=float, default=0.0)
+    x.add_argument("--duration", type=float, default=30.0)
+    x.set_defaults(fn=lambda a: out([_friendly(audio_midi.bands, f, a.start, a.duration) for f in a.files]))
+    x = sg.add_parser("sf2-compose", help="SoundFont composito da ricetta JSON (strategia orchestra)")
+    x.add_argument("recipe"); x.add_argument("--out", required=True)
+    x.set_defaults(fn=lambda a: out(_friendly(audio_sf2.compose, a.recipe, a.out)))
+    x = sg.add_parser("sf2-info", help="versione (sf2/sf3), campioni e preset di un SoundFont")
+    x.add_argument("soundfont")
+    x.set_defaults(fn=lambda a: out(_friendly(audio_sf2.info, a.soundfont)))
     x = sg.add_parser("restore-speech", help="restauro del parlato ORIGINALE (giochi già parlati): FLAC da livellare poi")
     x.add_argument("dir"); x.add_argument("--out", default="audio/clean/voice")
     x.add_argument("--model", choices=["deepfilternet"], help="modello locale di pulizia della voce, se installato")
