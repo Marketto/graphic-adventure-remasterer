@@ -9,5 +9,9 @@ Verifica online lo stato di supporto (non fidarti della memoria), cita gli URL.
 Non scaricare mai file di gioco da siti terzi. Lavora su copie dei file dell'utente.
 Indica anche piattaforma e anno dell'edizione dell'utente e l'emulatore o la VM di riferimento
 (`rstool.py engine reference --platform ...`). Rispondi con: motore, supporto (A/B/C), versioni,
-piattaforma di riferimento, lavoro riutilizzabile con licenza, percorso del report
-`analysis/engine-report.md`.
+piattaforma di riferimento, lavoro riutilizzabile con licenza, **lingue** (ufficiali e
+traduzioni amatoriali riusabili) e **voci esistenti per lingua** (doppiaggi ufficiali o
+amatoriali), conteggi dell'inventario per `analysis/conti.json` (fondali e pixel, fotogrammi
+di sprite, righe e caratteri di testo, battute e caratteri parlati, brani, effetti, pagine del
+manuale), percorso del report `analysis/engine-report.md`. Se lavori come pacchetto in
+background, riporta anche i token usati.

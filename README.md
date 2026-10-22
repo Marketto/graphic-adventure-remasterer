@@ -1,7 +1,7 @@
 # graphic-adventure-remasterer
 
 Suite agentica (plugin per Claude Code + app con Claude Agent SDK) per il remaster HD delle
-avventure grafiche 2D uscite fino alla fine degli anni '90. Ti intervista, verifica il supporto
+avventure grafiche 2D uscite fino alla fine degli anni '90. Ti chiede titolo, file e lingua, verifica il supporto
 del motore in ScummVM o in altri interpreti open source, ricava lo stile del gioco, rifà
 grafica, testi, audio e voci, e produce eseguibili e una patch distribuibile che richiede la
 copia originale del giocatore. Un tasto (F8) passa in ogni momento dalla versione originale a
@@ -29,13 +29,23 @@ Variabili: `ANTHROPIC_API_KEY` (o login del CLI), `ELEVENLABS_API_KEY` per il do
 `FAL_KEY` per l'outpainting a pagamento, `COMFYUI_URL` se usi ComfyUI in locale.
 
 ## Il flusso
-1. **Intervista**: titolo → compatibilità del motore → riuso del lavoro esistente → grafica
-   (fondali, sprite, testi; 16:9 con tecniche locali, fal.ai solo se lo scegli; framerate) →
-   lingue (verifica, traduzione) → audio → doppiaggio ElevenLabs (licenza) → manuale e aiuti →
-   piattaforme e distribuzione → file di gioco dell'utente.
-2. **Analisi**: style bible, inventario degli asset, piattaforma di riferimento e proporzione
-   dei pixel (solo se il gioco era pensato per pixel non quadrati), classificazione delle scene
-   per il 16:9, piano con stime di tempo e costi → conferma.
+1. **Avvio**: titolo, file del gioco, lingua dell'utente. Tutto ciò che è gratuito è incluso di
+   default (grafica HD, 16:9 con metodi locali, framerate, audio, restauro delle voci originali,
+   manuale e aiuti, tema GUI, controlli fluidi, motore patchabile, build per tutte le
+   piattaforme, distribuzione a ricette) e, se il gioco non c'è nella tua lingua, la traduzione.
+2. **Analisi gratuita**: compatibilità, provenienza dei file (avviso sui collegamenti a siti di
+   terze parti), lavoro esistente, lingue e voci esistenti per la tua edizione, estrazione
+   (dal Layer, o senza Layer con un adattatore del repository privato: `engine extract`),
+   inventario, proporzione dei pixel (anche misurata su una forma rotonda: `widescreen
+   aspect-measure`), classificazione delle scene per il 16:9, conteggi e stime
+   (`plan estimate`). Poi **solo le domande a pagamento con il costo stimato** (fal.ai per le
+   bande, ElevenLabs se il doppiaggio nella tua lingua non esiste, tetto di spesa; se il gioco è
+   tratto da un film, una serie o un cartone, per ogni personaggio riconoscibile se vuoi una voce
+   simile a quella dell'opera, ottenuta scegliendo e regolando voci esistenti della libreria,
+   senza cloni) e il **piano
+   in tabella** (emoji, agente, dipendenze, tempi, costi, token: `plan table`) da approvare o
+   sfoltire. Il lavoro procede a pacchetti in sotto-sessioni parallele sotto 200k token,
+   monitorate dalla sessione principale (`plan status`), che resta libera per darti lo stato.
 3. **Motore**: fork di ScummVM + Remaster Layer, gioco completabile, motore che accetta patch su
    testi, voci e immagini, tempi calibrati sull'originale nell'emulatore o nella VM della sua
    piattaforma (DOSBox, VM Windows d'epoca, Wine...), controlli fluidi, interfaccia nello stile
@@ -52,7 +62,7 @@ Variabili: `ANTHROPIC_API_KEY` (o login del CLI), `ELEVENLABS_API_KEY` per il do
 | `skills/` | orchestratore + 10 skill (motore, style bible, grafica HD, 16:9, localizzazione, audio, doppiaggio, integrazione nel motore, manuale e aiuti, rilascio) |
 | `agents/` | 10 subagenti specializzati, tra cui un QA indipendente e un revisore |
 | `commands/remaster.md` | comando `/remaster` |
-| `tools/rstool.py` | pipeline a riga di comando: progetto (con tetto e registro delle spese), rilevamento, emulatore di riferimento, misura dei tempi, fluidità dei controlli, chiavi e copertura degli asset, pacchetto canary, stile, grafica (upscaler APISR/Real-ESRGAN su CPU, sprite con contorno e inchiostro), filmati, font, proporzione dei pixel, 16:9 (LaMa, quilting, ricette, controlli, fal.ai opzionale), gallerie di revisione e regressione visiva, testi, audio (gruppi e mix, restauro del parlato originale), voci (trascrizione locale), tema GUI, aiuti, manuale, ricette (esempio in `references/recipe.example.json`), rilascio e peso del pacchetto |
+| `tools/rstool.py` | pipeline a riga di comando: progetto (con tetto e registro delle spese e dei pacchetti di lavoro), piano (stime di tempi, costi e token, pacchetti per sotto-sessioni, tabella, stato), rilevamento (con avviso sui collegamenti a siti di terze parti), estrazione senza Layer con adattatore e validazione del dump, emulatore di riferimento, misura dei tempi, fluidità dei controlli, chiavi e copertura degli asset, pacchetto canary, stile, grafica (upscaler APISR/Real-ESRGAN su CPU, sprite con contorno e inchiostro), filmati, font, proporzione dei pixel (candidata e misurata), 16:9 (classificatore con nomi delle stanze e lati aperti/chiusi, LaMa, quilting, ricette, controlli, fal.ai opzionale), gallerie di revisione e regressione visiva, testi, audio (gruppi e mix, restauro del parlato originale, brani ed effetti tra i MIDI), voci (stima sui testi unici, trascrizione locale, misure di un parlato di riferimento e classifica delle voci esistenti più simili: `voice reference`, `voice match`), tema GUI, aiuti, manuale (con OCR dei PDF scansionati), ricette (esempio in `references/recipe.example.json`), rilascio e peso del pacchetto |
 | `tools/ip_guard.py` | controllo che il repository resti privo di contenuti e riferimenti a giochi |
 | `engine/scummvm-remaster-layer/` | patch per ScummVM (`engines/remaster/`) + guida di integrazione |
 | `ci/` | workflow GitHub Actions multipiattaforma, librerie Android, build locale |
@@ -64,7 +74,7 @@ Variabili: `ANTHROPIC_API_KEY` (o login del CLI), `ELEVENLABS_API_KEY` per il do
 |---|---|
 | `references/conoscenza/motore-e-test.md` | motore e contenuto separati, renderer HD, sprite via buffer di id, testo HD, 16:9 con sprite e zone nelle bande, scorrimento fluido, tempi misurati sull'emulatore della piattaforma (DOSBox nel banco di prova), input moderno e fluidità dei controlli, salvataggi con miniature, aiuti in gioco, driver di test e casi di regressione, pagina web che si aggiorna da sola, versioni |
 | `references/conoscenza/grafica.md` | confronto degli upscaler (APISR, Real-ESRGAN...), pipeline dei fondali, bande 16:9 (LaMa a 1x, quilting, FLUX Fill via fal.ai, ricette locali), controlli e costi, insegne e firme inventate, sprite e font |
-| `references/conoscenza/voci-testi-audio-flusso.md` | doppiaggio ElevenLabs (chi parla, cast, regia, testo detto, pause, crediti, lotti in CI, verifica), correzione dei testi, normalizzazione per gruppo e mix, flusso con agenti (router, revisore, hook, PR, rilasci, spese) |
+| `references/conoscenza/voci-testi-audio-flusso.md` | doppiaggio ElevenLabs (chi parla, cast, voce simile ai personaggi di un'opera d'origine senza cloni, regia, testo detto, pause, crediti, lotti in CI, verifica), correzione dei testi, normalizzazione per gruppo e mix, flusso con agenti (router, revisore, hook, PR, rilasci, spese) |
 
 ## Requisiti sul tuo PC
 Python 3.10+ con `numpy` e `Pillow`; `ffmpeg`; `git` e toolchain C++ per ScummVM.
@@ -81,18 +91,22 @@ voci, DeepFilterNet per il restauro del parlato originale.
 ## Stato delle verifiche
 - `tools/`: test automatici su dati sintetici (`python -m pytest tools/tests`), tutti verdi; un
   test controlla anche che skill, agenti e documenti citino solo comandi, opzioni e file esistenti.
-- Remaster Layer: si applica su ScummVM `5d13ee16`, compila, collega, 411/411 test di `make test`
-  verdi (5 nuovi: chiavi, composizione, 16:9/mouse, scorrimento sub-pixel, fondali localizzati).
+- Remaster Layer: si applica su ScummVM `5d13ee16`, compila, collega, 415/415 test di `make test`
+  verdi (9 nuovi: chiavi, composizione, 16:9/mouse, scorrimento sub-pixel, fondali localizzati,
+  allungamento per pixel non quadrati: dimensioni e 16:9, righe filtrate, mouse, pixel quadrati
+  invariati).
 - Build Linux in modalità release verificata; Windows, macOS, Web e Android da provare al primo
   giro di CI.
+- Prima prova reale della Fase 1 su un secondo gioco (un'avventura del 1993 a 320x200, senza
+  Layer): estrazione con adattatore, inventario, stile, piano e classificazione 16:9 tarata sulle
+  sue 96 scene etichettate a mano (classi giuste dal 64% all'86%, decisione "inventare o no"
+  dal 74% al 96%, `references/conoscenza/grafica.md` §4.11).
 - Non ancora provati con questo codice su un gioco vero: generazione grafica, ElevenLabs via API,
-  fal.ai via API (il client è provato solo con un servizio finto), classificazione 16:9 (le
-  soglie vanno tarate sul primo gioco).
+  fal.ai via API (il client è provato solo con un servizio finto).
 - Tema GUI: generato dal tema di ScummVM dello stesso commit e caricato nel ScummVM compilato
   sotto Xvfb, con colori, font e logo sostituiti (schermata verificata).
-- Da implementare nel Layer comune: la scala verticale per i giochi pensati per pixel non
-  quadrati (oggi `pixelAspect` cambia solo la geometria 16:9) e i comandi `inputlog`,
-  `mousepath`, `keyhold` del driver di test, che vanno scritti nel motore di ogni gioco. Le tecniche in
+- Da implementare per ogni gioco: i comandi `inputlog`, `mousepath`, `keyhold` del driver di
+  test, che vanno scritti nel motore del gioco. Le tecniche in
   `references/conoscenza/` invece sono state usate in produzione sul banco di prova.
 
 ## Repository pubblico: regole
@@ -111,6 +125,10 @@ voci, DeepFilterNet per il restauro del parlato originale.
 - I file del gioco originale non si distribuiscono mai; l'installer verifica la copia del giocatore.
 - Asset HD, traduzioni e voci sono opere derivate: per pubblicarli serve il permesso del titolare
   dei diritti, altrimenti si usa la modalità `recipe` (vedi `references/legal-distribution.md`).
+- Lo scopo sono patch HD non ufficiali, senza scopo di lucro e lecite. Per i personaggi di un
+  film, una serie o un cartone: voce simile solo scegliendo e regolando voci esistenti (nessuna
+  clonazione, il materiale di riferimento resta locale e si cancella dopo la misura), volti dal
+  solo artwork ufficiale del gioco, mai da foto della persona reale.
 - ScummVM vieta la co-autorialità AI e gli asset generati con AI nel progetto ufficiale: il fork usa
   `Assisted-by:` e nulla viene proposto upstream senza la tua revisione.
 

@@ -1,7 +1,10 @@
-"""Inventory of a Remaster Layer dump (bg/, spr/, text dump, midi/), with work estimates."""
+"""Inventory of a dump (bg/, spr/, text.jsonl, midi/) of the Remaster Layer (.raw) or of an
+extraction without the Layer (PNG), with work estimates."""
 import csv
 import json
 import os
+
+from PIL import Image
 
 from . import rawframe
 
@@ -10,40 +13,59 @@ def inventory(dump_dir, out_csv):
     rows = []
     bg = os.path.join(dump_dir, "bg")
     spr = os.path.join(dump_dir, "spr")
-    if os.path.isdir(bg):
-        for name in sorted(os.listdir(bg)):
-            p = os.path.join(bg, name)
+    def frames(d):
+        names = sorted(os.listdir(d))
+        raws = {n[:-4] for n in names if n.endswith(".raw")}
+        for name in names:
+            p = os.path.join(d, name)
             if name.endswith(".raw"):
                 fr = rawframe.read_raw(p)
-                rows.append({"type": "bg", "key": name[:-4], "w": fr.w, "h": fr.h, "uses": ""})
+                yield fr.key or name[:-4], fr.w, fr.h
+            elif name.lower().endswith(".png") and name[:-4] not in raws:
+                with Image.open(p) as im:
+                    yield name[:-4], im.size[0], im.size[1]
+    if os.path.isdir(bg):
+        for key, w, h in frames(bg):
+            rows.append({"type": "bg", "key": key, "w": w, "h": h, "uses": ""})
     uses = {}
     usage = os.path.join(spr, "usage.json")  # optional: {key: times drawn} from the Layer
     if os.path.exists(usage):
         with open(usage) as f:
             uses = json.load(f)
     if os.path.isdir(spr):
-        for name in sorted(os.listdir(spr)):
-            if name.endswith(".raw"):
-                fr = rawframe.read_raw(os.path.join(spr, name))
-                rows.append({"type": "spr", "key": fr.key, "w": fr.w, "h": fr.h, "uses": uses.get(fr.key, "")})
+        for key, w, h in frames(spr):
+            rows.append({"type": "spr", "key": key, "w": w, "h": h, "uses": uses.get(key, "")})
     rows.sort(key=lambda r: (r["type"], -(int(r["uses"]) if str(r["uses"]).isdigit() else 0), r["key"]))
     os.makedirs(os.path.dirname(os.path.abspath(out_csv)), exist_ok=True)
     with open(out_csv, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=["type", "key", "w", "h", "uses"])
         w.writeheader()
         w.writerows(rows)
-    text_lines = 0
+    text_lines, text_rows = 0, 0
     tdump = os.path.join(dump_dir, "text.jsonl")
     if os.path.exists(tdump):
+        seen = set()
         with open(tdump, encoding="utf-8") as f:
-            text_lines = len({line for line in f if line.strip()})
+            for line in f:
+                if not line.strip():
+                    continue
+                text_rows += 1
+                try:
+                    seen.add(json.loads(line).get("hex") or line.strip())
+                except (ValueError, AttributeError):
+                    seen.add(line.strip())
+        text_lines = len(seen)   # unique texts (like `text catalog`): rows repeat with extra fields
     midi = os.path.join(dump_dir, "midi")
+    from . import style
+    n_index = style.sprite_count(spr) if os.path.isdir(spr) else None
     return {
         "backgrounds": sum(1 for r in rows if r["type"] == "bg"),
-        "sprite_frames": sum(1 for r in rows if r["type"] == "spr"),
+        "sprite_frames": n_index if n_index is not None else sum(1 for r in rows if r["type"] == "spr"),
         "sprite_pixels": sum(r["w"] * r["h"] for r in rows if r["type"] == "spr"),
         "text_lines": text_lines,
-        "midi_files": len(os.listdir(midi)) if os.path.isdir(midi) else 0,
+        "text_rows": text_rows,
+        "midi_files": (sum(1 for n in os.listdir(midi) if n.lower().endswith((".mid", ".midi")))
+                       if os.path.isdir(midi) else 0),
         "csv": out_csv,
     }
 

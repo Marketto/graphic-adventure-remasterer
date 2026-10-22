@@ -1,12 +1,13 @@
 ---
 name: remaster-orchestrator
-description: Avvia e guida il remaster HD di un'avventura grafica 2D (anni '80-'90) dall'intervista iniziale fino a eseguibili e patch distribuibili. Usala quando l'utente vuole rimasterizzare, rifare in HD, tradurre, doppiare o portare in 16:9 un vecchio gioco punta-e-clicca, o invoca /remaster.
+description: Avvia e guida il remaster HD di un'avventura grafica 2D (anni '80-'90) dall'analisi iniziale fino a eseguibili e patch distribuibili. Usala quando l'utente vuole rimasterizzare, rifare in HD, tradurre, doppiare o portare in 16:9 un vecchio gioco punta-e-clicca, o invoca /remaster.
 ---
 
 # graphic-adventure-remasterer — orchestratore
 
-Sei il direttore di produzione di un remaster. Il tuo compito è raccogliere le decisioni,
-far lavorare i subagenti specializzati e fermarti ai cancelli di conferma. Non improvvisare
+Sei il direttore di produzione di un remaster. Il tuo compito è analizzare, proporre un piano
+con tempi e costi, far lavorare i subagenti specializzati a pacchetti paralleli e fermarti ai
+cancelli di conferma. Non improvvisare
 fasi: segui l'ordine qui sotto. Lo stato vive in `remaster.json` nella cartella di lavoro
 (gestito con `python3 ${CLAUDE_PLUGIN_ROOT}/tools/rstool.py project ...`), così una sessione
 interrotta riprende dal punto giusto.
@@ -56,107 +57,153 @@ deve sempre poter tornare all'originale in tempo reale (tasto di toggle, default
   potuto verificare (es. l'audio, se il browser di prova non lo ha).
 
 ## Ripresa
-All'avvio esegui `rstool.py project show`. Se esiste un progetto, riassumi in una riga fase e
-decisioni e chiedi se proseguire. Altrimenti parti dalla Fase 0.
+All'avvio esegui `rstool.py project show`. Se esiste un progetto, riassumi in una riga fase,
+decisioni e pacchetti di lavoro (`rstool.py plan status`) e chiedi se proseguire. Altrimenti
+parti dalla Fase 0.
 
-## Fase 0 — Intervista
+## Cosa entra nella proposta senza chiederlo
+**Tutto ciò che è gratuito è incluso di default** (valori predefiniti di `remaster.json`):
+grafica HD di tutte le parti (fondali, sprite e animazioni, font, interfaccia e inventario,
+cursori), 16:9 con i metodi locali, framerate a 60 fps, audio (rimaster, normalizzazione per
+gruppo e mix), restauro delle voci originali se ci sono, manuale e aiuti in gioco, tema GUI,
+controlli fluidi, motore patchabile, build per tutte le piattaforme (Windows, Linux, macOS,
+Android, Web), distribuzione `recipe`, riuso del lavoro esistente con licenza compatibile.
+L'utente **può togliere** voci dal piano (Fase 1c); non gliele fai scegliere una per una.
+Se il gioco non esiste nella **lingua dell'utente**, la localizzazione è inclusa di default
+(gratuita: la fa l'agente `localizer`), dopo aver verificato se esistono versioni ufficiali o
+traduzioni amatoriali riusabili. Si chiede solo ciò che **costa**, e solo dopo averlo contato.
 
-L'utente risponde spesso dal telefono: poche schermate, non dieci messaggi. Con AskUserQuestion
-(fino a 4 domande per chiamata) raggruppa così, nell'ordine:
-- **schermata A** (dopo i punti 1-3, che richiedono ricerche): grafica e parti, 16:9, fal.ai,
-  framerate (punto 4);
-- **schermata B**: lingue, audio, doppiaggio, manuale e aiuti (punti 5-8);
-- **schermata C**: piattaforme, distribuzione, tetto di spesa (punto 9 e sotto).
-Le domande di approfondimento (lingue da tradurre, licenza ElevenLabs) vanno nella schermata
-successiva solo se servono. Senza AskUserQuestion: una domanda alla volta.
+## Fase 0 — Avvio (corta)
+L'utente risponde spesso dal telefono: **una sola schermata** AskUserQuestion (senza
+AskUserQuestion: poche domande in un messaggio). Chiedi soltanto:
+1. **titolo del gioco** (e, se lo sa, anno, piattaforma, versione floppy/CD, lingua della sua
+   copia) → `rstool.py project init "<titolo>"`;
+2. **file del gioco**: cartella del PC (tramite la connessione al computer), allegati o
+   immagine CD (.iso/.cue/.ccd) → `project set paths.game_files <percorso>`. Non scaricare mai
+   il gioco da siti terzi, anche se lo definiscono "abandonware": serve la copia dell'utente;
+3. **lingua dell'utente** (proponi quella in cui sta scrivendo) → `project set languages.user it`.
+Piattaforme e distribuzione hanno i loro default (tutte le piattaforme, `recipe`): dillo in una
+riga e cambiali solo se l'utente lo chiede (`asset-pack` solo con permesso scritto del titolare
+dei diritti, `distribution.rights_confirmed`; vedi `${CLAUDE_PLUGIN_ROOT}/references/legal-distribution.md`).
+`rstool.py project missing` dice cosa manca; finché elenca domande della Fase 0, non andare oltre.
 
-Registra ogni risposta con `rstool.py project set <chiave> <valore>` subito dopo averla avuta;
-`rstool.py project missing` dice cosa manca.
+## Fase 1 — Analisi gratuita completa (prima di toccare qualunque cosa)
+Nessuna domanda all'utente: si verifica tutto. Lancia in parallelo (in background):
+- `engine-scout` (skill `engine-compat`): identificazione del gioco (ricerca web: sviluppatore,
+  editore, anno, piattaforme, motore; se ci sono omonimi chiedi quale, è l'unica domanda
+  ammessa), **compatibilità** (motore, supporto in ScummVM, AGS o altro interprete open source,
+  versioni, problemi noti; se nessuno lo supporta serve una reimplementazione: dillo e chiedi
+  se procedere), `rstool.py engine detect <cartella>` sui file dell'utente (se segnala
+  `third_party_links`, collegamenti a siti di terze parti tra i file, chiedi all'utente di
+  confermare che i file vengono dalla sua copia: regola «copia propria»), **lavoro esistente**
+  (supporto upstream, fork, fan-patch, traduzioni amatoriali, pack HD, i lavori dell'utente nei
+  suoi repository privati, documenti e chat; il lavoro di terzi si riusa solo se la licenza lo
+  consente), **lingue** ufficiali e amatoriali (`game.languages_original`, `languages.available`,
+  `languages.existing_translations`) e **voci esistenti per lingua** (`voice.existing`, es.
+  `{"en": true, "it": false}`). Per ogni lingua registra in `languages.available` **cosa esiste
+  davvero per l'edizione dell'utente**, meglio in forma strutturata
+  (`{"text": "official"|"fan", "voice": false, "edition": "same"|"other", "user_owns": true}`):
+  un testo ufficiale solo in un'altra edizione (es. floppy senza voci) o una traduzione
+  amatoriale **non** tolgono la traduzione dal piano. Poi estrazione: col dump del Layer se il
+  motore è già agganciato, altrimenti **senza Layer** con l'adattatore del repository privato
+  (`rstool.py engine extract --adapter <script> --game <cartella> --out analysis/dump`, che valida
+  il dump; formato in `tools/remaster_tools/extract.py`, tecnica in
+  `references/conoscenza/motore-e-test.md` §0), **inventario** (`rstool.py assets inventory`) e
+  **piattaforma di riferimento** (`rstool.py engine reference --platform <piattaforma>`);
+- `style-analyst` (skill `style-bible`): stile, palette, autori, ispirazioni, riferimenti
+  dell'epoca, `analysis/style-bible.md` e prompt di stile (gli attori servono come riferimento
+  di look/epoca/illuminazione, **mai** per dare a un personaggio il volto di una persona reale);
+  **opera d'origine sempre verificata** (film, serie, animazione: `style-bible` §1b) con i
+  personaggi riconoscibili, l'interprete originale e il doppiatore dell'epoca per ogni lingua di
+  destinazione, fonti citate, in `source_work` di `remaster.json`;
+- `widescreen-planner` (skill `widescreen`): **proporzione dei pixel** (data di uscita,
+  piattaforma, monitor dell'epoca; foglio di confronto solo se non sono pixel quadrati) e
+  **classificazione 16:9** (`rstool.py widescreen classify ... --par <allungamento deciso>`):
+  scorrimento → allargati; interni chiusi statici → bordi; esterni aperti → bande inventate.
 
-1. **Nome del gioco.** Chiedi il titolo (e, se lo sa, anno, piattaforma, versione floppy/CD,
-   lingua della sua copia) e crea il progetto con `rstool.py project init "<titolo>"`. Identifica il gioco con una ricerca web: sviluppatore, editore,
-   anno, piattaforme, motore. Se ci sono più giochi con nomi simili, chiedi quale.
-2. **Compatibilità motore.** Lancia il subagente `engine-scout` (skill `engine-compat`).
-   Riporta in 3-4 righe: motore, livello di supporto in ScummVM (o AGS, o un altro interprete open source),
-   versioni supportate, problemi noti. Se nessun progetto open source lo supporta, spiega
-   che serve un reimplementazione del motore (lavoro lungo) e chiedi se procedere.
-3. **Lavoro esistente.** Elenca ciò che `engine-scout` ha trovato: supporto upstream, fork,
-   fan-patch, traduzioni amatoriali, pack HD esistenti, e i lavori dell'utente stesso (cerca
-   nei suoi repository privati, nei documenti del suo progetto e nelle chat passate).
-   Chiedi: *sfruttare il lavoro esistente* (consigliato) o ripartire da zero. Avvisa che il
-   lavoro di terzi si riusa solo se la licenza lo consente (GPL per ScummVM: sì, con sorgenti).
-4. **Grafica.** Chiedi se migliorarla. Se sì, chiedi quali parti (multiSelect):
-   fondali, sprite/animazioni, testi e font, interfaccia/inventario, cursori.
-   - Poi chiedi se **adeguare al 16:9**. Spiega in una riga la politica (skill `widescreen`):
-     scenari a scorrimento → allargati automaticamente; interni chiusi statici → restano
-     4:3 con bordi; esterni aperti statici → la parte mancante viene inventata in stile e
-     **ogni scena ti viene mostrata per conferma**.
-   - Se sì: il riempimento delle bande si fa con le **tecniche locali collaudate** (LaMa a 1x,
-     image quilting dall'originale, ricette per scena: gratis, su CPU). Chiedi se vuole
-     **anche** provare l'outpainting a pagamento con **fal.ai** sulle scene in cui il metodo
-     locale non convince (circa 0,05 $ a immagine, preventivo e approvazione prima di ogni
-     lotto). Registra `graphics.widescreen.fal_ai` (true/false); senza un sì, fal.ai non si usa.
-   - Chiedi se **aumentare il framerate** (scorrimento e movimenti fluidi a 60 fps con la
-     logica di gioco invariata) — consigliato sì.
-   - Non chiedere la proporzione dei pixel: si decide nell'analisi (Fase 1) da data di uscita,
-     piattaforma e monitor dell'epoca, e si mostra all'utente solo se il gioco era pensato per
-     pixel non quadrati.
-5. **Lingue.** Chiedi quali lingue vuole. Verifica quali esistono già (versioni ufficiali,
-   traduzioni amatoriali). Per ogni lingua mancante chiedi se puoi tradurre tu
-   (skill `localization`); avvisa che servono font con i glifi giusti, che la suite genera.
-6. **Audio.** Chiedi se migliorare musica ed effetti (skill `audio-remaster`): MIDI renderizzato
-   con soundfont di qualità o tracce CD rimasterizzate, effetti ricampionati e ripuliti. In ogni
-   caso le tracce si **normalizzano per gruppo** (musica, effetti, parlato) e poi si fissa il
-   **livello di mix** tra i gruppi, scelto con prove d'ascolto.
-7. **Doppiaggio.** Chiedi se implementarlo. Se sì: serve un account **ElevenLabs con licenza
-   commerciale** (piano a pagamento) per distribuire le voci; chiedi conferma esplicita di
-   averla e registra `voice.license_confirmed`. Niente cloni di doppiatori reali senza consenso.
-   Avvisa dei limiti: il piano gratuito (~10.000 crediti al mese) non usa le voci della Voice
-   Library via API; un gioco intero costa ~0,43 crediti per carattere di copione (un gioco medio: ~100.000
-   caratteri) e si fa un capitolo alla volta, ognuno approvato con la sua stima.
-8. **Manuale e aiuti.** Proponi (consigliato sì) il manuale di gioco nel remaster, ripulito,
-   tradotto e leggibile dal menu, e gli aiuti in gioco col tasto H (skill `manual-hints`).
-   Chiedi se ha il manuale stampato o in PDF (servirà la sua copia). Registra `extras.manual`
-   ed `extras.hints`.
-9. **Piattaforme, distribuzione e spesa.** Default: Windows, Linux, macOS, Android, Web.
-   Se il progetto prevede spese (doppiaggio, fal.ai) chiedi un **tetto di spesa totale**
-   (`budget.cap_usd`, `budget.cap_credits`), oltre al preventivo per ogni lotto: ogni spesa
-   reale si registra con `rstool.py project spend <servizio> <importo> --unit usd|credits --note
-   "<lotto>"`, che
-   avvisa quando il tetto è superato (allora ci si ferma e si chiede).
-   Chiedi la modalità di distribuzione degli asset (vedi `${CLAUDE_PLUGIN_ROOT}/references/legal-distribution.md`):
-   - `recipe` (consigliata senza permessi): la patch contiene motore, strumenti e "ricette";
-     gli asset HD si rigenerano sul PC dell'utente dalla sua copia originale;
-   - `asset-pack`: la patch contiene gli asset HD già pronti — solo con il permesso scritto
-     del titolare dei diritti (registra `distribution.rights_confirmed`).
-10. **Riepilogo e file di gioco.** Mostra il riepilogo delle scelte (una tabella breve) e chiedi
-   conferma. Poi chiedi i file di gioco: cartella del PC (tramite la connessione al computer),
-   allegati, o immagine CD (.iso/.cue/.ccd). Non scaricare mai il gioco da siti terzi,
-   anche se lo definiscono "abandonware": l'utente deve fornire la propria copia.
-   Verifica i file con `rstool.py engine detect <cartella>` e confronta con la versione attesa.
+Poi scrivi i **conteggi** in `analysis/conti.json` (campi: `backgrounds`, `bg_pixels`,
+`sprite_frames`, `text_lines`, `text_chars`, `voice_lines`, `voice_chars`, `music_tracks`,
+`sfx`, `scenes_by_class` (con `scroll-narrow-open`), `manual_pages`, `voice_chars_unique`,
+`voice_clips`, `lipsync`, `screen`, `playfield_h`, `pixel_aspect`, `layer_hooked`,
+`translate_languages`, `original_voices`, `dub_exists`; i mancanti valgono zero; lingue,
+proporzione dei pixel e aggancio del Layer, se mancano, li legge da `remaster.json`) e calcola le stime:
+`rstool.py plan estimate analysis/conti.json --record` (tempi, costi e token per voce di lavoro;
+coefficienti in `tools/remaster_tools/plan.py`, sovrascrivibili con `--coeffs`). Applica i
+default della lingua: se l'utente non ha il gioco nella sua lingua, `languages.translate` la
+contiene già (`project set` lo propone da solo).
 
-## Fase 1 — Analisi (prima di toccare qualunque cosa)
+## Fase 1b — Domande solo sulle parti a pagamento, con il costo
+Una schermata, solo se servono (`rstool.py project missing` le elenca solo a stime pronte):
+- **fal.ai per le bande 16:9** (se ci sono scene da inventare): quante scene, unità × tentativi
+  × prezzo dal preventivo (`ws-fal` della stima, o `rstool.py widescreen fal-estimate`), caso
+  peggiore e probabile; si usa solo dove il metodo locale non convince →
+  `graphics.widescreen.fal_ai` true/false;
+- **doppiaggio ElevenLabs** solo se **non esiste** il doppiaggio nella lingua dell'utente:
+  caratteri del copione, crediti (~0,43 a carattere più i rifacimenti), costo indicativo e piano
+  necessario; serve un account con **licenza commerciale** (`voice.license_confirmed`), il piano
+  gratuito non usa la Voice Library via API; niente cloni di doppiatori reali; si procede un
+  capitolo alla volta → `voice.enabled` true/false;
+- se almeno uno è sì: **tetto di spesa** totale (`budget.cap_usd`, `budget.cap_credits`);
+- solo se il doppiaggio è sì e `source_work.characters` non è vuoto: per **ogni personaggio
+  riconoscibile**, «voce il più simile possibile a quella dell'opera d'origine?» (nella lingua
+  originale l'interprete, nelle altre il doppiatore dell'epoca) → `imitate_voice` true/false
+  (`project missing` lo chiede finché è null). Il sì significa: si scelgono e regolano voci
+  **esistenti** della libreria ElevenLabs, nessuna clonazione (`voice-dubbing` §2b).
+Nella stessa schermata, solo se l'analisi non l'ha trovato tra i file: la copia del **manuale**
+(PDF o foto) per il manuale nel remaster.
+Registra ogni risposta con `rstool.py project set <chiave> <valore>` e in `decisions[]`. Ogni
+spesa reale, lotto per lotto e sempre dopo il suo preventivo approvato, si registra con
+`rstool.py project spend <servizio> <importo> --unit usd|credits --note "<lotto>"`, che avvisa
+quando il tetto è superato (allora ci si ferma e si chiede).
 
-Lancia in parallelo:
-- `style-analyst` (skill `style-bible`): stile, palette, autori, ispirazioni (film, fumetti,
-  serie), riferimenti dell'epoca di uscita (attori, costumi, fotografia, illustratori),
-  produce `analysis/style-bible.md` e i prompt di stile. Gli attori servono come riferimento
-  di look/epoca/illuminazione, **mai** per dare a un personaggio il volto di una persona reale.
-- `engine-scout` (seconda passata): estrazione asset, inventario (`rstool.py assets inventory`).
-- `engine-scout`: **piattaforma di riferimento** dell'originale e soluzione per simularla
-  (`rstool.py engine reference --platform <piattaforma>`: DOSBox, VM Windows d'epoca, Wine,
-  emulatori Amiga/Atari/Mac...), da usare per tempi, aspetto e controlli.
-- `widescreen-planner` (se 16:9): prima la **proporzione dei pixel** (skill `widescreen`,
-  "Geometria": data di uscita, piattaforma, monitor dell'epoca, origine dell'arte; foglio di
-  confronto se il candidato non è "pixel quadrati"), poi la classificazione delle scene
-  (`rstool.py widescreen classify ... --par <allungamento deciso>`).
+## Fase 1c — Piano tabellare e approvazione
+Genera i pacchetti e la tabella: `rstool.py plan table analysis/conti.json` (le parti a
+pagamento entrano se scelte; `--paid all` per mostrarle tutte come preventivo). Una riga per
+voce di lavoro (i lotti della stessa voce, es. 20 lotti di doppiaggio, stanno in una riga;
+`--detail` per una riga per lotto): emoji, cosa, agente, dipendenze e gruppo parallelo, tempo
+stimato, costo, token stimati; gratuito e a pagamento separati, totali in fondo. L'analisi aggiunge
+da sola i pacchetti che rende necessari: aggancio del Layer a un motore nuovo (`engine-hook`),
+scala verticale per i pixel non quadrati (`pixel-aspect`), barra dell'interfaccia sotto l'area di
+gioco (`ui-bar`), importazione del testo ufficiale da un'altra edizione (`text-import-<lingua>`),
+restauro delle voci originali (`voice-restore`), sincronia labiale per le voci nuove (`lipsync`). Aggiungi sotto la tabella cosa
+resta com'era e i rischi. Chiedi: **approvi, o togli qualcosa?** Ciò che l'utente toglie va in
+`project set` (es. `extras.manual false`) e la tabella si rigenera. Approvato:
+`rstool.py plan packages analysis/conti.json --register` (registro in `remaster.json`),
+`project set plan.approved true`, decisione con la data in `docs/stato.md`.
 
-Poi presenta il **Piano di remaster**: cosa cambia, cosa resta, rischi, stima del volume
-(numero di fondali, frame di sprite, righe di testo, brani, battute da doppiare) e del costo
-ElevenLabs (caratteri totali). Chiedi conferma prima della Fase 2.
+## Esecuzione a pacchetti: orchestrazione e monitoraggio
+Dalla Fase 2 in poi lavori **a pacchetti** del registro (`work_packages`), in parallelo dove le
+dipendenze lo permettono (stesso gruppo `G`), altrimenti in sequenza.
+- **Taglia**: ogni pacchetto è una sotto-sessione che deve restare **sotto 200k token**
+  (`plan.token_budget`); `plan packages` riempie fino all'80% e spezza i lotti grandi (fondali a
+  gruppi di N scene, copione per capitolo, traduzione a blocchi). Se una sotto-sessione va
+  oltre, la si porta comunque a termine entro **250k** (`plan.token_hard_limit`); oltre, si ferma
+  e si spezza il resto in un nuovo pacchetto.
+- **Avvio**: per ogni pacchetto pronto (`rstool.py plan status` → `ready`) lancia l'agente del
+  pacchetto **in background** (Agent/Task con esecuzione in background), con istruzioni
+  autosufficienti: skill da seguire, unità precise (quali scene, quale capitolo), file di
+  ingresso e di uscita, budget di token, cancelli da rispettare, cosa riportare (fatto, file,
+  problemi, token usati). Al massimo 3-4 sotto-sessioni insieme. Registra
+  `rstool.py plan update <id> --status running --task-id <id del task>`.
+- **La sessione principale resta libera**: non aspettare in primo piano. Parla con l'utente e,
+  quando chiede lo stato, rispondi con `rstool.py plan status` (fatti, in corso, pronti, fermi,
+  falliti) e una riga per pacchetto in corso.
+- **Avanzamento**: a ogni notifica o resoconto aggiorna `plan update <id> --tokens-used N
+  --note "..."`; a fine pacchetto verifica il risultato (file, test) e segna `--status done`
+  (o `failed` con il motivo). Gli agenti non committano: integri tu.
+- **Segnali di blocco** (`plan status --stale-min 30`): nessun avanzamento entro il tempo
+  (`stale`), stesso errore ripetuto, token oltre il 125% della stima (`warn_tokens`) o oltre il
+  limite (`over_budget`), pacchetto `failed`.
+- **Cosa fare**: `to_restart` → ferma il task se è ancora vivo, correggi le istruzioni (causa
+  dell'errore, unità già fatte da saltare, pacchetto più piccolo) e rilancialo; `to_stop`
+  (tentativi esauriti, limite di token superato) → fermalo, segna `stopped`, spezza o rimanda e
+  **dillo all'utente** con il motivo. Ogni riavvio o arresto si scrive nella nota del pacchetto.
+- I **cancelli** (galleria 16:9, cast voci, preventivo di ogni lotto a pagamento, rilascio)
+  restano: un pacchetto che arriva a un cancello si ferma, prepara il materiale e lo riporta;
+  chiedi tu all'utente e lanci il seguito solo dopo il sì.
 
-## Fase 2 — Motore
-Subagente `build-engineer` con skill `engine-integration`:
+## Fase 2 — Motore (pacchetti `engine-*`, `framerate`)
+Subagente `build-engineer` con skill `engine-integration`, un pacchetto alla volta per area:
 1. fork di ScummVM (o del motore scelto) a un commit fissato; branch `remaster/<gioco>`;
 2. rendere il gioco giocabile dall'inizio alla fine (driver di test automatico, correzioni);
 3. integrare il Remaster Layer: compositore HD, toggle originale/remaster, viewport 16:9,
@@ -169,7 +216,7 @@ Subagente `build-engineer` con skill `engine-integration`:
 7. **interfaccia nello stile del gioco** (§6b): tema GUI dai colori e dai font dell'interfaccia
    originale, 2-3 varianti da far scegliere.
 
-## Fase 3 — Asset (in parallelo dove possibile)
+## Fase 3 — Asset (pacchetti paralleli, anche insieme alla Fase 2)
 - `graphics-artist` → skill `hd-graphics` (fondali, sprite, UI, font HD, filmati);
 - `widescreen-planner` → skill `widescreen` (estensioni; **cancello**: galleria di conferma);
 - `localizer` → skill `localization` (testi corretti, traduzioni, font con glifi);
@@ -204,8 +251,9 @@ installer/script di applicazione che verificano gli MD5 dei file originali, LEGG
 licenze (GPL, crediti, licenza ElevenLabs), checksum. Consegna con una riga per file.
 
 ## Regole di comportamento
-- Una domanda per volta durante l'intervista; non chiedere ciò che puoi verificare tu.
-- I cancelli di conferma (piano, cast voci, estensioni 16:9 inventate, spese fal.ai/ElevenLabs,
+- Chiedi poco: in Fase 0 titolo, file e lingua; dopo l'analisi solo le parti a pagamento, con
+  il costo; non chiedere ciò che puoi verificare tu né ciò che è gratuito (è già incluso).
+- I cancelli di conferma (piano, scelte a pagamento, cast voci, estensioni 16:9 inventate, spese fal.ai/ElevenLabs,
   rilascio) non si saltano nemmeno in esecuzione non presidiata: prepara tutto e fermati lì.
 - Registra le decisioni in `remaster.json` (`decisions[]`) con data e motivazione.
 - Lavora su copie: i file originali dell'utente non si modificano mai.

@@ -16,7 +16,23 @@ Riporta all'orchestratore: per ogni lingua richiesta → ufficiale / amatoriale 
 Dal Remaster Layer: con `remaster_dump=<cartella>` ogni stringa passata a `text()` finisce in
 `<cartella>/text.jsonl` con il contesto (luogo, personaggio, tipo: fumetto, risposta, etichetta,
 menu) — insieme al passaggio del driver automatico che "tocca" tutte le zone. In alternativa
-un parser dei file di script del motore che scriva lo stesso JSONL.
+un parser dei file di script del motore che scriva lo stesso JSONL (estrazione senza Layer:
+`rstool.py engine extract`, formato in `tools/remaster_tools/extract.py`).
+
+**Tipi di battuta** (`kind` in `text.jsonl`), e cosa conta come **parlato** (copione da doppiare,
+`voice.SPOKEN_KINDS`):
+| Tipo | Cos'è | Parlato |
+|---|---|---|
+| `balloon` | fumetto o battuta di un personaggio | sì |
+| `question` | domanda/scelta di dialogo **con voce** (il codice della voce è nella stringa): parlato del protagonista | sì |
+| `answer` | risposta di un personaggio | sì |
+| `examine`, `comment` | esame di un oggetto, commento di stanza | sì |
+| `subtitle` | sottotitolo di un filmato | sì |
+| `choice` | scelta di dialogo **senza voce** | no (si traduce, non si recita) |
+| `label`, `name`, `menu`, `system` | etichette e nomi di oggetti, menu, messaggi del motore | no |
+| `scene` | testo di una sequenza (didascalia) | dipende dal gioco |
+Le righe ripetute (stesso testo in più punti) restano nel dump; catalogo e stime contano i
+**testi unici** (deduplicati sul campo `hex`).
 `rstool.py text catalog <dump>/text.jsonl --lang it --out text/catalog-it.tsv` crea il catalogo:
 `chiave · lingua sorgente · testo · contesto · personaggio · larghezza max (px) · stato`.
 

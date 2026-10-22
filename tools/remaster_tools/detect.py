@@ -81,10 +81,48 @@ def md5_tree(root, limit_mb=2048):
     return out
 
 
+LINK_FILES = (".url", ".lnk", ".webloc", ".desktop", ".website")
+TEXT_FILES = (".txt", ".nfo", ".diz", ".htm", ".html", ".md", ".rtf")
+_URL = re.compile(rb"(?:https?://|www\.)[A-Za-z0-9.-]+\.[A-Za-z]{2,}[^\s\"'<>\x00]*", re.I)
+# hosts of the official stores and of the open source tools: links to them are not reported
+KNOWN_HOSTS = ("scummvm.org", "dosbox.com", "dosbox-staging.org", "gog.com", "steampowered.com",
+               "steamcommunity.com", "humblebundle.com", "itch.io", "github.com", "microsoft.com",
+               "apple.com")
+
+
+def third_party_links(root, max_bytes=200000):
+    """Shortcuts (.url/.lnk/.webloc...) and readme-like files that point to web sites other than
+    the official stores: the folder may come from a redistribution site. The agent only REPORTS
+    them and asks the user to confirm that the files come from his own copy."""
+    found = []
+    for f in list_files(root):
+        low = f.lower()
+        if not low.endswith(LINK_FILES + TEXT_FILES):
+            continue
+        p = os.path.join(root, f)
+        try:
+            with open(p, "rb") as fh:
+                data = fh.read(max_bytes)
+        except OSError:
+            continue
+        urls = sorted({u.decode("latin-1").rstrip(".,);]") for u in _URL.findall(data)})
+        hosts = sorted({re.sub(r"^(?:https?://)?(?:www\.)?", "", u, flags=re.I).split("/")[0].lower() for u in urls})
+        other = [h for h in hosts if not any(h == k or h.endswith("." + k) for k in KNOWN_HOSTS)]
+        if low.endswith(LINK_FILES) or other:
+            found.append({"file": f.replace(os.sep, "/"), "kind": "collegamento" if low.endswith(LINK_FILES) else "testo",
+                          "hosts": other or hosts})
+    return found
+
+
 def detect(root, binary=None):
     if not os.path.isdir(root):
         raise NotADirectoryError(root)
     result = inventory(root)
+    links = third_party_links(root)
+    if links:
+        result["third_party_links"] = links
+        result["warning"] = ("tra i file ci sono collegamenti a siti di terze parti: chiedi all'utente di "
+                             "confermare che i file vengono dalla sua copia (regola «copia propria»)")
     result["strings"] = {e: exe_strings(root, e) for e in result["executables"][:5]}
     sv = scummvm_detect(root, binary)
     result["scummvm"] = sv if sv is not None else "scummvm non installato: installalo per il riconoscimento"

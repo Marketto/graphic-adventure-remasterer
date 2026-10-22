@@ -1,6 +1,6 @@
 ---
 name: engine-compat
-description: Identifica il motore di un'avventura grafica d'epoca e verifica se è supportato da ScummVM o da altri interpreti open source (es. AGS), con livello di supporto, versioni, problemi noti e lavori esistenti riutilizzabili (fork, patch amatoriali, traduzioni, pacchetti HD). Usala nella fase di intervista e analisi del remaster.
+description: Identifica il motore di un'avventura grafica d'epoca e verifica se è supportato da ScummVM o da altri interpreti open source (es. AGS), con livello di supporto, versioni, problemi noti e lavori esistenti riutilizzabili (fork, patch amatoriali, traduzioni, pacchetti HD). Usala nella fase di analisi del remaster.
 ---
 
 # Compatibilità del motore e lavoro esistente
@@ -10,12 +10,24 @@ al momento, sul web e nei file dell'utente, e resta nella cartella privata del p
 
 ## 1. Identificare il gioco e il motore
 - Ricerca web: sviluppatore, anno, piattaforme, edizioni (floppy, CD, versione parlata, demo),
-  motore usato. Annota le fonti.
+  motore usato. Annota le fonti. Se il gioco risulta **su licenza** di un film, una serie o un
+  cartone, annotalo nel report: la verifica completa dell'opera d'origine e dei personaggi
+  riconoscibili la fa `style-bible` §1b.
 - File dell'utente: `python3 ${CLAUDE_PLUGIN_ROOT}/tools/rstool.py engine detect <cartella>`
   restituisce un inventario neutro (estensioni, file più grandi, eseguibili, immagini disco,
   stringhe di copyright/versione negli eseguibili) e, se `scummvm` è installato, l'esito di
   `scummvm --detect`, la fonte più affidabile perché confronta gli MD5 con le tabelle di
   rilevamento di ScummVM. Le stringhe degli eseguibili servono a cercare il motore online.
+- **Provenienza dei file**: se `engine detect` riporta `third_party_links` (collegamenti `.url`,
+  `.lnk`, `.webloc` o readme che puntano a siti diversi dai negozi ufficiali e dagli strumenti
+  open source), la cartella potrebbe venire da un sito di redistribuzione. Non è una prova: lo
+  segnali all'utente e gli chiedi di confermare che i file vengono dalla **sua copia** (regola
+  «copia propria», `references/legal-distribution.md`); la risposta va nelle decisioni.
+- **Motore non ancora agganciato al Layer**: per l'analisi si estrae senza Layer con gli
+  strumenti open source di estrazione di quel motore, tramite un adattatore nel repository
+  privato del gioco: `rstool.py engine extract --adapter <script> --game <cartella> --out
+  analysis/dump` (contratto e regole in `references/conoscenza/motore-e-test.md` §0). Registra
+  `engine.layer_hooked` false: il piano aggiunge il pacchetto `engine-hook`.
 
 ## 2. Livello di supporto (verificalo sempre online: cambia nel tempo)
 - ScummVM: elenco di compatibilità sul sito ufficiale e pagina del gioco; wiki (formati dei

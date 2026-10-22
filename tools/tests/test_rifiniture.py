@@ -378,12 +378,15 @@ def test_canary_pack_and_coverage(dump, tmp_path):
     assert cov["coverage"]["text/it"]["orphans"] == 1 and cov["problems"]
 
 
-def test_project_asks_fal_and_manual(tmp_path):
+def test_project_asks_fal_only_after_the_analysis(tmp_path):
     data = project.init("Avventura di prova", str(tmp_path))
-    assert "manuale e aiuti in gioco" in project.missing_answers(data)
-    project.set_key(data, "graphics.enabled", True)
-    project.set_key(data, "graphics.widescreen.enabled", True)
-    assert "fal.ai per le bande 16:9 (opzionale)" in project.missing_answers(data)
+    assert data["extras"]["manual"] and data["extras"]["hints"]  # free: on by default
+    project.set_key(data, "paths.game_files", "/giochi/prova")
+    project.set_key(data, "languages.user", "it")
+    assert project.missing_answers(data) == ["analisi (fase 1) e stime"]
+    project.set_key(data, "analysis.done", True)
+    project.set_key(data, "analysis.counts", "analysis/conti.json")
+    assert "fal.ai per le bande 16:9 (con preventivo)" in project.missing_answers(data)
     assert data["graphics"]["widescreen"]["fill"] == "local"
 
 

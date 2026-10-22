@@ -192,10 +192,9 @@ Guida con codice d'esempio: `${CLAUDE_PLUGIN_ROOT}/engine/scummvm-remaster-layer
   (oppure ridisegnali nelle bande, vedi la nota del motore §5); le bande prendono la dissolvenza del pixel originale più vicino.
 - Opzione per tornare al 4:3 (`remaster_widescreen=false`).
 - Proporzione dei pixel: quadrati per default; un allungamento verticale solo se deciso
-  nell'analisi (skill `widescreen`, "Geometria"). `Desc::pixelAspect` oggi cambia solo la
-  larghezza della viewport: se l'allungamento serve davvero, il Layer deve anche scalare in
-  verticale (es. 320x200 a 3x → 960x720) e convertire il mouse di conseguenza; non è ancora
-  implementato nel Layer comune.
+  nell'analisi (skill `widescreen`, "Geometria"). Con `Desc::pixelAspect` != 1 il Layer scala
+  in verticale con righe filtrate (es. 320x200 a 3x → 960x720), allarga la viewport 16:9 e
+  converte il mouse (anche `warpMouse()`); `remaster_aspect=false` torna ai pixel quadrati.
 
 ## 5. Framerate
 - La logica resta al ritmo originale (spesso 7-30 Hz). `pace(tickMs)` mostra

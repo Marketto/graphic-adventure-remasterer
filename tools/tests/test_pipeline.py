@@ -84,6 +84,7 @@ def dump(tmp_path):
     room[:, 100:102] = 0
     room[:, 220:222] = 0
     room[:150:6, :] = 12             # wallpaper stripes
+    room[160:] = np.where(rng.random((40, 320)) > 0.9, 14, 13)   # floor with a little grain
     write_bg(bg / "chiusa.raw", room)
     # wide scrolling scene
     wide = np.tile(out, (1, 2))[:, :720]
@@ -111,10 +112,9 @@ def dump(tmp_path):
 def test_project_flow(tmp_path):
     data = project.init("Avventura di prova", str(tmp_path))
     assert "file di gioco" in project.missing_answers(data)
-    project.set_key(data, "graphics.enabled", True)
-    assert "formato 16:9" in project.missing_answers(data)
+    assert data["graphics"]["enabled"] and data["graphics"]["widescreen"]["enabled"]  # free: on by default
     project.set_key(data, "voice.enabled", project.parse_value("true"))
-    assert "conferma licenza ElevenLabs" in project.missing_answers(data)
+    assert "conferma licenza ElevenLabs" in project.paid_followups(data)
     project.set_phase(data, "analysis")
     project.save(data, str(tmp_path))
     again = project.load(str(tmp_path))

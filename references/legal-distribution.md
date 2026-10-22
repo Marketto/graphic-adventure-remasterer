@@ -56,11 +56,39 @@ firmato da una persona e non accetta asset grafici generati con AI. Quindi: patc
 motore eventualmente proponibili upstream solo dopo revisione dell'utente; asset del
 remaster mai proposti al progetto.
 
+## Scopo della suite
+La suite serve a produrre **patch HD non ufficiali, senza scopo di lucro e lecite** per giochi
+che il giocatore possiede: niente file originali distribuiti, niente vendita, niente
+imitazione di prodotti o persone. Ogni scelta tecnica (ricette, installer che verifica la copia,
+voci sintetiche senza cloni) discende da questo.
+
 ## Doppiaggio ElevenLabs
 - Serve un piano con diritti d'uso commerciale per distribuire l'audio generato.
-- Voci create con Voice Design o dalla libreria; niente cloni di persone reali (inclusi i
-  doppiatori originali) senza il loro consenso scritto.
+- Voci create con Voice Design o dalla libreria; niente cloni di persone reali (inclusi
+  interpreti e doppiatori originali); la voce simile a un personaggio di un'opera d'origine si
+  ottiene solo scegliendo e regolando voci esistenti (sezione sopra).
 - Annotare nei crediti: "Voci sintetiche generate con ElevenLabs".
+
+## Somiglianza di voce e volto di persone reali
+Per i giochi tratti da un film, una serie o un cartone i personaggi possono avere il volto e la
+voce di persone reali (attori, doppiatori). La voce e l'immagine di una persona sono protette
+(diritti della personalità, diritto all'immagine, in alcuni paesi leggi specifiche sulle voci
+sintetiche) anche quando il personaggio appartiene a un'opera.
+- **Voce simile**: si ottiene **solo scegliendo e regolando voci esistenti** della libreria
+  ElevenLabs (parametri e regia). Nessuna clonazione, né istantanea né professionale, dal
+  materiale di riferimento; il materiale (trailer, spot, clip) si usa solo per misure numeriche
+  in locale, non si carica su alcun servizio e si cancella dopo la misura. È vietato anche dalle
+  condizioni d'uso dei servizi di sintesi (niente voci di persone senza il loro consenso).
+- **Mai presentare la voce come quella della persona**: nessun nome di persona reale nei nomi
+  delle voci, nei file del cast o nei crediti; nei crediti "voci sintetiche generate con
+  ElevenLabs", eventualmente "ispirate ai personaggi di <opera>".
+- **Distribuzione pubblica**: una somiglianza molto marcata con una voce celebre può essere
+  contestata anche senza clonazione (imitazione a fini di confusione). Nel dubbio, per i
+  personaggi riconoscibili si pubblica con una voce meno vicina o si lascia la scelta della
+  voce simile solo alla build privata dell'utente; la decisione va in `decisions[]`.
+- **Volti**: per i lineamenti si usa solo l'artwork ufficiale dello stesso gioco (copertina,
+  scatola, manuale, schermate); mai fotografie o fotogrammi della persona reale come guida,
+  LoRA o riferimento di generazione.
 
 ## Persone reali come riferimento di stile
 Attori e personaggi dell'epoca servono a capire costumi, trucco, luce, inquadrature.

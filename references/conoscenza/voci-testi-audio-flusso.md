@@ -36,6 +36,32 @@
 - **Filtri a valle (ffmpeg) per voci "speciali"**: robot, telefono, televisore. Sono deterministici e ripetibili, e non costano crediti.
 - **Nei provini una voce mancante salta le sue battute, non blocca il lotto.**
 
+### 1.2b Personaggi di un'opera d'origine (film, serie, cartoni)
+
+- **La verifica si fa sempre**, anche quando il gioco non sembra su licenza: scatola, manuale,
+  crediti ("basato su"), schede dei database. Per ogni personaggio riconoscibile si annotano
+  l'interprete originale e, per ogni lingua di destinazione, il doppiatore dell'edizione
+  dell'epoca del gioco, con le fonti. "Non trovato" è una risposta, inventare no.
+- **La domanda sulla voce simile arriva solo dopo che il doppiaggio è scelto**, una per
+  personaggio: chiederla prima allunga la Fase 1b senza motivo.
+- **Somiglianza senza clonazione.** Si misurano pochi secondi puliti del riferimento (trailer,
+  spot, clip ufficiali dello stesso periodo) in locale: altezza mediana e variabilità in
+  semitoni, centroide e pendenza dello spettro, rapporto armoniche/rumore come ruvidità,
+  velocità d'eloquio dai picchi d'energia sillabici, quota di pause. Le stesse misure sulle
+  anteprime delle voci della libreria danno una classifica; i frammenti si cancellano subito
+  dopo e non vengono caricati da nessuna parte.
+- **Pesare ciò che i parametri non cambiano.** Altezza e timbro pesano di più nella distanza,
+  perché stabilità, stile e velocità non li spostano; velocità e pause pesano poco, perché si
+  correggono con `speed` e con la regia (punteggiatura, pause, audio tag).
+- **Le misure scelgono la rosa, l'orecchio sceglie la voce.** Le anteprime della libreria sono
+  frasi diverse da quelle del riferimento e con un'altra recitazione: la classifica serve a
+  passare da centinaia di voci a 3-5 provini, non a decidere.
+- **Riferimenti d'epoca con banda stretta.** Le copie di trailer vecchi (VHS, TV) spesso tagliano
+  sopra i 4-5 kHz: la pendenza dello spettro si misura solo fino a 4 kHz e il centroide va letto
+  con prudenza.
+- **Toni interpretativi**: dal modo di recitare nei riferimenti (ritmo, ironia, pause, attacchi)
+  si ricavano gli audio tag e le note di regia, scritti senza citare la persona.
+
 ### 1.3 Impostazioni
 
 - Modello multilingue recente (`eleven_v3`/`eleven_v4`), `language_code` italiano, similarità 0,8 per tutti.
@@ -134,6 +160,20 @@ Se uno script aspetta la fine della voce prima di proseguire, **un clic o un tas
 
 ---
 
+### 1.13 Seconda prova: stime, tipi di battuta, sincronia labiale
+- **Stime sui testi unici e nella lingua di arrivo**: le clip originali ripetevano la stessa
+  frase (+15% di clip rispetto ai testi unici) e l'italiano è più lungo dell'inglese del 10-15%:
+  `rstool.py voice estimate <dump>/text.jsonl --expand 1.12`; il piano usa `voice_chars_unique` e
+  il coefficiente `eleven_expand`.
+- **Tipi di battuta**: dove le scelte di dialogo hanno il codice della voce nella stringa, sono
+  parlato del protagonista (`question`); quelle senza voce sono `choice` e non si recitano.
+- **Chi parla**: con l'attore indicato da un numero riassegnato da scena a scena, la mappa statica
+  attore → nome sbagliava in parte; la conferma viene dal driver di test che registra l'attore
+  nel momento della battuta.
+- **Sincronia labiale**: ogni clip originale aveva i suoi dati di movimento della bocca; le voci
+  nuove li perdono. Servono dati rigenerati dall'audio (`voice/<lang>/<textKey>.lip.json`) o la
+  bocca guidata dall'ampiezza (pacchetto `lipsync` del piano).
+
 ## 2. Correzione dei testi
 
 - **I file originali non si toccano.** Le correzioni stanno in un file di testi della patch, indicizzato per chiave del testo originale, che il motore carica sopra l'originale.
@@ -181,6 +221,22 @@ quelli scelti nel banco di prova.
 - Musica MIDI convertita in WAV con FluidSynth e una soundfont, poi normalizzata come le tracce CD.
 
 ---
+
+### 3.1 Musica in blocchi con più varianti
+Nella seconda prova ogni suono del motore conteneva più versioni (MT-32/General MIDI, AdLib,
+altoparlante, a volte campioni digitali) e non c'erano tracce CD: si estrae la variante più vicina
+al General MIDI come .mid standard e `rstool.py audio midi-classify` separa brani ed effetti
+(brano: ≥ 20 s e ≥ 80 note). Alcuni estrattori scrivono una lunghezza di traccia sbagliata: il
+parser non legge oltre la fine del file. Con la musica interattiva (punti di ripetizione) la
+durata dei file sovrastima l'ascolto: i minuti sono un limite superiore.
+
+### 3.2 Manuale, guida agli indizi e provenienza dei file
+- I PDF del manuale e della guida erano **solo immagini** (`pdftotext` 0 caratteri); tesseract a
+  250 dpi dava un testo quasi pulito: `rstool.py manual ocr <pdf> --out <cartella>`. Una guida agli
+  indizi a domande progressive è la fonte migliore per la struttura a livelli degli aiuti.
+- Tra i file forniti c'era un collegamento a un sito di redistribuzione: `engine detect` ora
+  segnala i collegamenti a siti di terze parti, e l'orchestratore chiede all'utente di confermare
+  la provenienza dalla sua copia.
 
 ## 4. Flusso di lavoro con agenti
 

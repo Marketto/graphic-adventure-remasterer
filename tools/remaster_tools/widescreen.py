@@ -11,7 +11,15 @@ from PIL import Image, ImageFilter
 
 from . import bands, comfy, imaging, rawframe
 
-UI_HINTS = re.compile(r"(menu|map|mappa|inv|intro|title|titolo|credits|crediti|logo|slide|option)", re.I)
+# names of interface screens, close-ups and inserts (file name or room name from bg/names.json)
+UI_HINTS = re.compile(r"(menu|map|mappa|inv|intro|title|titolo|credits|crediti|logo|slide|option|"
+                      r"dead|death|morte|game.?over|close.?up|primo.?piano|insert|inserto|^cu[-_]|"
+                      r"overview)", re.I)
+MIN_REAL_W = 64          # narrower backgrounds are dummy rooms (no real picture): never extended
+SKY_LUM = 0.25           # a sky is bright: mean luminance of the top third above this
+FLAT_COLORS = 3          # backgrounds with at most this many colours: content drawn by objects (UI)
+OPEN_SCORE = 0.40        # above: open borders (sky/horizon); 0.15-0.40 uncertain, checked by eye
+SCROLL_WIDE_RULE = "larghezza del fondale ≥ viewport (schermo + 2 × estensione per lato)"
 
 
 def geometry(screen_w, screen_h, par=1.0, aspect=(16, 9)):
@@ -35,6 +43,8 @@ def _load(path):
 
 
 def edge_features(img: Image.Image, strip: int):
+    """Per side: sky (smooth, BRIGHT and blue top third, darker or brighter monotonically
+    towards the horizon), long verticals (walls), horizontal lines leaving the frame, texture."""
     f = imaging.to_f(img)
     lum = f @ np.array([0.299, 0.587, 0.114])
     h, w = lum.shape
@@ -43,46 +53,105 @@ def edge_features(img: Image.Image, strip: int):
     feats = {}
     for side, sl in (("left", slice(0, strip)), ("right", slice(w - strip, w))):
         L, GX, GY, F = lum[:, sl], gx[:, sl], gy[:, sl], f[:, sl]
-        top = slice(0, h // 3)
-        # sky: smooth, bright-ish top band with blue dominance or very low texture
-        sky_smooth = float((np.hypot(GX[top], GY[top]) < 0.02).mean())
+        top = slice(0, max(1, h // 3))
+        smooth = float((np.hypot(GX[top], GY[top]) < 0.02).mean())
         blue = float((F[top][..., 2] > F[top][..., 0] + 0.03).mean())
-        # long vertical edges (walls, door frames): columns with strong |gx| along many rows
+        top_lum = float(L[top].mean())
+        rows = L[top].mean(axis=1)
+        d = np.diff(rows)
+        mono = float(max((d >= -0.004).mean(), (d <= 0.004).mean())) if len(d) else 1.0
+        # dark tops (ceilings, night interiors) are not skies: weight by brightness
+        bright = min(1.0, max(0.0, (top_lum - 0.15) / (SKY_LUM - 0.15 + 1e-9)))
+        sky = smooth * (0.2 + 0.8 * blue) * bright * (0.5 + 0.5 * mono)
         col_vert = (np.abs(GX) > 0.08).mean(axis=0)
         vertical = float(col_vert.max())
-        # horizontal structures running out of the frame (horizon, road, rooftops)
         row_horiz = (np.abs(GY) > 0.08).mean(axis=1)
         horizontal = float((row_horiz > 0.6).mean())
         texture = float(np.hypot(GX, GY).mean())
-        feats[side] = {"sky": round(sky_smooth * (0.5 + 0.5 * blue), 3), "vertical": round(vertical, 3),
-                       "horizontal": round(horizontal, 3), "texture": round(texture, 4)}
+        feats[side] = {"sky": round(sky, 3), "vertical": round(vertical, 3), "horizontal": round(horizontal, 3),
+                       "texture": round(texture, 4), "top_lum": round(top_lum, 3), "blue": round(blue, 3),
+                       "monotone": round(mono, 3)}
     return feats
 
 
-def classify_scene(img, screen_w, screen_h, geo, name=""):
-    w, h = img.size
-    if UI_HINTS.search(name):
-        return "ui-fixed", 0.5, "nome da schermata di interfaccia"
-    if w >= geo["viewport_w"]:
-        return "scroll-wide", 0.95, f"fondale largo {w}px ≥ viewport {geo['viewport_w']}px"
-    if w > screen_w:
-        return "scroll-narrow", 0.8, f"fondale {w}px tra schermo {screen_w} e viewport {geo['viewport_w']}"
-    feats = edge_features(img, max(8, geo["left"]))
-    open_score = 0.0
+def _open_score(feats):
+    sc = 0.0
     for s in ("left", "right"):
         e = feats[s]
-        open_score += 1.2 * e["sky"] + 0.8 * e["horizontal"] - 1.5 * max(0.0, e["vertical"] - 0.35)
-    open_score /= 2
-    if open_score > 0.45:
-        return "open-static", min(0.9, 0.5 + open_score / 2), f"bordi aperti (cielo/orizzonte), punteggio {open_score:.2f}"
-    if open_score < 0.15:
-        return "closed-static", min(0.9, 0.6 + (0.15 - open_score)), f"bordi chiusi (pareti/verticali), punteggio {open_score:.2f}"
-    return "closed-static", 0.4, f"incerto (punteggio {open_score:.2f}): verificare a vista"
+        sc += 1.2 * e["sky"] + 0.8 * e["horizontal"] - 1.5 * max(0.0, e["vertical"] - 0.35)
+    return sc / 2
 
 
-def classify(src_dir, screen_w, screen_h, par=1.0, out_path=None):
+def _n_colors(img, limit=16):
+    a = np.asarray(img.convert("RGB")).reshape(-1, 3)
+    if len(a) > 20000:
+        a = a[:: len(a) // 20000 + 1]
+    return min(limit + 1, len(np.unique(a, axis=0)))
+
+
+def classify_scene(img, screen_w, screen_h, geo, name="", room_name="", playfield_h=None):
+    """(class, confidence, why, extra) for one background.
+
+    Order: dummy rooms (narrower than MIN_REAL_W) → skip; interface hints in the file name or
+    in the room name → ui-fixed; (almost) flat backgrounds → ui-fixed (the content is drawn by
+    objects); width → scroll-wide / scroll-narrow (the missing sides are classified open or
+    closed like a static scene); then the borders. A full-height picture in a game whose
+    typical playfield is shorter (interface bar below) leans towards close-ups and inserts."""
+    w, h = img.size
+    extra = {}
+    if w < MIN_REAL_W:
+        return "skip", 0.9, f"fondale largo {w}px < {MIN_REAL_W}: stanza fittizia, non si estende", extra
+    if w >= geo["viewport_w"]:   # a wide map that scrolls is still a scrolling scene
+        return "scroll-wide", 0.95, f"fondale largo {w}px ≥ viewport {geo['viewport_w']}px", extra
+    for label, n in (("nome del file", name), ("nome della stanza", room_name)):
+        if n and UI_HINTS.search(n):
+            return "ui-fixed", 0.6, f"{label} da schermata di interfaccia/primo piano ({n})", extra
+    ncol = _n_colors(img)
+    if ncol <= FLAT_COLORS:
+        return "ui-fixed", 0.7, f"fondale quasi a tinta unita ({ncol} colori): il contenuto è disegnato dagli oggetti", extra
+    score = _open_score(edge_features(img, max(8, geo["left"])))
+    if w > screen_w:
+        sides = "open" if score > 0.3 else "closed"
+        extra["sides"] = sides
+        return ("scroll-narrow", 0.7, f"fondale {w}px tra schermo {screen_w} e viewport {geo['viewport_w']}; "
+                f"lati {'aperti: da estendere' if sides == 'open' else 'chiusi: bande o bordi'} "
+                f"(punteggio {score:.2f})", extra)
+    full_insert = bool(playfield_h and playfield_h < screen_h and h >= screen_h)
+    if full_insert:
+        extra["full_height"] = True
+    if score > OPEN_SCORE:
+        conf = min(0.9, 0.5 + score / 2) - (0.2 if full_insert else 0)
+        return "open-static", conf, f"bordi aperti (cielo/orizzonte), punteggio {score:.2f}", extra
+    if score < 0.15:
+        why, conf = f"bordi chiusi (pareti/verticali), punteggio {score:.2f}", min(0.9, 0.6 + (0.15 - score))
+    else:
+        why, conf = f"incerto (punteggio {score:.2f}): verificare a vista", 0.4
+    if full_insert:
+        why += (f"; a tutto schermo mentre l'area di gioco tipica è alta {playfield_h}px: "
+                "forse un primo piano o un inserto (ui-fixed)")
+        conf = min(conf, 0.4)
+    return "closed-static", conf, why, extra
+
+
+def _load_names(src_dir, names):
+    """bg/names.json: {scene: room name} (from the game's index), optional."""
+    path = names or os.path.join(src_dir, "names.json")
+    if path and os.path.exists(path):
+        with open(path, encoding="utf-8") as f:
+            return {str(k): str(v) for k, v in json.load(f).items()}
+    return {}
+
+
+CLASSES = ("scroll-wide", "scroll-narrow", "closed-static", "open-static", "ui-fixed", "skip")
+
+
+def classify(src_dir, screen_w, screen_h, par=1.0, out_path=None, names=None, playfield_h=None):
+    """Classify every background of `src_dir` (.raw or images). `names`: JSON {scene: room name}
+    (default `<src_dir>/names.json`). `playfield_h`: height of the play area when an interface bar
+    sits below it (default: the most common background height, when lower than the screen)."""
     geo = geometry(screen_w, screen_h, par)
-    scenes = []
+    room_names = _load_names(src_dir, names)
+    items = []
     for name in sorted(os.listdir(src_dir)):
         p = os.path.join(src_dir, name)
         if not os.path.isfile(p) or not name.lower().endswith((".raw", ".png", ".bmp", ".gif", ".jpg")):
@@ -90,18 +159,45 @@ def classify(src_dir, screen_w, screen_h, par=1.0, out_path=None):
         scene = os.path.splitext(name)[0]
         if name.lower().endswith(".png") and os.path.exists(os.path.join(src_dir, scene + ".raw")):
             continue
-        img = _load(p)
-        cls, conf, why = classify_scene(img, screen_w, screen_h, geo, scene)
-        scenes.append({"scene": scene, "source": p, "size": list(img.size), "class": cls,
-                       "confidence": round(conf, 2), "why": why, "verified": False})
-    plan = {"geometry": geo, "scenes": scenes,
-            "counts": {c: sum(1 for s in scenes if s["class"] == c) for c in
-                       ("scroll-wide", "scroll-narrow", "closed-static", "open-static", "ui-fixed")}}
+        items.append((scene, p, _load(p)))
+    if playfield_h is None:
+        hs = [im.size[1] for _, _, im in items if im.size[0] >= MIN_REAL_W]
+        if hs:
+            common = max(set(hs), key=hs.count)
+            playfield_h = common if common < screen_h else None
+    scenes = []
+    for scene, p, img in items:
+        cls, conf, why, extra = classify_scene(img, screen_w, screen_h, geo, scene,
+                                               room_names.get(scene, ""), playfield_h)
+        s = {"scene": scene, "source": p, "size": list(img.size), "class": cls,
+             "confidence": round(conf, 2), "why": why, "verified": False}
+        if room_names.get(scene):
+            s["room_name"] = room_names[scene]
+        s.update(extra)
+        scenes.append(s)
+    counts = {c: sum(1 for s in scenes if s["class"] == c) for c in CLASSES}
+    counts["scroll-narrow-open"] = sum(1 for s in scenes if s["class"] == "scroll-narrow" and s.get("sides") != "closed")
+    bar = None
+    if playfield_h and playfield_h < screen_h:
+        bar = {"playfield_h": playfield_h, "bar_h": screen_h - playfield_h,
+               "note": "area di gioco più bassa dello schermo: la barra dell'interfaccia sotto va allargata "
+                       "anch'essa a 16:9 (bande neutre o ridisegnata), vedi skill widescreen"}
+    plan = {"geometry": geo, "scroll_wide_rule": SCROLL_WIDE_RULE, "ui_bar": bar, "scenes": scenes,
+            "counts": counts}
     if out_path:
         os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
         with open(out_path, "w", encoding="utf-8") as f:
             json.dump(plan, f, indent=2, ensure_ascii=False)
     return plan
+
+
+def inventable(scene):
+    """True when the scene needs invented bands: open-static, scroll-narrow with open sides."""
+    return scene["class"] == "open-static" or (scene["class"] == "scroll-narrow" and scene.get("sides") != "closed")
+
+
+def count_inventable(plan):
+    return sum(1 for s in plan["scenes"] if inventable(s))
 
 
 def border_variant(img: Image.Image, left: int, right: int, darken=0.45):
@@ -269,7 +365,7 @@ def make_extensions(plan_path, hd_dir, out_dir, scale, recipe=None, seeds=(11, 2
         need = max(0, geo["viewport_w"] - s["size"][0])
         lw, rw = need // 2, need - need // 2
         left_px, right_px = lw * scale, rw * scale
-        inventable = s["class"] in ("open-static", "scroll-narrow")
+        inventable = globals()["inventable"](s)
         use_recipe = recipe if inventable else None
         previous = [v for v in s.get("variants", []) if os.path.exists(os.path.join(out_dir, v["file"]))]
         s["variants"] = []
