@@ -25,8 +25,8 @@
 ### 1.2 Casting e provini
 
 - **Una voce per personaggio, fissa per sempre**, coerente con età e genere. Voce e impostazioni stanno in un file di cast versionato (`cast.json`). La regia per battuta sta in un file separato.
-- **Provini.** Per ogni nuovo personaggio si propongono 2-3 voci con 2-3 battute vere del gioco nel registro tipico del personaggio (ironiche per un ironico), non frasi inventate: una frase neutra non dice se la voce regge il ruolo. Sceglie l'utente, all'orecchio.
-- **Altezza.** Meglio una voce che sta già nel registro giusto. Le rifiniture con vocoder tipo WORLD suonano robotiche; al massimo un pitch-shift di 2 semitoni con formanti preservate (rubberband).
+- **Provini.** Per ogni nuovo personaggio si propongono 2-3 voci con **una sola battuta vera** del gioco, la stessa per tutte, nel registro tipico del personaggio (ironica per un ironico), non frasi inventate: una frase neutra non dice se la voce regge il ruolo. Sceglie l'utente, all'orecchio; se resta in dubbio su una o più voci si propone una battuta addizionale solo per quelle, con il costo.
+- **Altezza.** Si sceglie una voce che sta già nel registro giusto e si controlla con la regia (tag che non alzano il tono). Niente correzione di tono a posteriori: sia i vocoder tipo WORLD sia un pitch-shift di 2 semitoni con formanti preservate (rubberband) sono risultati metallici all'ascolto.
 - **Connettore e API.** Il connettore MCP può non esporre stabilità, stile e velocità: serve per esplorare; provini definitivi e lotti si fanno con l'API diretta, con la chiave nei segreti d'ambiente.
 - **Lista delle voci scartate**, con il motivo, da controllare prima di ogni proposta. I motivi tipici sono "stanza piccola", "riverbero da chiesa" e "non usabile via API".
 - **Le misure automatiche del riverbero non sono affidabili.** Una voce con riverbero evidente era passata. È meglio preferire voci di studi professionali già approvati e far decidere l'orecchio dell'utente.
