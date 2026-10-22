@@ -40,10 +40,10 @@ COEFFS = {
     "sprite_avg_pixels": 3000,        # pixels of a sprite frame when sprite_pixels is missing
     "ws_local_s_per_scene": 150,      # LaMa 1x + quilting + recipes + checks, per scene to invent
     "ws_border_s_per_scene": 5,       # closed-static: borders only
-    "audio_s_per_track": 90,          # render/clean + group normalization, per music track
+    "audio_s_per_track": 30,          # fluidsynth render + group normalization, per track (faster than real time) (tuned on the first real trial)
     "audio_s_per_sfx": 3,             # resample + clean + normalization, per effect
-    "restore_s_per_line": 4,          # restoration of the original speech, per line
-    "dub_s_per_line": 6,              # generation + automatic check, per dubbed line
+    "restore_s_per_line": 0.3,          # ffmpeg restoration of one short original clip (tuned on the first real trial)
+    "dub_s_per_line": 4,              # API generation + automatic check, per dubbed line (tuned on the first real trial)
     "ci_min_per_platform": 25,        # minutes of CI per platform build
     "agent_tokens_per_min": 4000,     # how many tokens a sub-session consumes per minute of work
     # --- prices --------------------------------------------------------------------------
@@ -61,13 +61,13 @@ COEFFS = {
     "tok_per_ws_scene": 5000,         # one scene to invent: variants, galleries, images looked at
     "tok_per_ws_border": 300,         # one scene with borders only
     "tok_per_fal_scene": 2500,        # one fal.ai scene: call, check, gallery
-    "tok_per_text_line": 40,          # correction of the text, per line
+    "tok_per_text_line": 25,          # correction: read + write + review of an average line (~9 tokens) (tuned on the first real trial)
     "tok_per_translate_char": 1.2,    # translation, per character (read + write + review)
-    "tok_per_voice_line": 450,        # dubbing: direction, generation, check, per line
-    "tok_per_restore_line": 60,       # restoration of the original speech, per line
-    "tok_per_track": 3000,            # music track
+    "tok_per_voice_line": 150,        # dubbing in scripted batches: direction notes, checks of flagged lines (tuned on the first real trial)
+    "tok_per_restore_line": 2,       # batch command; only samples are listened to (tuned on the first real trial)
+    "tok_per_track": 600,            # batch render; samples listened to (tuned on the first real trial)
     "tok_per_sfx": 150,               # sound effect
-    "tok_per_manual_page": 3500,      # manual page: clean, translate, lay out
+    "tok_per_manual_page": 1500,      # OCR page ~350 tokens: clean, translate, lay out (tuned on the first real trial)
     "tok_hints": 60000,               # in-game hints
     "tok_fonts_ui": 90000,            # HD fonts with the glyphs + UI/inventory/cursors
     "tok_engine_port": 180000,        # fork + playable from start to end (test driver)
