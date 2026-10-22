@@ -79,7 +79,7 @@ COEFFS = {
     "tok_qa": 170000,                 # independent QA
     "tok_release": 120000,            # builds, patch, installer, checksums
     "tok_engine_hook": 150000,        # hook the Layer into an engine it does not know yet (dump, keys)
-    "tok_pixel_aspect": 60000,        # vertical scale of the Layer for non-square pixels
+    "tok_pixel_aspect": 40_000,        # set pixelAspect in the engine, mouse, check (the Layer scales)
     "tok_ui_bar": 50000,              # interface bar below the play area widened to 16:9
     "tok_lipsync": 60000,             # lip-sync data for the new voices (from the audio) or fallback
     "tok_per_import_line": 12,        # official text of another edition: import and align, per line
@@ -182,7 +182,7 @@ def estimate(counts, coeffs=None, project=None):
       c["tok_engine_layer"], depends=["engine-hook" if not hooked else "engine-port"], splittable=False)
     stretch = _stretch(counts, project)
     if abs(stretch - 1.0) > 1e-3:
-        E("pixel-aspect", "📐", f"Scala verticale per pixel non quadrati (allungamento {stretch:g})",
+        E("pixel-aspect", "📐", f"Pixel non quadrati: pixelAspect {stretch:g} nel motore, mouse e verifica",
           "build-engineer", 0, "", 0, c["tok_pixel_aspect"], depends=["engine-layer"], splittable=False)
     E("engine-patch", "🎮", "Motore patchabile, controlli fluidi, salvataggi e menu", "build-engineer",
       0, "", 0, c["tok_engine_patch"], depends=["engine-port"], splittable=False)
