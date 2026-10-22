@@ -135,7 +135,7 @@ def cmd_plan(a):
         pk = _plan_packages(a)
         if a.register:
             data = need_project(a.workdir)
-            project.register_packages(data, pk["packages"], budget=pk["budget"])
+            project.register_packages(data, pk["packages"], budget=pk["budget"], deferred=pk.get("deferred") or [])
             project.save(data, a.workdir)
         if a.out:
             with open(a.out, "w", encoding="utf-8") as f:

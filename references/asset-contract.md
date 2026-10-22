@@ -24,7 +24,9 @@ remaster/
   gfx/spr/<key>.png|jpg    frame HD, key = frameKey (PNG con alpha; un JPEG è opaco nei blocchi originali)
   fonts/<font>.dat|png     atlante font HD (formato RFNT, sotto)
   text/<lang>.tsv          testi corretti/tradotti: "<textKey>\t<testo UTF-8>"
-  voice/<lang>/<textKey>.ogg   battute doppiate
+  voice/<lang>/<textKey>.ogg   battute doppiate; possono coprire solo alcune parti del gioco
+                           (doppiaggio parziale, voice.scope): una riga senza file ricade sul
+                           comportamento originale (clip originale o solo sottotitolo)
   voice/<lang>/<textKey>.lip.json  sincronia labiale della voce nuova: {"fps": 60, "frames": [indici
                            della bocca]}, generata dall'audio; senza file il motore guida la bocca
                            dall'ampiezza o la lascia ferma (le voci nuove perdono i dati

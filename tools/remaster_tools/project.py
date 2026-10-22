@@ -50,9 +50,13 @@ DEFAULT = {
     # spending cap for the whole project (on top of the quote per batch) and the ledger
     "budget": {"cap_usd": None, "cap_credits": None, "spent": []},
     # enabled: decided after the analysis (None = not asked); existing: language → True when the
-    # game already has a dub in that language (then ElevenLabs is not proposed for it)
+    # game already has a dub in that language (then ElevenLabs is not proposed for it).
+    # credits_available: credits the user can spend on the dub (None = not asked); scope: the whole
+    # game ("tutto") or only some parts in play order ("parti", ids of the analysis voice.parts) when
+    # the credits are not enough. The lines outside the scope keep the original behaviour.
     "voice": {"enabled": None, "provider": "elevenlabs", "license_confirmed": False,
-              "languages": [], "existing": {}},
+              "languages": [], "existing": {}, "credits_available": None,
+              "scope": {"mode": "tutto", "parts": []}},
     "platforms": ["windows", "linux", "macos", "android", "web"],
     "distribution": {"mode": "recipe", "rights_confirmed": False},
     "toggle_key": "F8",
@@ -65,7 +69,8 @@ DEFAULT = {
     "decisions": [],
 }
 
-PACKAGE_STATES = ["pending", "running", "done", "failed", "stopped"]
+# deferred: a package left out on purpose (e.g. a dub part outside voice.scope), not run
+PACKAGE_STATES = ["pending", "running", "done", "failed", "stopped", "deferred"]
 
 
 def path(workdir="."):
@@ -360,10 +365,36 @@ def paid_followups(data):
     return out
 
 
-def register_packages(data, packages, budget=None, hard_limit=None):
+def set_voice_scope(data, mode, parts=()):
+    """Record the dubbing scope: "tutto" (whole game) or "parti" with the ids of the parts."""
+    if mode not in ("tutto", "parti"):
+        raise ValueError(f"voice.scope.mode «{mode}» non valido: tutto o parti")
+    parts = [str(x) for x in parts]
+    if mode == "parti" and not parts:
+        raise ValueError("voice.scope «parti» senza parti: indicane almeno una")
+    data.setdefault("voice", {})["scope"] = {"mode": mode, "parts": parts if mode == "parti" else []}
+    return data
+
+
+def register_packages(data, packages, budget=None, hard_limit=None, deferred=()):
     """Write the planned work packages in the registry, keeping the state of the ones already
-    there (same id)."""
+    there (same id). `deferred` (packages of parts left out of voice.scope) are registered as
+    `deferred`; a package back in the scope returns to `pending`."""
     reg = {p["id"]: p for p in data.setdefault("work_packages", [])}
+    for pk in deferred:
+        cur = reg.get(pk["id"])
+        if cur is None:
+            reg[pk["id"]] = {"id": pk["id"], "label": pk.get("label"), "agent": pk.get("agent"),
+                             "depends": [], "group": None, "status": "deferred",
+                             "tokens_est": pk.get("tokens"), "tokens_used": 0, "started": None,
+                             "last_progress": None, "attempts": 0, "task_id": None,
+                             "note": "fuori da voice.scope"}
+        elif cur.get("status") == "pending":
+            cur["status"] = "deferred"
+    for pk in packages:
+        cur = reg.get(pk["id"])
+        if cur is not None and cur.get("status") == "deferred":
+            cur["status"] = "pending"
     for pk in packages:
         cur = reg.get(pk["id"])
         if cur is None:

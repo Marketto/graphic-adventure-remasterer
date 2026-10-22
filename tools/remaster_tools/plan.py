@@ -24,6 +24,15 @@ optional (a missing one counts as 0 or as "not present"):
                                      project (remaster.json: languages.translate/available) decides
     original_voices                  true when the game has speech to restore
     dub_exists                       true when a dub in the user's language already exists
+    voice.parts (or voice_parts)     parts of the game in play order (chapters, acts, discs, paths):
+                                     [{"id", "label", "chars", "lines"}]; chars = unique spoken
+                                     characters of the part (a line repeated in later parts counts
+                                     only in the first). With them the dub is planned PER PART;
+                                     without them it is split into plain lots (and the plan says so)
+
+From the project (remaster.json): voice.credits_available (credits the user can spend: the table
+says how many parts fit, first part first, in play order) and voice.scope = {"mode": "tutto" |
+"parti", "parts": [ids]} (the parts outside the scope stay `deferred`: no package is generated).
     platforms                        list of target platforms (default: the five of the project)
 
 The coefficients (times, prices, tokens) are in COEFFS, documented one by one; a JSON file can
@@ -155,6 +164,40 @@ def _playfield(counts):
     return (int(scr[1]) if len(scr) == 2 else None), (int(pf) if pf else None)
 
 
+def _voice_parts(counts):
+    """Parts of the game for the dub, in play order: [{"id", "label", "chars", "lines"}] or []."""
+    v = counts.get("voice")
+    raw = (v.get("parts") if isinstance(v, dict) else None) or counts.get("voice_parts") or []
+    out = []
+    for k, p in enumerate(raw):
+        if not isinstance(p, dict):
+            continue
+        pid = str(p.get("id") if p.get("id") not in (None, "") else k + 1)
+        out.append({"id": pid, "label": p.get("label") or f"parte {pid}",
+                    "chars": int(p.get("chars") or 0), "lines": int(p.get("lines") or 0)})
+    return out
+
+
+def _scope(project):
+    """Ids of the parts in the dubbing scope, or None for the whole game."""
+    sc = (project.get("voice") or {}).get("scope") or {}
+    if (sc.get("mode") or "tutto") != "parti":
+        return None
+    return {str(x) for x in sc.get("parts") or []}
+
+
+def parts_in_credits(credits, available):
+    """How many parts fit in the available credits, in play order (the first part always first):
+    the longest prefix whose cumulative credits stay within `available`."""
+    n, cum = 0, 0
+    for c in credits:
+        cum += c
+        if cum > available:
+            break
+        n += 1
+    return n
+
+
 def _item(id_, emoji, label, agent, units, unit_name, tok_per_unit, tok_flat=0, cpu_s=0.0,
           depends=(), paid=None, usd=0.0, credits=0.0, quote=None, splittable=True, requires=None):
     return {"id": id_, "emoji": emoji, "label": label, "agent": agent, "units": units,
@@ -254,8 +297,9 @@ def estimate(counts, coeffs=None, project=None):
         E("audio", "🔊", "Musica ed effetti: rimaster e normalizzazione per gruppo", "audio-engineer",
           tracks, "brani", c["tok_per_track"], c["tok_base"] + sfx * c["tok_per_sfx"],
           cpu_s=tracks * c["audio_s_per_track"] + sfx * c["audio_s_per_sfx"])
-    vlines = _n(counts, "voice_lines")
-    vchars = _n(counts, "voice_chars_unique") or _n(counts, "voice_chars")
+    vparts = _voice_parts(counts)
+    vlines = _n(counts, "voice_lines") or sum(p["lines"] for p in vparts)
+    vchars = _n(counts, "voice_chars_unique") or _n(counts, "voice_chars") or sum(p["chars"] for p in vparts)
     clips = _n(counts, "voice_clips")
     if (counts.get("original_voices") or clips) and (vlines or clips) and \
             (project.get("audio") or {}).get("restore_original_voices", True) is not False:
@@ -273,20 +317,64 @@ def estimate(counts, coeffs=None, project=None):
         chars_t = vchars * expand
         cred = chars_t * c["eleven_credits_per_char"] * c["eleven_retake"]
         dep = ["text"] + [f"translate-{x}" for x in langs] + [f"text-import-{x}" for x in langs]
-        E("dub", "🎙️", "Doppiaggio ElevenLabs (per capitolo)", "voice-director", vlines, "battute",
-          c["tok_per_voice_line"], c["tok_base"], cpu_s=vlines * c["dub_s_per_line"],
-          depends=[d for d in dep if any(i["id"] == d for i in items)], paid="voice",
-          credits=cred, usd=cred * c["eleven_usd_per_credit"],
-          quote={"chars": vchars, "unique_texts": bool(_n(counts, "voice_chars_unique")),
-                 "expand": expand, "chars_target": round(chars_t),
-                 "credits_per_char": c["eleven_credits_per_char"],
-                 "retake": c["eleven_retake"], "credits": round(cred),
-                 "usd_indicative": round(cred * c["eleven_usd_per_credit"], 2)})
-        if counts.get("lipsync"):
+        dep = [d for d in dep if any(i["id"] == d for i in items)]
+        base_quote = {"unique_texts": bool(_n(counts, "voice_chars_unique")), "expand": expand,
+                      "credits_per_char": c["eleven_credits_per_char"], "retake": c["eleven_retake"]}
+        parts = _voice_parts(counts)
+        scope = _scope(project)
+        avail = vproj.get("credits_available")
+        avail = float(avail) if isinstance(avail, (int, float)) else None
+        dub_ids = []
+        if parts:
+            tot_chars = sum(p["chars"] for p in parts)
+            tot_lines = sum(p["lines"] for p in parts)
+            creds, cum, rows = [], 0, []
+            for p in parts:
+                # a part without characters takes its share of the script by lines
+                ch = p["chars"] or (round(vchars * p["lines"] / tot_lines) if tot_lines else 0)
+                ln = p["lines"] or (round(vlines * ch / tot_chars) if tot_chars else 0)
+                cred = ch * expand * c["eleven_credits_per_char"] * c["eleven_retake"]
+                creds.append(cred)
+                cum += cred
+                rows.append((p, ch, ln, cred, cum))
+            fit = parts_in_credits(creds, avail) if avail is not None else None
+            n = len(parts)
+            for k, (p, ch, ln, cred, cumc) in enumerate(rows):
+                iid = f"dub-{p['id']}"
+                deferred = scope is not None and p["id"] not in scope
+                E(iid, "🎙️", f"Doppiaggio parte {k + 1}/{n}: {p['label']}", "voice-director", ln, "battute",
+                  c["tok_per_voice_line"], c["tok_base"], cpu_s=ln * c["dub_s_per_line"], depends=dep,
+                  paid="voice", credits=cred, usd=cred * c["eleven_usd_per_credit"],
+                  quote=dict(base_quote, chars=ch, chars_target=round(ch * expand), credits=round(cred),
+                             usd_indicative=round(cred * c["eleven_usd_per_credit"], 2)))
+                items[-1]["part"] = {"id": p["id"], "label": p["label"], "index": k + 1, "total": n,
+                                     "credits_cumulative": round(cumc),
+                                     "in_credits": (k < fit) if fit is not None else None,
+                                     "in_scope": not deferred}
+                items[-1]["deferred"] = deferred
+                if not deferred:
+                    dub_ids.append(iid)
+            voice_parts = {"parts": [dict(i["part"], credits=i["credits"]) for i in items if i.get("part")],
+                           "credits_total": round(cum), "credits_available": avail, "fit": fit,
+                           "scope": sorted(scope) if scope is not None else "tutto"}
+        else:
+            cred = chars_t * c["eleven_credits_per_char"] * c["eleven_retake"]
+            E("dub", "🎙️", "Doppiaggio ElevenLabs (per lotti: parti del gioco non note)", "voice-director",
+              vlines, "battute", c["tok_per_voice_line"], c["tok_base"], cpu_s=vlines * c["dub_s_per_line"],
+              depends=dep, paid="voice", credits=cred, usd=cred * c["eleven_usd_per_credit"],
+              quote=dict(base_quote, chars=vchars, chars_target=round(chars_t), credits=round(cred),
+                         usd_indicative=round(cred * c["eleven_usd_per_credit"], 2)))
+            dub_ids.append("dub")
+            voice_parts = {"parts": [], "credits_total": round(cred), "credits_available": avail,
+                           "fit": None, "scope": "tutto",
+                           "note": "parti del gioco non note: il doppiaggio si spezza per lotti; "
+                                   "per doppiare solo alcune parti servono voice.parts nei conti"}
+        if counts.get("lipsync") and dub_ids:
             E("lipsync", "👄", "Sincronia labiale per le voci nuove (dati dall'audio o bocca dall'ampiezza)",
-              "build-engineer", 0, "", 0, c["tok_lipsync"], depends=["dub", "engine-layer"], splittable=False,
+              "build-engineer", 0, "", 0, c["tok_lipsync"], depends=dub_ids + ["engine-layer"], splittable=False,
               requires="voice")
-    mix_dep = [d for d in ("audio", "voice-restore", "dub", "lipsync") if any(i["id"] == d for i in items)]
+    mix_dep = [i["id"] for i in items if not i.get("deferred") and
+               (i["id"] in ("audio", "voice-restore", "lipsync") or i["paid"] == "voice")]
     if mix_dep:
         E("mix", "🎚️", "Mix tra i gruppi (prove d'ascolto)", "audio-engineer", 0, "", 0, c["tok_mix"],
           depends=mix_dep, splittable=False)
@@ -306,13 +394,21 @@ def estimate(counts, coeffs=None, project=None):
     E("release", "📦", f"Build ({', '.join(plats)}; ~{ci_min} min di CI) e patch", "build-engineer", 0, "", 0,
       c["tok_release"], cpu_s=c["ci_min_per_platform"] * 60, depends=["qa"], splittable=False)
     items[-1]["ci_minutes"] = ci_min
-    return {"items": items, "coeffs": c}
+    for it in items:  # nothing waits for a part left out of the scope
+        if it.get("deferred"):
+            continue
+        it["depends"] = [d for d in it["depends"]
+                         if not any(j["id"] == d and j.get("deferred") for j in items)]
+    res = {"items": items, "coeffs": c}
+    if vlines and not dub_exists:
+        res["voice_parts"] = voice_parts
+    return res
 
 
 def _select(items, paid):
     """Keep the free items and the paid ones chosen (`paid`: set of "fal", "voice"); a free item
     that only makes sense with a paid one (`requires`, e.g. lip-sync for the new voices) follows it."""
-    keep = [i for i in items if (not i["paid"] or i["paid"] in paid)
+    keep = [i for i in items if (not i["paid"] or i["paid"] in paid) and not i.get("deferred")
             and (not i.get("requires") or i["requires"] in paid)]
     ids = {i["id"] for i in keep}
     for i in keep:
@@ -325,7 +421,13 @@ def packages(est, paid=(), budget=200000, coeffs=None):
     with dependencies and parallel groups (group n starts when the groups before are done)."""
     c = coeffs or est.get("coeffs") or COEFFS
     target = budget * c["package_fill"]
-    items = _select(json.loads(json.dumps(est["items"])), set(paid))
+    all_items = json.loads(json.dumps(est["items"]))
+    items = _select(all_items, set(paid))
+    # parts of the dub left out of voice.scope: no package, listed as deferred
+    deferred = [{"id": i["id"], "item": i["id"], "emoji": i["emoji"], "label": i["label"], "agent": i["agent"],
+                 "units": i["units"], "unit_name": i["unit_name"], "tokens": i["tokens"], "credits": i["credits"],
+                 "usd": i["usd"], "paid": i["paid"], "part": i.get("part"), "depends": [], "status": "deferred"}
+                for i in all_items if i.get("deferred") and (not i["paid"] or i["paid"] in set(paid))]
     out, by_item = [], {}
     for it in items:
         n = 1
@@ -345,7 +447,7 @@ def packages(est, paid=(), budget=200000, coeffs=None):
                         "agent": it["agent"], "units": u, "unit_name": it["unit_name"], "tokens": tok,
                         "cpu_s": round(it["cpu_s"] * share), "usd": round(it["usd"] * share, 2),
                         "credits": round(it["credits"] * share), "paid": it["paid"],
-                        "item_depends": it["depends"],
+                        "item_depends": it["depends"], "part": it.get("part"),
                         "minutes": round(it["cpu_s"] * share / 60 + tok / c["agent_tokens_per_min"])})
             by_item[it["id"]].append(pid)
     for p in out:
@@ -356,7 +458,8 @@ def packages(est, paid=(), budget=200000, coeffs=None):
         level[p["id"]] = 1 + max((level[d] for d in p["depends"]), default=0)
         p["group"] = level[p["id"]]
     over = [p["id"] for p in out if p["tokens"] > budget]
-    return {"budget": budget, "target": int(target), "packages": out, "over_budget": over}
+    return {"budget": budget, "target": int(target), "packages": out, "over_budget": over,
+            "deferred": deferred, "voice_parts": est.get("voice_parts")}
 
 
 def wall_minutes(pk, parallel=3):
@@ -428,15 +531,38 @@ def table(pk, parallel=3, group=True):
             cost = f"≤ {_usd(p['usd'])}"
         elif p["paid"] == "voice":
             cost = f"~{_int(p['credits'])} crediti (~{_usd(p['usd'])})"
+            part = p.get("part") or {}
+            if p.get("status") == "deferred":
+                cost += " ⏸️ esclusa (voice.scope)"
+            elif part.get("in_credits") is True:
+                cost += " ✅ nei crediti"
+            elif part.get("in_credits") is False:
+                cost += " ⏸️ oltre i crediti"
         dep = ", ".join(p["depends"]) if len(p["depends"]) <= 3 else f"{len(p['depends'])} pacchetti"
+        if p.get("status") == "deferred":
+            return f"| ⏸️ | {p['label']} | {p['agent']} | non generato | — | {cost} | {_k(p['tokens'])} |"
         return (f"| {p['emoji']} | {p['label']} | {p['agent']} | {dep or '—'} · G{p['group']} | "
                 f"{_hm(p['minutes'])} | {cost} | {_k(p['tokens'])} |")
     shown = _grouped(pk["packages"]) if group else pk["packages"]
     free = [p for p in shown if not p["paid"]]
     paid = [p for p in shown if p["paid"]]
+    deferred = pk.get("deferred") or []
     parts = ["**Gratuito (incluso di default)**", "", head] + [row(p) for p in free]
-    if paid:
-        parts += ["", "**A pagamento (scelto dopo il preventivo)**", "", head] + [row(p) for p in paid]
+    if paid or deferred:
+        parts += ["", "**A pagamento (scelto dopo il preventivo)**", "", head] + [row(p) for p in paid + deferred]
+    vp = pk.get("voice_parts") or {}
+    if vp.get("parts"):
+        n = len(vp["parts"])
+        cum = " → ".join(_int(p["credits_cumulative"]) for p in vp["parts"])
+        line = f"🎙️ Doppiaggio in {n} parti: crediti cumulati {cum}"
+        if vp.get("credits_available") is not None:
+            line += (f" · crediti disponibili {_int(vp['credits_available'])}: "
+                     f"stanno {vp['fit']} parti su {n} (in ordine di gioco)")
+        if vp.get("scope") != "tutto":
+            line += f" · scelte (voice.scope): {', '.join(vp['scope']) or 'nessuna'}"
+        parts += ["", line]
+    elif vp.get("note") and any(p["paid"] == "voice" for p in pk["packages"]):
+        parts += ["", f"🎙️ {vp['note']}"]
     seq = sum(p["minutes"] for p in pk["packages"])
     usd = sum(p["usd"] for p in pk["packages"] if p["paid"])
     cred = sum(p["credits"] for p in pk["packages"] if p["paid"])
@@ -444,6 +570,7 @@ def table(pk, parallel=3, group=True):
     parts += ["", f"**Totale**: {len(pk['packages'])} pacchetti · tempo ~{_hm(wall_minutes(pk, parallel))} "
               f"con {parallel} in parallelo ({_hm(seq)} in sequenza) · costo ≤ {_usd(usd)}"
               + (f" (di cui ~{_int(cred)} crediti ElevenLabs)" if cred else "")
+              + (f" · {len(deferred)} parti escluse non contate" if deferred else "")
               + f" · ~{_k(tok)} token · budget per sotto-sessione {_k(pk['budget'])} "
               f"(riempimento fino a {_k(pk['target'])})"]
     if pk.get("over_budget"):
@@ -467,9 +594,12 @@ def status(data, stale_min=30, max_attempts=3, now=None):
     wp = data.get("work_packages") or []
     st = {p["id"]: p.get("status") for p in wp}
     res = {"running": [], "stale": [], "failed": [], "over_budget": [], "warn_tokens": [],
-           "ready": [], "done": [], "to_restart": [], "to_stop": [], "pending": []}
+           "ready": [], "done": [], "to_restart": [], "to_stop": [], "pending": [], "deferred": []}
     for p in wp:
         s = p.get("status", "pending")
+        if s == "deferred":
+            res["deferred"].append(p["id"])
+            continue
         if s == "done":
             res["done"].append(p["id"])
             continue
@@ -498,5 +628,6 @@ def status(data, stale_min=30, max_attempts=3, now=None):
             else:
                 res["to_stop"].append({"id": p["id"], "why": trouble, "attempts": p.get("attempts", 0)})
     res["summary"] = (f"{len(res['done'])}/{len(wp)} fatti, {len(res['running'])} in corso, "
-                      f"{len(res['ready'])} pronti, {len(res['stale'])} fermi, {len(res['failed'])} falliti")
+                      f"{len(res['ready'])} pronti, {len(res['stale'])} fermi, {len(res['failed'])} falliti"
+                      + (f", {len(res['deferred'])} rimandati" if res["deferred"] else ""))
     return res
