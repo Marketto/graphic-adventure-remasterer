@@ -14,11 +14,20 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from remaster_tools import (assets, audio, controls, detect, extract, falai, font, gfx, hints, keys,  # noqa: E402
                             manual, plan, platforms, project, rawframe, recipe, release, review, style,
-                            text, theme, timing, transcribe, video, voice, voiceref, widescreen)
+                            text, theme, timing, transcribe, video, voice, voiceref, voiceseg,
+                            widescreen)
 
 
 def out(obj):
     print(json.dumps(obj, ensure_ascii=False, indent=2))
+
+
+def _friendly(fn, *args):
+    """Expected problems (missing optional dependency, bad input) as a one-line message."""
+    try:
+        return fn(*args)
+    except (RuntimeError, ValueError) as e:
+        sys.exit(f"errore: {e}")
 
 
 def need_project(workdir):
@@ -416,17 +425,43 @@ def main(argv=None):
     x = sg.add_parser("transcripts", help="confronta le trascrizioni automatiche ({chiave: testo}) col copione")
     x.add_argument("script"); x.add_argument("transcripts")
     x.set_defaults(fn=lambda a: out(voice.check_transcripts(a.script, a.transcripts)))
+    x = sg.add_parser("segments", help="tratti di file lunghi: trascrizione locale e gruppi di parlanti (TSV)")
+    x.add_argument("audio", nargs="+", help="file audio lunghi (trailer, clip) o cartelle")
+    x.add_argument("--lang", default="it"); x.add_argument("--out", required=True, help="segmenti.tsv")
+    x.add_argument("--model", default="small", help="modello faster-whisper (small, medium...)")
+    x.add_argument("--speakers", type=int, help="numero di parlanti, se noto (più affidabile della soglia)")
+    x.add_argument("--threshold", type=float, help="soglia di distanza per i gruppi (default del tipo di impronta)")
+    x.add_argument("--prints", choices=("auto", "resemblyzer", "simple"), default="auto",
+                   help="impronte vocali: resemblyzer se installato, altrimenti semplici")
+    x.set_defaults(fn=lambda a: out(_friendly(voiceseg.segments, a.audio, a.out, a.lang, a.model, a.speakers,
+                                              a.threshold, a.prints)))
     x = sg.add_parser("reference", help="misure del parlato di riferimento (solo numeri; i frammenti restano locali)")
-    x.add_argument("audio", nargs="+", help="frammenti puliti del personaggio (file o cartelle)")
+    x.add_argument("audio", nargs="*", help="frammenti puliti del personaggio (file o cartelle)")
     x.add_argument("--out", required=True); x.add_argument("--start", type=float); x.add_argument("--end", type=float)
-    x.add_argument("--delete-after", action="store_true", help="cancella i frammenti dopo la misura")
-    x.set_defaults(fn=lambda a: out(voiceref.reference(a.audio, a.out, a.start, a.end, a.delete_after)))
+    x.add_argument("--segments", help="TSV di `voice segments`: misura i tratti senza tagliare i file")
+    x.add_argument("--group", help="gruppo (o gruppi, separati da virgola) del TSV da misurare")
+    x.add_argument("--select", help="righe del TSV da misurare, per id: 3,5-7")
+    x.add_argument("--gender", help="genere del personaggio (male, female) per il controllo dell'altezza")
+    x.add_argument("--age", help="età del personaggio (young, middle_aged, old, child)")
+    x.add_argument("--delete-after", action="store_true", help="cancella l'audio misurato dopo la misura")
+    x.set_defaults(fn=lambda a: out(_friendly(voiceref.reference, a.audio, a.out, a.start, a.end, a.delete_after,
+                                              a.segments, a.group, a.select, a.gender, a.age)))
+    x = sg.add_parser("measure", help="misura le anteprime delle voci candidate una volta sola (riusabili)")
+    x.add_argument("candidates", help="file o cartella di anteprime, o voices.json (voice_id, name, file o preview_url)")
+    x.add_argument("--out", required=True, help="misure.json (le voci già misurate non si rimisurano)")
+    x.add_argument("--cache", help="dove scaricare le anteprime (default: previews/ accanto a --out)")
+    x.set_defaults(fn=lambda a: out(_friendly(voiceref.measure, a.candidates, a.out, a.cache)))
     x = sg.add_parser("match", help="ordina le voci esistenti della libreria per somiglianza al riferimento")
-    x.add_argument("ref"); x.add_argument("--candidates", required=True,
-                                          help="cartella di anteprime audio o voices.json (voice_id, name, file o preview_url)")
+    x.add_argument("ref")
+    x.add_argument("--candidates", help="cartella di anteprime audio o voices.json (voice_id, name, file o preview_url)")
+    x.add_argument("--measured", help="misure.json di `voice measure` (niente nuove misure)")
+    x.add_argument("--gender", help="genere del personaggio, se il riferimento non lo dichiara")
+    x.add_argument("--age", help="età del personaggio, se il riferimento non la dichiara")
+    x.add_argument("--strict", action="store_true", help="escludi le candidate con genere o età dichiarati diversi")
     x.add_argument("--top", type=int, default=5); x.add_argument("--out", required=True)
     x.add_argument("--cache", help="dove scaricare le anteprime (default: previews/ accanto a --out)")
-    x.set_defaults(fn=lambda a: out(voiceref.match(a.ref, a.candidates, a.top, a.out, a.cache)))
+    x.set_defaults(fn=lambda a: out(_friendly(voiceref.match, a.ref, a.candidates, a.top, a.out, a.cache,
+                                              a.measured, a.gender, a.age, a.strict)))
 
     s = g.add_parser("ui", help="interfaccia del motore nello stile del gioco")
     sg = s.add_subparsers(dest="action", required=True)
