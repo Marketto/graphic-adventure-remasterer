@@ -112,8 +112,11 @@ voci, DeepFilterNet per il restauro del parlato originale.
 ## Repository pubblico: regole
 - Nessun nome di giochi, personaggi, luoghi, sviluppatori o motori proprietari; nessun testo,
   immagine, suono o dato di gioco, neanche come esempio nei test. Strumenti open source citabili.
-- Prima di ogni commit: `python3 tools/ip_guard.py --staged` (installa l'hook con
-  `git config core.hooksPath .githooks`). La lista dei termini vietati è salvata solo come hash
+- Prima di ogni commit: `python3 tools/ip_guard.py --staged` (installa gli hook `pre-commit` e
+  `commit-msg` con `git config core.hooksPath .githooks`). Controlla il contenuto davvero in
+  staging e il messaggio di commit: termini protetti, file multimediali o binari, file grandi,
+  segreti (chiavi API, token, chiavi private), e-mail personali e, se configurati in
+  `<.git>/ipguard-private`, i testi privati del gioco (sequenze di 6 parole). La lista dei termini vietati è salvata solo come hash
   SHA-256 (`.ipguard/denylist.sha256`); nuovi termini: `python3 tools/ip_guard.py --add "termine"`.
   In locale si può aggiungere `--private-texts <testi del gioco>` per trovare frasi copiate.
 - Lo stesso controllo gira in CI (`.github/workflows/ip-guard.yml`).
