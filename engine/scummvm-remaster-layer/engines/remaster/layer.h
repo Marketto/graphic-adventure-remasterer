@@ -49,6 +49,7 @@ namespace Remaster {
  *   texts    if (!l->addText(font, x, y, s, color, outline, boxW)) <draw as before>
  *   show     l->present(bb8, scrollX, scrollY); l->pace(tickMs) instead of delayMillis
  *   input    for every polled event: if (l->handleEvent(ev)) continue;
+ *            l->warpMouse(x, y) instead of g_system->warpMouse
  *   strings  s = l->text(original); l->playVoice(original)
  */
 class Layer {
@@ -56,7 +57,13 @@ public:
 	struct Desc {
 		Common::String gameId;
 		int screenW = 320, screenH = 200;
-		float pixelAspect = 1.0f;			///< 1.0: square pixels (640x400 -> 36 px per side); other values only for games made for stretched pixels
+		/**
+		 * Pixel height / width on the monitor the game was made for. 1.0: square pixels
+		 * (320x200 -> 18 px per side in 16:9). 1.2: 320x200 shown at 4:3; the rows are then
+		 * stretched (320x200 at scale 3 -> 960x720, 54 px per side in 16:9) unless
+		 * remaster_aspect=false.
+		 */
+		float pixelAspect = 1.0f;
 		Common::CodePage codePage = Common::kDos850;
 		Common::String language;			///< "it", "en"... (empty: from the ScummVM settings)
 	};
@@ -100,6 +107,9 @@ public:
 	// --- input ----------------------------------------------------------
 	/** toggle key and mouse remapping; true when the event was consumed */
 	bool handleEvent(Common::Event &ev);
+	/** g_system->warpMouse() with engine screen coordinates */
+	void warpMouse(int x, int y);
+	bool aspectCorrected() const { return _aspect; }
 
 	// --- texts and voices -------------------------------------------------
 	/** corrected or translated string in the game code page (original in classic mode) */
@@ -116,6 +126,7 @@ private:
 	Compositor *_comp;
 	Graphics::PixelFormat _fmt;
 	bool _widescreen;
+	bool _aspect;
 	bool _smooth;
 	bool _voices;
 	int _toggleKey;

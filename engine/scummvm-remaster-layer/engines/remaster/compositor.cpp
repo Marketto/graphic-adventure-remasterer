@@ -103,6 +103,7 @@ Compositor::Compositor(const AssetPack &pack, int scale, int screenW, int screen
 }
 
 Compositor::~Compositor() {
+	_frame.free();
 	_out.free();
 	_hdBg.free();
 	_origBg.free();
@@ -383,24 +384,24 @@ void Compositor::drawText(const Text &t, int originX) {
 			int gw = g.w * S / f.scale, gh = g.h * S / f.scale;
 			for (int yy = 0; yy < gh; yy++) {
 				int oy = gy + yy;
-				if (oy < 0 || oy >= _out.h)
+				if (oy < 0 || oy >= _frame.h)
 					continue;
 				int ay = g.ay + yy * f.scale / S;
 				for (int xx = 0; xx < gw; xx++) {
 					int ox = gx + xx;
-					if (ox < 0 || ox >= _out.w)
+					if (ox < 0 || ox >= _frame.w)
 						continue;
 					int ax = g.ax + xx * f.scale / S;
 					int cf = f.fill[ay * f.aw + ax], cs = f.stroke[ay * f.aw + ax];
 					if (!cf && !cs)
 						continue;
 					if (_fmt.bytesPerPixel == 4) {
-						uint32 *d = (uint32 *)_out.getBasePtr(ox, oy);
+						uint32 *d = (uint32 *)_frame.getBasePtr(ox, oy);
 						if (cs)
 							*d = blend(_fmt, *d, oc[0], oc[1], oc[2], cs);
 						*d = blend(_fmt, *d, fc[0], fc[1], fc[2], cf);
 					} else {
-						uint16 *d = (uint16 *)_out.getBasePtr(ox, oy);
+						uint16 *d = (uint16 *)_frame.getBasePtr(ox, oy);
 						uint32 v = *d;
 						if (cs)
 							v = blend(_fmt, v, oc[0], oc[1], oc[2], cs);
@@ -484,11 +485,11 @@ const Graphics::Surface &Compositor::compose(const Graphics::Surface &bb, int sc
 	const int S = _scale;
 	const int L = _maxExtL, R = _maxExtR;
 	const int viewW = _screenW + L + R;
-	if (_out.w != viewW * S || _out.h != _screenH * S) {
-		_out.free();
-		_out.create(viewW * S, _screenH * S, _fmt);
+	if (_frame.w != viewW * S || _frame.h != _screenH * S) {
+		_frame.free();
+		_frame.create(viewW * S, _screenH * S, _fmt);
 	}
-	_out.fillRect(Common::Rect(_out.w, _out.h), _fmt.RGBToColor(0, 0, 0));
+	_frame.fillRect(Common::Rect(_frame.w, _frame.h), _fmt.RGBToColor(0, 0, 0));
 	const int sx = scrollX256 >> 8;
 
 	if (_classic) {
@@ -501,14 +502,14 @@ const Graphics::Surface &Compositor::compose(const Graphics::Surface &bb, int sc
 					for (int i = 0; i < S; i++) {
 						int ox = (L + x) * S + i;
 						if (_fmt.bytesPerPixel == 4)
-							*(uint32 *)_out.getBasePtr(ox, y * S + j) = c;
+							*(uint32 *)_frame.getBasePtr(ox, y * S + j) = c;
 						else
-							*(uint16 *)_out.getBasePtr(ox, y * S + j) = (uint16)c;
+							*(uint16 *)_frame.getBasePtr(ox, y * S + j) = (uint16)c;
 					}
 				}
 			}
 		}
-		return _out;
+		return finish();
 	}
 
 	if (_modesDirty) {
@@ -567,7 +568,7 @@ const Graphics::Surface &Compositor::compose(const Graphics::Surface &bb, int sc
 		const byte *ob = (hasHD && bgy >= 0 && bgy < _origBg.h) ? (const byte *)_origBg.getBasePtr(0, bgy) : nullptr;
 		const uint32 *hdRow = ob ? (const uint32 *)_hdBg.getBasePtr(0, bgy * S + jy) : nullptr;
 		const uint32 *idRow = (_ids && by < _idH) ? _ids + by * _idW : nullptr;
-		for (int X = 0; X < _out.w; X++) {
+		for (int X = 0; X < _frame.w; X++) {
 			const int hx = X + sub;
 			const int c = hx / S, j = hx % S;
 			const int col = viewLeft + c;
@@ -612,24 +613,113 @@ const Graphics::Surface &Compositor::compose(const Graphics::Surface &bb, int sc
 				}
 			}
 			if (_fmt.bytesPerPixel == 4)
-				*(uint32 *)_out.getBasePtr(X, Y) = out;
+				*(uint32 *)_frame.getBasePtr(X, Y) = out;
 			else
-				*(uint16 *)_out.getBasePtr(X, Y) = (uint16)out;
+				*(uint16 *)_frame.getBasePtr(X, Y) = (uint16)out;
 		}
 	}
 	drawTexts((sx - viewLeft) * S - sub);
+	return finish();
+}
+
+void Compositor::setAspect(float pixelAspect) {
+	int h = (int)(_screenH * _scale * pixelAspect + 0.5f);
+	_outH = (h > 0 && h != _screenH * _scale) ? h : 0;
+	if (!_outH)
+		_out.free();
+}
+
+int Compositor::sideExtension(int screenW, int screenH, float pixelAspect) {
+	// same number of pixels on each side, as in the pipeline tools (rstool widescreen geometry)
+	float target = screenH * pixelAspect * 16.0f / 9.0f;
+	float half = (target - screenW) / 2.0f - 1e-4f;
+	int side = (int)half;
+	if (half > side)
+		side++;
+	return MAX(0, side);
+}
+
+const Graphics::Surface &Compositor::finish() {
+	if (!_outH)
+		return _frame;
+	if (_out.w != _frame.w || _out.h != _outH) {
+		_out.free();
+		_out.create(_frame.w, _outH, _fmt);
+	}
+	stretchRows(_frame, _out);
 	return _out;
+}
+
+void Compositor::stretchRows(const Graphics::Surface &src, Graphics::Surface &dst) const {
+	// area filter on rows: output row Y covers the source rows [Y * sh / dh, (Y + 1) * sh / dh),
+	// computed exactly in units of 1/dh; every source row weighs the same in the result
+	const int sh = src.h, dh = dst.h, w = MIN(src.w, dst.w);
+	const bool wide = _fmt.bytesPerPixel == 4;
+	Common::Array<uint32> acc(w * 4);
+	for (int Y = 0; Y < dh; Y++) {
+		const int64 lo = (int64)Y * sh, hi = (int64)(Y + 1) * sh;
+		const int r0 = (int)(lo / dh), r1 = (int)MIN<int64>((hi + dh - 1) / dh, sh);
+		if (r1 - r0 == 1) {
+			memcpy(dst.getBasePtr(0, Y), src.getBasePtr(0, r0), w * _fmt.bytesPerPixel);
+			continue;
+		}
+		memset(&acc[0], 0, w * 4 * sizeof(uint32));
+		for (int r = r0; r < r1; r++) {
+			const uint32 wgt = (uint32)(MIN<int64>(hi, (int64)(r + 1) * dh) - MAX<int64>(lo, (int64)r * dh));
+			if (wide) {
+				const byte *sp = (const byte *)src.getBasePtr(0, r);
+				for (int i = 0; i < w * 4; i++)
+					acc[i] += sp[i] * wgt;	// every channel of an 8888 pixel is one byte
+			} else {
+				const uint16 *sp = (const uint16 *)src.getBasePtr(0, r);
+				for (int x = 0; x < w; x++) {
+					byte cr, cg, cb;
+					_fmt.colorToRGB(sp[x], cr, cg, cb);
+					acc[x * 4] += cr * wgt;
+					acc[x * 4 + 1] += cg * wgt;
+					acc[x * 4 + 2] += cb * wgt;
+				}
+			}
+		}
+		const uint32 half = sh / 2;
+		if (wide) {
+			byte *dp = (byte *)dst.getBasePtr(0, Y);
+			for (int i = 0; i < w * 4; i++)
+				dp[i] = (byte)((acc[i] + half) / sh);
+		} else {
+			uint16 *dp = (uint16 *)dst.getBasePtr(0, Y);
+			for (int x = 0; x < w; x++)
+				dp[x] = (uint16)_fmt.RGBToColor((acc[x * 4] + half) / sh, (acc[x * 4 + 1] + half) / sh, (acc[x * 4 + 2] + half) / sh);
+		}
+	}
 }
 
 Common::Point Compositor::toGame(const Common::Point &p, int scrollX) const {
 	(void)scrollX;
 	const int S = _scale;
-	int x = p.x / S, y = p.y / S;
+	int x = p.x / S;
+	// the stretched rows are mapped back with the same proportion used to draw them
+	int y = _outH ? (int)((int64)p.y * _screenH / _outH) : p.y / S;
 	if (_classic)
 		x -= _maxExtL;
 	else
 		x = _lastViewLeft + x - _lastSx;
 	return Common::Point(CLIP(x, 0, _screenW - 1), CLIP(y, 0, _screenH - 1));
+}
+
+Common::Point Compositor::toScreen(const Common::Point &p) const {
+	const int S = _scale;
+	int c = _classic ? p.x + _maxExtL : p.x + _lastSx - _lastViewLeft;
+	int X = c * S + S / 2, Y;
+	if (_outH) {
+		// rows of output that map back to game row p.y: [ceil(y * H / h), ceil((y + 1) * H / h))
+		int y0 = (int)(((int64)p.y * _outH + _screenH - 1) / _screenH);
+		int y1 = (int)(((int64)(p.y + 1) * _outH + _screenH - 1) / _screenH);
+		Y = (y0 + y1 - 1) / 2;
+	} else {
+		Y = p.y * S + S / 2;
+	}
+	return Common::Point(X, Y);
 }
 
 } // End of namespace Remaster

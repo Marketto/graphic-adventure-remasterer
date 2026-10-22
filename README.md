@@ -88,8 +88,10 @@ voci, DeepFilterNet per il restauro del parlato originale.
 ## Stato delle verifiche
 - `tools/`: test automatici su dati sintetici (`python -m pytest tools/tests`), tutti verdi; un
   test controlla anche che skill, agenti e documenti citino solo comandi, opzioni e file esistenti.
-- Remaster Layer: si applica su ScummVM `5d13ee16`, compila, collega, 411/411 test di `make test`
-  verdi (5 nuovi: chiavi, composizione, 16:9/mouse, scorrimento sub-pixel, fondali localizzati).
+- Remaster Layer: si applica su ScummVM `5d13ee16`, compila, collega, 415/415 test di `make test`
+  verdi (9 nuovi: chiavi, composizione, 16:9/mouse, scorrimento sub-pixel, fondali localizzati,
+  allungamento per pixel non quadrati: dimensioni e 16:9, righe filtrate, mouse, pixel quadrati
+  invariati).
 - Build Linux in modalità release verificata; Windows, macOS, Web e Android da provare al primo
   giro di CI.
 - Prima prova reale della Fase 1 su un secondo gioco (un'avventura del 1993 a 320x200, senza
@@ -100,9 +102,8 @@ voci, DeepFilterNet per il restauro del parlato originale.
   fal.ai via API (il client è provato solo con un servizio finto).
 - Tema GUI: generato dal tema di ScummVM dello stesso commit e caricato nel ScummVM compilato
   sotto Xvfb, con colori, font e logo sostituiti (schermata verificata).
-- Da implementare nel Layer comune: la scala verticale per i giochi pensati per pixel non
-  quadrati (oggi `pixelAspect` cambia solo la geometria 16:9) e i comandi `inputlog`,
-  `mousepath`, `keyhold` del driver di test, che vanno scritti nel motore di ogni gioco. Le tecniche in
+- Da implementare per ogni gioco: i comandi `inputlog`, `mousepath`, `keyhold` del driver di
+  test, che vanno scritti nel motore del gioco. Le tecniche in
   `references/conoscenza/` invece sono state usate in produzione sul banco di prova.
 
 ## Repository pubblico: regole

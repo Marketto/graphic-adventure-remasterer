@@ -1,4 +1,4 @@
-From 1b99da2278bbbcc5ffdc4178cd04f00bb6d34d8c Mon Sep 17 00:00:00 2001
+From c9fd0a9b3f5308e3862c70413e52d0114f587368 Mon Sep 17 00:00:00 2001
 From: Marketto <Marketto@users.noreply.github.com>
 Date: Wed, 21 Oct 2026 14:59:36 +0200
 Subject: [PATCH] ENGINES: Add Remaster Layer (HD, 16:9, smooth scrolling,
@@ -15,10 +15,13 @@ Engine independent helper for remastering 8-bit adventure engines:
   sprite frames through a per-pixel id buffer filled by the engine's own
   blitters, Scale2x/Scale3x elsewhere; palette fades and gray views on HD
   pixels; widescreen viewport with invented sides or bands; sub-pixel
-  scrolling; HD text; classic mode (original frame, sharp pixels)
+  scrolling; HD text; classic mode (original frame, sharp pixels);
+  vertical stretch for games made for non-square pixels (rows resampled
+  with an area filter, 16:9 view and mouse mapping following it)
 - Layer: one object per game with the hooks for the engine, F8 (or
   remaster_toggle_key) to switch original/remastered while playing,
-  mouse remapping, frame pacing between logic ticks, developer dump
+  aspect correction from Desc::pixelAspect (remaster_aspect), mouse
+  remapping and warping, frame pacing between logic ticks, developer dump
   (remaster_dump) of backgrounds, sprite frames and texts
 - Keys (frameKey, textKey) compatible with the graphic-adventure-remasterer tools
 - Unit tests in test/graphics/remaster.h
@@ -26,17 +29,17 @@ Engine independent helper for remastering 8-bit adventure engines:
 Assisted-by: Claude:claude-opus-5-5
 ---
  engines/module.mk               |   4 +
- engines/remaster/assetpack.cpp  | 279 ++++++++++++++
+ engines/remaster/assetpack.cpp  | 279 ++++++++++++
  engines/remaster/assetpack.h    | 119 ++++++
- engines/remaster/compositor.cpp | 635 ++++++++++++++++++++++++++++++++
- engines/remaster/compositor.h   | 171 +++++++++
+ engines/remaster/compositor.cpp | 725 ++++++++++++++++++++++++++++++++
+ engines/remaster/compositor.h   | 189 +++++++++
  engines/remaster/keys.cpp       |  77 ++++
- engines/remaster/keys.h         |  45 +++
- engines/remaster/layer.cpp      | 338 +++++++++++++++++
- engines/remaster/layer.h        | 148 ++++++++
- test/graphics/remaster.h        | 158 ++++++++
+ engines/remaster/keys.h         |  45 ++
+ engines/remaster/layer.cpp      | 342 +++++++++++++++
+ engines/remaster/layer.h        | 159 +++++++
+ test/graphics/remaster.h        | 302 +++++++++++++
  test/module.mk                  |   6 +-
- 11 files changed, 1978 insertions(+), 2 deletions(-)
+ 11 files changed, 2245 insertions(+), 2 deletions(-)
  create mode 100644 engines/remaster/assetpack.cpp
  create mode 100644 engines/remaster/assetpack.h
  create mode 100644 engines/remaster/compositor.cpp
@@ -470,10 +473,10 @@ index 00000000..e939d171
 +#endif
 diff --git a/engines/remaster/compositor.cpp b/engines/remaster/compositor.cpp
 new file mode 100644
-index 00000000..8a6d206a
+index 00000000..39dbaa2b
 --- /dev/null
 +++ b/engines/remaster/compositor.cpp
-@@ -0,0 +1,635 @@
+@@ -0,0 +1,725 @@
 +/* ScummVM - Graphic Adventure Engine
 + *
 + * ScummVM is the legal property of its developers, whose names
@@ -579,6 +582,7 @@ index 00000000..8a6d206a
 +}
 +
 +Compositor::~Compositor() {
++	_frame.free();
 +	_out.free();
 +	_hdBg.free();
 +	_origBg.free();
@@ -859,24 +863,24 @@ index 00000000..8a6d206a
 +			int gw = g.w * S / f.scale, gh = g.h * S / f.scale;
 +			for (int yy = 0; yy < gh; yy++) {
 +				int oy = gy + yy;
-+				if (oy < 0 || oy >= _out.h)
++				if (oy < 0 || oy >= _frame.h)
 +					continue;
 +				int ay = g.ay + yy * f.scale / S;
 +				for (int xx = 0; xx < gw; xx++) {
 +					int ox = gx + xx;
-+					if (ox < 0 || ox >= _out.w)
++					if (ox < 0 || ox >= _frame.w)
 +						continue;
 +					int ax = g.ax + xx * f.scale / S;
 +					int cf = f.fill[ay * f.aw + ax], cs = f.stroke[ay * f.aw + ax];
 +					if (!cf && !cs)
 +						continue;
 +					if (_fmt.bytesPerPixel == 4) {
-+						uint32 *d = (uint32 *)_out.getBasePtr(ox, oy);
++						uint32 *d = (uint32 *)_frame.getBasePtr(ox, oy);
 +						if (cs)
 +							*d = blend(_fmt, *d, oc[0], oc[1], oc[2], cs);
 +						*d = blend(_fmt, *d, fc[0], fc[1], fc[2], cf);
 +					} else {
-+						uint16 *d = (uint16 *)_out.getBasePtr(ox, oy);
++						uint16 *d = (uint16 *)_frame.getBasePtr(ox, oy);
 +						uint32 v = *d;
 +						if (cs)
 +							v = blend(_fmt, v, oc[0], oc[1], oc[2], cs);
@@ -960,11 +964,11 @@ index 00000000..8a6d206a
 +	const int S = _scale;
 +	const int L = _maxExtL, R = _maxExtR;
 +	const int viewW = _screenW + L + R;
-+	if (_out.w != viewW * S || _out.h != _screenH * S) {
-+		_out.free();
-+		_out.create(viewW * S, _screenH * S, _fmt);
++	if (_frame.w != viewW * S || _frame.h != _screenH * S) {
++		_frame.free();
++		_frame.create(viewW * S, _screenH * S, _fmt);
 +	}
-+	_out.fillRect(Common::Rect(_out.w, _out.h), _fmt.RGBToColor(0, 0, 0));
++	_frame.fillRect(Common::Rect(_frame.w, _frame.h), _fmt.RGBToColor(0, 0, 0));
 +	const int sx = scrollX256 >> 8;
 +
 +	if (_classic) {
@@ -977,14 +981,14 @@ index 00000000..8a6d206a
 +					for (int i = 0; i < S; i++) {
 +						int ox = (L + x) * S + i;
 +						if (_fmt.bytesPerPixel == 4)
-+							*(uint32 *)_out.getBasePtr(ox, y * S + j) = c;
++							*(uint32 *)_frame.getBasePtr(ox, y * S + j) = c;
 +						else
-+							*(uint16 *)_out.getBasePtr(ox, y * S + j) = (uint16)c;
++							*(uint16 *)_frame.getBasePtr(ox, y * S + j) = (uint16)c;
 +					}
 +				}
 +			}
 +		}
-+		return _out;
++		return finish();
 +	}
 +
 +	if (_modesDirty) {
@@ -1043,7 +1047,7 @@ index 00000000..8a6d206a
 +		const byte *ob = (hasHD && bgy >= 0 && bgy < _origBg.h) ? (const byte *)_origBg.getBasePtr(0, bgy) : nullptr;
 +		const uint32 *hdRow = ob ? (const uint32 *)_hdBg.getBasePtr(0, bgy * S + jy) : nullptr;
 +		const uint32 *idRow = (_ids && by < _idH) ? _ids + by * _idW : nullptr;
-+		for (int X = 0; X < _out.w; X++) {
++		for (int X = 0; X < _frame.w; X++) {
 +			const int hx = X + sub;
 +			const int c = hx / S, j = hx % S;
 +			const int col = viewLeft + c;
@@ -1088,19 +1092,93 @@ index 00000000..8a6d206a
 +				}
 +			}
 +			if (_fmt.bytesPerPixel == 4)
-+				*(uint32 *)_out.getBasePtr(X, Y) = out;
++				*(uint32 *)_frame.getBasePtr(X, Y) = out;
 +			else
-+				*(uint16 *)_out.getBasePtr(X, Y) = (uint16)out;
++				*(uint16 *)_frame.getBasePtr(X, Y) = (uint16)out;
 +		}
 +	}
 +	drawTexts((sx - viewLeft) * S - sub);
++	return finish();
++}
++
++void Compositor::setAspect(float pixelAspect) {
++	int h = (int)(_screenH * _scale * pixelAspect + 0.5f);
++	_outH = (h > 0 && h != _screenH * _scale) ? h : 0;
++	if (!_outH)
++		_out.free();
++}
++
++int Compositor::sideExtension(int screenW, int screenH, float pixelAspect) {
++	// same number of pixels on each side, as in the pipeline tools (rstool widescreen geometry)
++	float target = screenH * pixelAspect * 16.0f / 9.0f;
++	float half = (target - screenW) / 2.0f - 1e-4f;
++	int side = (int)half;
++	if (half > side)
++		side++;
++	return MAX(0, side);
++}
++
++const Graphics::Surface &Compositor::finish() {
++	if (!_outH)
++		return _frame;
++	if (_out.w != _frame.w || _out.h != _outH) {
++		_out.free();
++		_out.create(_frame.w, _outH, _fmt);
++	}
++	stretchRows(_frame, _out);
 +	return _out;
++}
++
++void Compositor::stretchRows(const Graphics::Surface &src, Graphics::Surface &dst) const {
++	// area filter on rows: output row Y covers the source rows [Y * sh / dh, (Y + 1) * sh / dh),
++	// computed exactly in units of 1/dh; every source row weighs the same in the result
++	const int sh = src.h, dh = dst.h, w = MIN(src.w, dst.w);
++	const bool wide = _fmt.bytesPerPixel == 4;
++	Common::Array<uint32> acc(w * 4);
++	for (int Y = 0; Y < dh; Y++) {
++		const int64 lo = (int64)Y * sh, hi = (int64)(Y + 1) * sh;
++		const int r0 = (int)(lo / dh), r1 = (int)MIN<int64>((hi + dh - 1) / dh, sh);
++		if (r1 - r0 == 1) {
++			memcpy(dst.getBasePtr(0, Y), src.getBasePtr(0, r0), w * _fmt.bytesPerPixel);
++			continue;
++		}
++		memset(&acc[0], 0, w * 4 * sizeof(uint32));
++		for (int r = r0; r < r1; r++) {
++			const uint32 wgt = (uint32)(MIN<int64>(hi, (int64)(r + 1) * dh) - MAX<int64>(lo, (int64)r * dh));
++			if (wide) {
++				const byte *sp = (const byte *)src.getBasePtr(0, r);
++				for (int i = 0; i < w * 4; i++)
++					acc[i] += sp[i] * wgt;	// every channel of an 8888 pixel is one byte
++			} else {
++				const uint16 *sp = (const uint16 *)src.getBasePtr(0, r);
++				for (int x = 0; x < w; x++) {
++					byte cr, cg, cb;
++					_fmt.colorToRGB(sp[x], cr, cg, cb);
++					acc[x * 4] += cr * wgt;
++					acc[x * 4 + 1] += cg * wgt;
++					acc[x * 4 + 2] += cb * wgt;
++				}
++			}
++		}
++		const uint32 half = sh / 2;
++		if (wide) {
++			byte *dp = (byte *)dst.getBasePtr(0, Y);
++			for (int i = 0; i < w * 4; i++)
++				dp[i] = (byte)((acc[i] + half) / sh);
++		} else {
++			uint16 *dp = (uint16 *)dst.getBasePtr(0, Y);
++			for (int x = 0; x < w; x++)
++				dp[x] = (uint16)_fmt.RGBToColor((acc[x * 4] + half) / sh, (acc[x * 4 + 1] + half) / sh, (acc[x * 4 + 2] + half) / sh);
++		}
++	}
 +}
 +
 +Common::Point Compositor::toGame(const Common::Point &p, int scrollX) const {
 +	(void)scrollX;
 +	const int S = _scale;
-+	int x = p.x / S, y = p.y / S;
++	int x = p.x / S;
++	// the stretched rows are mapped back with the same proportion used to draw them
++	int y = _outH ? (int)((int64)p.y * _screenH / _outH) : p.y / S;
 +	if (_classic)
 +		x -= _maxExtL;
 +	else
@@ -1108,13 +1186,28 @@ index 00000000..8a6d206a
 +	return Common::Point(CLIP(x, 0, _screenW - 1), CLIP(y, 0, _screenH - 1));
 +}
 +
++Common::Point Compositor::toScreen(const Common::Point &p) const {
++	const int S = _scale;
++	int c = _classic ? p.x + _maxExtL : p.x + _lastSx - _lastViewLeft;
++	int X = c * S + S / 2, Y;
++	if (_outH) {
++		// rows of output that map back to game row p.y: [ceil(y * H / h), ceil((y + 1) * H / h))
++		int y0 = (int)(((int64)p.y * _outH + _screenH - 1) / _screenH);
++		int y1 = (int)(((int64)(p.y + 1) * _outH + _screenH - 1) / _screenH);
++		Y = (y0 + y1 - 1) / 2;
++	} else {
++		Y = p.y * S + S / 2;
++	}
++	return Common::Point(X, Y);
++}
++
 +} // End of namespace Remaster
 diff --git a/engines/remaster/compositor.h b/engines/remaster/compositor.h
 new file mode 100644
-index 00000000..23511f0f
+index 00000000..d5be2703
 --- /dev/null
 +++ b/engines/remaster/compositor.h
-@@ -0,0 +1,171 @@
+@@ -0,0 +1,189 @@
 +/* ScummVM - Graphic Adventure Engine
 + *
 + * ScummVM is the legal property of its developers, whose names
@@ -1180,6 +1273,10 @@ index 00000000..23511f0f
 + * Palette fades and grayscale views are applied to HD pixels; other palette
 + * effects fall back to (3) for the colours involved.
 + * In classic mode it shows the original frame with sharp pixels.
++ *
++ * Games drawn for non-square pixels (e.g. 320x200 shown on a 4:3 monitor) can
++ * be stretched vertically (setAspect): the frame is composed at the square
++ * scale and its rows are resampled with an area filter to the final height.
 + */
 +class Compositor {
 +public:
@@ -1188,8 +1285,16 @@ index 00000000..23511f0f
 +
 +	int scale() const { return _scale; }
 +	int outputWidth() const { return (_screenW + _maxExtL + _maxExtR) * _scale; }
-+	int outputHeight() const { return _screenH * _scale; }
++	int outputHeight() const { return _outH ? _outH : _screenH * _scale; }
 +	void setMaxExtension(int left, int right) { _maxExtL = left; _maxExtR = right; }
++	/**
++	 * Vertical stretch for games made for non-square pixels: the output is
++	 * round(screenH * scale * pixelAspect) rows high (1.0: no stretch).
++	 */
++	void setAspect(float pixelAspect);
++	bool stretched() const { return _outH != 0; }
++	/** columns to add on each side for a 16:9 view (same count per side) */
++	static int sideExtension(int screenW, int screenH, float pixelAspect);
 +	int extLeft() const { return _maxExtL; }
 +
 +	void setClassic(bool c) { _classic = c; }
@@ -1219,6 +1324,8 @@ index 00000000..23511f0f
 +
 +	/** Output (HD) coordinates -> engine screen coordinates. */
 +	Common::Point toGame(const Common::Point &p, int scrollX) const;
++	/** Engine screen coordinates -> output (HD) coordinates (centre of the pixel; inverse of toGame) */
++	Common::Point toScreen(const Common::Point &p) const;
 +
 +private:
 +	enum Mode { kSame = 0, kFade = 1, kGray = 2, kLowRes = 3 };
@@ -1242,10 +1349,12 @@ index 00000000..23511f0f
 +	const AssetPack &_pack;
 +	int _scale, _screenW, _screenH;
 +	int _maxExtL = 0, _maxExtR = 0;
++	int _outH = 0;				// stretched output height (0: square pixels)
 +	Graphics::PixelFormat _fmt;
 +	bool _classic = false;
 +
-+	Graphics::Surface _out;
++	Graphics::Surface _frame;	// composed at the square scale
++	Graphics::Surface _out;		// _frame stretched vertically (only with setAspect)
 +	Graphics::Surface _hdBg;	// ARGB at _scale
 +	Graphics::Surface _origBg;	// 8-bit copy of the original background
 +	Graphics::Surface _wideBg;	// ARGB at _scale, scene + extensions
@@ -1281,6 +1390,8 @@ index 00000000..23511f0f
 +	void drawTexts(int originX);
 +	void drawText(const Text &t, int originX);
 +	void resampleTo(const Graphics::Surface &src, int srcScale, Graphics::Surface &dst) const;
++	const Graphics::Surface &finish();
++	void stretchRows(const Graphics::Surface &src, Graphics::Surface &dst) const;
 +};
 +
 +} // End of namespace Remaster
@@ -1422,10 +1533,10 @@ index 00000000..abc295b3
 +#endif
 diff --git a/engines/remaster/layer.cpp b/engines/remaster/layer.cpp
 new file mode 100644
-index 00000000..4872b3a0
+index 00000000..f0d22b79
 --- /dev/null
 +++ b/engines/remaster/layer.cpp
-@@ -0,0 +1,338 @@
+@@ -0,0 +1,342 @@
 +/* ScummVM - Graphic Adventure Engine
 + *
 + * ScummVM is the legal property of its developers, whose names
@@ -1506,14 +1617,13 @@ index 00000000..4872b3a0
 +	_toggleKey = ConfMan.hasKey("remaster_toggle_key") ? CLIP(ConfMan.getInt("remaster_toggle_key"), 1, 12) : 8;
 +	memset(_pal, 0, sizeof(_pal));
 +
++	// games made for non-square pixels: stretch the rows (remaster_aspect=false keeps square pixels)
++	float aspect = CLIP(desc.pixelAspect, 0.5f, 2.0f);
++	_aspect = aspect != 1.0f && confBool("remaster_aspect", true);
++	if (_aspect)
++		_comp->setAspect(aspect);
 +	if (_widescreen) {
-+		// same number of pixels on each side, as in the pipeline tools (rstool widescreen geometry)
-+		float target = desc.screenH * desc.pixelAspect * 16.0f / 9.0f;
-+		float half = (target - desc.screenW) / 2.0f - 1e-4f;
-+		int side = (int)half;
-+		if (half > side)
-+			side++;
-+		side = MAX(0, side);
++		int side = Compositor::sideExtension(desc.screenW, desc.screenH, _aspect ? aspect : 1.0f);
 +		_comp->setMaxExtension(side, side);
 +	}
 +
@@ -1530,8 +1640,8 @@ index 00000000..4872b3a0
 +		_dumpDir = ConfMan.get("remaster_dump");
 +
 +	_comp->setClassic(confBool("remaster_classic", false));
-+	debug(1, "Remaster: %dx%d -> %dx%d (scale %d, widescreen %d, language %s)", desc.screenW, desc.screenH,
-+		_comp->outputWidth(), _comp->outputHeight(), scale, _widescreen, _lang.c_str());
++	debug(1, "Remaster: %dx%d -> %dx%d (scale %d, aspect %d, widescreen %d, language %s)", desc.screenW, desc.screenH,
++		_comp->outputWidth(), _comp->outputHeight(), scale, _aspect, _widescreen, _lang.c_str());
 +}
 +
 +Layer::~Layer() {
@@ -1688,6 +1798,11 @@ index 00000000..4872b3a0
 +	}
 +}
 +
++void Layer::warpMouse(int x, int y) {
++	Common::Point p = _comp->toScreen(Common::Point(x, y));
++	g_system->warpMouse(p.x, p.y);
++}
++
 +// ---------------------------------------------------------------------------
 +
 +Common::String Layer::text(const Common::String &original, const char *kind, const char *location, const char *speaker, int boxW) {
@@ -1766,10 +1881,10 @@ index 00000000..4872b3a0
 +} // End of namespace Remaster
 diff --git a/engines/remaster/layer.h b/engines/remaster/layer.h
 new file mode 100644
-index 00000000..ef7871f5
+index 00000000..20a5f385
 --- /dev/null
 +++ b/engines/remaster/layer.h
-@@ -0,0 +1,148 @@
+@@ -0,0 +1,159 @@
 +/* ScummVM - Graphic Adventure Engine
 + *
 + * ScummVM is the legal property of its developers, whose names
@@ -1821,6 +1936,7 @@ index 00000000..ef7871f5
 + *   texts    if (!l->addText(font, x, y, s, color, outline, boxW)) <draw as before>
 + *   show     l->present(bb8, scrollX, scrollY); l->pace(tickMs) instead of delayMillis
 + *   input    for every polled event: if (l->handleEvent(ev)) continue;
++ *            l->warpMouse(x, y) instead of g_system->warpMouse
 + *   strings  s = l->text(original); l->playVoice(original)
 + */
 +class Layer {
@@ -1828,7 +1944,13 @@ index 00000000..ef7871f5
 +	struct Desc {
 +		Common::String gameId;
 +		int screenW = 320, screenH = 200;
-+		float pixelAspect = 1.0f;			///< 1.0: square pixels (640x400 -> 36 px per side); other values only for games made for stretched pixels
++		/**
++		 * Pixel height / width on the monitor the game was made for. 1.0: square pixels
++		 * (320x200 -> 18 px per side in 16:9). 1.2: 320x200 shown at 4:3; the rows are then
++		 * stretched (320x200 at scale 3 -> 960x720, 54 px per side in 16:9) unless
++		 * remaster_aspect=false.
++		 */
++		float pixelAspect = 1.0f;
 +		Common::CodePage codePage = Common::kDos850;
 +		Common::String language;			///< "it", "en"... (empty: from the ScummVM settings)
 +	};
@@ -1872,6 +1994,9 @@ index 00000000..ef7871f5
 +	// --- input ----------------------------------------------------------
 +	/** toggle key and mouse remapping; true when the event was consumed */
 +	bool handleEvent(Common::Event &ev);
++	/** g_system->warpMouse() with engine screen coordinates */
++	void warpMouse(int x, int y);
++	bool aspectCorrected() const { return _aspect; }
 +
 +	// --- texts and voices -------------------------------------------------
 +	/** corrected or translated string in the game code page (original in classic mode) */
@@ -1888,6 +2013,7 @@ index 00000000..ef7871f5
 +	Compositor *_comp;
 +	Graphics::PixelFormat _fmt;
 +	bool _widescreen;
++	bool _aspect;
 +	bool _smooth;
 +	bool _voices;
 +	int _toggleKey;
@@ -1920,10 +2046,10 @@ index 00000000..ef7871f5
 +#endif
 diff --git a/test/graphics/remaster.h b/test/graphics/remaster.h
 new file mode 100644
-index 00000000..714d8464
+index 00000000..2db890a7
 --- /dev/null
 +++ b/test/graphics/remaster.h
-@@ -0,0 +1,158 @@
+@@ -0,0 +1,302 @@
 +#include <cxxtest/TestSuite.h>
 +
 +#include "common/config-manager.h"
@@ -2079,6 +2205,150 @@ index 00000000..714d8464
 +		const Graphics::Surface &out = comp.compose(bb, 256 + 86, 0);
 +		TS_ASSERT_EQUALS(px(out, 0, 0), f.RGBToColor(2, 253, 1));
 +		TS_ASSERT_EQUALS(px(out, 2, 0), f.RGBToColor(3, 252, 1));
++		bb.free();
++	}
++
++	// games made for non-square pixels: rows stretched by pixelAspect
++	void test_aspect_output_size_and_16_9() {
++		Remaster::AssetPack pack;
++		Remaster::Compositor comp(pack, 3, 320, 200, argb());
++		TS_ASSERT_EQUALS(comp.outputHeight(), 600);
++		comp.setAspect(1.2f);
++		TS_ASSERT(comp.stretched());
++		TS_ASSERT_EQUALS(comp.outputWidth(), 960);
++		TS_ASSERT_EQUALS(comp.outputHeight(), 720);
++		// 16:9: the view grows with the stretched height
++		TS_ASSERT_EQUALS(Remaster::Compositor::sideExtension(320, 200, 1.0f), 18);
++		TS_ASSERT_EQUALS(Remaster::Compositor::sideExtension(320, 200, 1.2f), 54);
++		TS_ASSERT_EQUALS(Remaster::Compositor::sideExtension(640, 480, 1.0f), 107);
++		comp.setMaxExtension(54, 54);
++		TS_ASSERT_EQUALS(comp.outputWidth(), 1284);
++		TS_ASSERT_DELTA((double)comp.outputWidth() / comp.outputHeight(), 16.0 / 9.0, 0.01);
++		byte pal[768];
++		makePalette(pal);
++		comp.setPalette(pal, 0, 256);
++		Graphics::Surface bb;
++		bb.create(320, 200, Graphics::PixelFormat::createFormatCLUT8());
++		memset(bb.getPixels(), 7, 320 * 200);
++		comp.beginScene(320, 200);
++		const Graphics::Surface &out = comp.compose(bb, 0, 0);
++		TS_ASSERT_EQUALS(out.w, 1284);
++		TS_ASSERT_EQUALS(out.h, 720);
++		Graphics::PixelFormat f = argb();
++		TS_ASSERT_EQUALS(px(out, 54 * 3, 0), f.RGBToColor(7, 248, 3));
++		TS_ASSERT_EQUALS(px(out, 1284 - 54 * 3 - 1, 719), f.RGBToColor(7, 248, 3));
++		TS_ASSERT_EQUALS(px(out, 0, 360), f.RGBToColor(0, 0, 0));	// band
++		bb.free();
++	}
++
++	void test_aspect_rows_filtered() {
++		Remaster::AssetPack pack;
++		Remaster::Compositor comp(pack, 3, 2, 5, argb());
++		comp.setAspect(1.2f);	// 5 rows x 3 x 1.2 = 18
++		byte pal[768];
++		makePalette(pal);
++		comp.setPalette(pal, 0, 256);
++		Graphics::Surface bb;
++		bb.create(2, 5, Graphics::PixelFormat::createFormatCLUT8());
++		for (int y = 0; y < 5; y++)
++			memset(bb.getBasePtr(0, y), 10 * (y + 1), 2);
++		comp.beginScene(2, 5);
++		Graphics::PixelFormat f = argb();
++		for (int classic = 0; classic < 2; classic++) {
++			comp.setClassic(classic != 0);
++			const Graphics::Surface &out = comp.compose(bb, 0, 0);
++			TS_ASSERT_EQUALS(out.w, 6);
++			TS_ASSERT_EQUALS(out.h, 18);
++			// game row 0 covers output rows [0, 3.6): three plain rows, then one blended row
++			for (int y = 0; y < 3; y++)
++				TS_ASSERT_EQUALS(px(out, 1, y), f.RGBToColor(10, 245, 5));
++			// row 3 = source rows 2 (weight 9) and 3 (weight 6): red (9 * 10 + 6 * 20) / 15
++			TS_ASSERT_EQUALS(px(out, 1, 3), f.RGBToColor(14, 241, 7));
++			for (int y = 4; y < 7; y++)
++				TS_ASSERT_EQUALS(px(out, 5, y), f.RGBToColor(20, 235, 10));
++			TS_ASSERT_EQUALS(px(out, 0, 17), f.RGBToColor(50, 205, 25));
++			// every row is a weighted mean of neighbours: red never decreases going down
++			for (int y = 1; y < 18; y++)
++				TS_ASSERT_LESS_THAN_EQUALS(px(out, 2, y - 1) >> 16 & 0xff, px(out, 2, y) >> 16 & 0xff);
++		}
++		bb.free();
++	}
++
++	void test_aspect_mouse() {
++		Remaster::AssetPack pack;
++		for (int wide = 0; wide < 2; wide++) {
++			for (int classic = 0; classic < 2; classic++) {
++				Remaster::Compositor comp(pack, 3, 320, 200, argb());
++				comp.setAspect(1.2f);
++				if (wide)
++					comp.setMaxExtension(54, 54);
++				comp.setClassic(classic != 0);
++				Graphics::Surface bb;
++				bb.create(320, 200, Graphics::PixelFormat::createFormatCLUT8());
++				memset(bb.getPixels(), 1, 320 * 200);
++				comp.beginScene(320, 200);
++				comp.compose(bb, 0, 0);
++				const int L = wide ? 54 * 3 : 0;
++				// extremes and centre
++				TS_ASSERT_EQUALS(comp.toGame(Common::Point(L, 0), 0), Common::Point(0, 0));
++				TS_ASSERT_EQUALS(comp.toGame(Common::Point(L + 959, 719), 0), Common::Point(319, 199));
++				TS_ASSERT_EQUALS(comp.toGame(Common::Point(L + 480, 360), 0), Common::Point(160, 100));
++				// no jumps: every output row maps to the same or the next game row, 3 or 4 rows each
++				int prev = 0, run = 0;
++				for (int Y = 0; Y < 720; Y++) {
++					int y = comp.toGame(Common::Point(L + 10, Y), 0).y;
++					TS_ASSERT(y == prev || y == prev + 1);
++					if (y != prev) {
++						TS_ASSERT(run == 3 || run == 4);
++						run = 0;
++					}
++					prev = y;
++					run++;
++				}
++				TS_ASSERT_EQUALS(prev, 199);
++				// and back: game -> screen -> game
++				for (int y = 0; y < 200; y++)
++					for (int x = 0; x < 320; x += 53) {
++						Common::Point s = comp.toScreen(Common::Point(x, y));
++						TS_ASSERT_EQUALS(comp.toGame(s, 0), Common::Point(x, y));
++					}
++				TS_ASSERT_EQUALS(comp.toScreen(Common::Point(0, 0)), Common::Point(L + 1, 1));
++				TS_ASSERT_EQUALS(comp.toScreen(Common::Point(319, 199)), Common::Point(L + 958, 718));
++				bb.free();
++			}
++		}
++	}
++
++	void test_square_pixels_unchanged() {
++		Remaster::AssetPack pack;
++		Remaster::Compositor a(pack, 3, 4, 3, argb()), b(pack, 3, 4, 3, argb());
++		b.setAspect(1.0f);
++		TS_ASSERT(!b.stretched());
++		TS_ASSERT_EQUALS(b.outputHeight(), 9);
++		byte pal[768];
++		makePalette(pal);
++		a.setPalette(pal, 0, 256);
++		b.setPalette(pal, 0, 256);
++		Graphics::Surface bb;
++		bb.create(4, 3, Graphics::PixelFormat::createFormatCLUT8());
++		byte *p = (byte *)bb.getPixels();
++		for (int i = 0; i < 12; i++)
++			p[i] = (byte)((i * 37) % 7);
++		a.beginScene(4, 3);
++		b.beginScene(4, 3);
++		const Graphics::Surface &oa = a.compose(bb, 0, 0);
++		const Graphics::Surface &ob = b.compose(bb, 0, 0);
++		TS_ASSERT_EQUALS(oa.h, 9);
++		TS_ASSERT_EQUALS(ob.h, 9);
++		for (int y = 0; y < 9; y++)
++			for (int x = 0; x < 12; x++)
++				TS_ASSERT_EQUALS(px(oa, x, y), px(ob, x, y));
++		for (int y = 0; y < 3; y++)
++			for (int x = 0; x < 4; x++) {
++				Common::Point s = b.toScreen(Common::Point(x, y));
++				TS_ASSERT_EQUALS(s, Common::Point(x * 3 + 1, y * 3 + 1));
++				TS_ASSERT_EQUALS(b.toGame(s, 0), Common::Point(x, y));
++			}
 +		bb.free();
 +	}
 +};

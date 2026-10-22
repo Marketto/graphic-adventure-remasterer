@@ -155,4 +155,148 @@ public:
 		TS_ASSERT_EQUALS(px(out, 2, 0), f.RGBToColor(3, 252, 1));
 		bb.free();
 	}
+
+	// games made for non-square pixels: rows stretched by pixelAspect
+	void test_aspect_output_size_and_16_9() {
+		Remaster::AssetPack pack;
+		Remaster::Compositor comp(pack, 3, 320, 200, argb());
+		TS_ASSERT_EQUALS(comp.outputHeight(), 600);
+		comp.setAspect(1.2f);
+		TS_ASSERT(comp.stretched());
+		TS_ASSERT_EQUALS(comp.outputWidth(), 960);
+		TS_ASSERT_EQUALS(comp.outputHeight(), 720);
+		// 16:9: the view grows with the stretched height
+		TS_ASSERT_EQUALS(Remaster::Compositor::sideExtension(320, 200, 1.0f), 18);
+		TS_ASSERT_EQUALS(Remaster::Compositor::sideExtension(320, 200, 1.2f), 54);
+		TS_ASSERT_EQUALS(Remaster::Compositor::sideExtension(640, 480, 1.0f), 107);
+		comp.setMaxExtension(54, 54);
+		TS_ASSERT_EQUALS(comp.outputWidth(), 1284);
+		TS_ASSERT_DELTA((double)comp.outputWidth() / comp.outputHeight(), 16.0 / 9.0, 0.01);
+		byte pal[768];
+		makePalette(pal);
+		comp.setPalette(pal, 0, 256);
+		Graphics::Surface bb;
+		bb.create(320, 200, Graphics::PixelFormat::createFormatCLUT8());
+		memset(bb.getPixels(), 7, 320 * 200);
+		comp.beginScene(320, 200);
+		const Graphics::Surface &out = comp.compose(bb, 0, 0);
+		TS_ASSERT_EQUALS(out.w, 1284);
+		TS_ASSERT_EQUALS(out.h, 720);
+		Graphics::PixelFormat f = argb();
+		TS_ASSERT_EQUALS(px(out, 54 * 3, 0), f.RGBToColor(7, 248, 3));
+		TS_ASSERT_EQUALS(px(out, 1284 - 54 * 3 - 1, 719), f.RGBToColor(7, 248, 3));
+		TS_ASSERT_EQUALS(px(out, 0, 360), f.RGBToColor(0, 0, 0));	// band
+		bb.free();
+	}
+
+	void test_aspect_rows_filtered() {
+		Remaster::AssetPack pack;
+		Remaster::Compositor comp(pack, 3, 2, 5, argb());
+		comp.setAspect(1.2f);	// 5 rows x 3 x 1.2 = 18
+		byte pal[768];
+		makePalette(pal);
+		comp.setPalette(pal, 0, 256);
+		Graphics::Surface bb;
+		bb.create(2, 5, Graphics::PixelFormat::createFormatCLUT8());
+		for (int y = 0; y < 5; y++)
+			memset(bb.getBasePtr(0, y), 10 * (y + 1), 2);
+		comp.beginScene(2, 5);
+		Graphics::PixelFormat f = argb();
+		for (int classic = 0; classic < 2; classic++) {
+			comp.setClassic(classic != 0);
+			const Graphics::Surface &out = comp.compose(bb, 0, 0);
+			TS_ASSERT_EQUALS(out.w, 6);
+			TS_ASSERT_EQUALS(out.h, 18);
+			// game row 0 covers output rows [0, 3.6): three plain rows, then one blended row
+			for (int y = 0; y < 3; y++)
+				TS_ASSERT_EQUALS(px(out, 1, y), f.RGBToColor(10, 245, 5));
+			// row 3 = source rows 2 (weight 9) and 3 (weight 6): red (9 * 10 + 6 * 20) / 15
+			TS_ASSERT_EQUALS(px(out, 1, 3), f.RGBToColor(14, 241, 7));
+			for (int y = 4; y < 7; y++)
+				TS_ASSERT_EQUALS(px(out, 5, y), f.RGBToColor(20, 235, 10));
+			TS_ASSERT_EQUALS(px(out, 0, 17), f.RGBToColor(50, 205, 25));
+			// every row is a weighted mean of neighbours: red never decreases going down
+			for (int y = 1; y < 18; y++)
+				TS_ASSERT_LESS_THAN_EQUALS(px(out, 2, y - 1) >> 16 & 0xff, px(out, 2, y) >> 16 & 0xff);
+		}
+		bb.free();
+	}
+
+	void test_aspect_mouse() {
+		Remaster::AssetPack pack;
+		for (int wide = 0; wide < 2; wide++) {
+			for (int classic = 0; classic < 2; classic++) {
+				Remaster::Compositor comp(pack, 3, 320, 200, argb());
+				comp.setAspect(1.2f);
+				if (wide)
+					comp.setMaxExtension(54, 54);
+				comp.setClassic(classic != 0);
+				Graphics::Surface bb;
+				bb.create(320, 200, Graphics::PixelFormat::createFormatCLUT8());
+				memset(bb.getPixels(), 1, 320 * 200);
+				comp.beginScene(320, 200);
+				comp.compose(bb, 0, 0);
+				const int L = wide ? 54 * 3 : 0;
+				// extremes and centre
+				TS_ASSERT_EQUALS(comp.toGame(Common::Point(L, 0), 0), Common::Point(0, 0));
+				TS_ASSERT_EQUALS(comp.toGame(Common::Point(L + 959, 719), 0), Common::Point(319, 199));
+				TS_ASSERT_EQUALS(comp.toGame(Common::Point(L + 480, 360), 0), Common::Point(160, 100));
+				// no jumps: every output row maps to the same or the next game row, 3 or 4 rows each
+				int prev = 0, run = 0;
+				for (int Y = 0; Y < 720; Y++) {
+					int y = comp.toGame(Common::Point(L + 10, Y), 0).y;
+					TS_ASSERT(y == prev || y == prev + 1);
+					if (y != prev) {
+						TS_ASSERT(run == 3 || run == 4);
+						run = 0;
+					}
+					prev = y;
+					run++;
+				}
+				TS_ASSERT_EQUALS(prev, 199);
+				// and back: game -> screen -> game
+				for (int y = 0; y < 200; y++)
+					for (int x = 0; x < 320; x += 53) {
+						Common::Point s = comp.toScreen(Common::Point(x, y));
+						TS_ASSERT_EQUALS(comp.toGame(s, 0), Common::Point(x, y));
+					}
+				TS_ASSERT_EQUALS(comp.toScreen(Common::Point(0, 0)), Common::Point(L + 1, 1));
+				TS_ASSERT_EQUALS(comp.toScreen(Common::Point(319, 199)), Common::Point(L + 958, 718));
+				bb.free();
+			}
+		}
+	}
+
+	void test_square_pixels_unchanged() {
+		Remaster::AssetPack pack;
+		Remaster::Compositor a(pack, 3, 4, 3, argb()), b(pack, 3, 4, 3, argb());
+		b.setAspect(1.0f);
+		TS_ASSERT(!b.stretched());
+		TS_ASSERT_EQUALS(b.outputHeight(), 9);
+		byte pal[768];
+		makePalette(pal);
+		a.setPalette(pal, 0, 256);
+		b.setPalette(pal, 0, 256);
+		Graphics::Surface bb;
+		bb.create(4, 3, Graphics::PixelFormat::createFormatCLUT8());
+		byte *p = (byte *)bb.getPixels();
+		for (int i = 0; i < 12; i++)
+			p[i] = (byte)((i * 37) % 7);
+		a.beginScene(4, 3);
+		b.beginScene(4, 3);
+		const Graphics::Surface &oa = a.compose(bb, 0, 0);
+		const Graphics::Surface &ob = b.compose(bb, 0, 0);
+		TS_ASSERT_EQUALS(oa.h, 9);
+		TS_ASSERT_EQUALS(ob.h, 9);
+		for (int y = 0; y < 9; y++)
+			for (int x = 0; x < 12; x++)
+				TS_ASSERT_EQUALS(px(oa, x, y), px(ob, x, y));
+		for (int y = 0; y < 3; y++)
+			for (int x = 0; x < 4; x++) {
+				Common::Point s = b.toScreen(Common::Point(x, y));
+				TS_ASSERT_EQUALS(s, Common::Point(x * 3 + 1, y * 3 + 1));
+				TS_ASSERT_EQUALS(b.toGame(s, 0), Common::Point(x, y));
+			}
+		bb.free();
+	}
 };
