@@ -1,6 +1,6 @@
 ---
 name: widescreen
-description: Porta le scene di un'avventura 2D d'epoca al 16:9 secondo regole precise — proporzione dei pixel decisa dalla piattaforma e dai monitor dell'epoca, scenari a scorrimento allargati automaticamente, interni chiusi lasciati in 4:3 con bordi, esterni aperti estesi con le tecniche locali collaudate (fal.ai solo se l'utente lo sceglie), sempre con conferma — e prepara i dati per la viewport del motore. Usala quando l'utente sceglie il formato 16:9.
+description: Porta le scene di un'avventura 2D d'epoca al 16:9 secondo regole precise — proporzione dei pixel decisa da sola (piattaforma, monitor dell'epoca e forme rotonde misurate nel dump; chiede solo nel dubbio), scenari a scorrimento allargati automaticamente, interni chiusi lasciati in 4:3 con bordi, esterni aperti estesi con le tecniche locali collaudate (fal.ai solo se l'utente lo sceglie), sempre con conferma — e prepara i dati per la viewport del motore. Usala quando l'utente sceglie il formato 16:9.
 ---
 
 # 16:9
@@ -16,19 +16,40 @@ Non basta la risoluzione: decidi nell'analisi, prima di classificare, da
   NTSC, Atari ST) o pixel quadrati (640x480, Windows, Mac, Amiga PAL lowres);
 - **come è nata l'arte**: disegnata a mano su quel monitor (l'artista vedeva i pixel allungati)
   o digitalizzata/renderizzata a pixel quadrati (allora la versione fedele è quadrata).
-`rstool.py widescreen aspect --platform dos --w 320 --h 200 --year 1992 [--art pixel|digitized]`
-dà l'allungamento candidato, i motivi e quanto è sicuro. Poi **decide l'occhio**:
-`rstool.py widescreen aspect-sheet <3-4 fondali con oggetti tondi, volti, ruote, lune, testo
-disegnato> --out review/aspect.png` mette le scene a pixel quadrati e allungati affiancate; la
-versione giusta li mostra rotondi. Il foglio **non basta** su viste in prospettiva e documenti
-(l'occhio non vede la differenza): allora **misura** una forma rotonda nella realtà (disco o
-tavolo visto dall'alto, ruota, luna, oblò), anche divisa tra più stanze:
+**Il controllo è automatico; si chiede all'utente solo in caso di dubbio.**
+`rstool.py widescreen aspect-auto --platform dos --w 320 --h 200 --year 1992 [--art pixel|digitized]
+--evidence <dump>/bg <dump>/obj [--measure review/misura.json] --record` combina:
+- il **candidato della tabella** (piattaforma, modo video, anno, monitor dell'epoca) con la sua
+  confidenza (lo stesso di `rstool.py widescreen aspect`);
+- le **prove misurate da sole** sul dump: cerca forme ellittiche piene o ad anello (rapporto
+  d'inerzia, sovrapposizione con l'ellisse stimata) e archi di cerchi grandi tagliati dal bordo
+  (una pianta rotonda divisa tra più stanze) in oggetti, icone, sprite e fondali, e ne misura
+  larghezza/altezza: un cerchio disegnato per pixel allungati di 1,2 misura ~1,2. Le forme più
+  larghe di ogni candidato sono rotonde **in prospettiva** (tavoli, pozzi visti di sbieco) e si
+  scartano, quelle più alte non sono rotonde; conta la distribuzione delle restanti (moda e
+  sostegno attorno a 1,0, 1,2 o al candidato della tabella), non la singola forma;
+- le eventuali **misure manuali** salvate da `aspect-measure` (vedi sotto).
+Decide **da solo** (`decided_by: "auto"`) quando la tabella è sicura (confidenza alta) e le prove
+non la contraddicono, o quando le prove concordano nettamente con il candidato della tabella;
+con `--record` scrive `graphics.pixel_aspect` {stretch, decided_by, confidence, reasons, evidence}
+e una decisione con la data. **Chiede** (`decided_by: "ask"`, `stretch` null, `proposed` e i motivi
+in `reasons`, «dubbi: ...») quando la confidenza è media o bassa senza prove concordi, quando
+prove e tabella (o le prove tra loro) si contraddicono, o con arte digitalizzata senza prove; allora
+prepara il foglio di confronto (`--sheet`, default `review/aspect.png`) con le scene dove ha
+trovato più forme, e `rstool.py project missing` elenca la domanda finché l'utente non risponde
+(`rstool.py project set graphics.pixel_aspect.stretch 1.2 graphics.pixel_aspect.decided_by user`
+e una decisione con `project decide`).
+
+Nei casi dubbi aiutano: `rstool.py widescreen aspect-sheet <3-4 fondali con oggetti tondi, volti,
+ruote, lune, testo disegnato> --out review/aspect.png` (scene a pixel quadrati e allungati
+affiancate; la versione giusta li mostra rotondi; **non basta** su viste in prospettiva e
+documenti) e la **misura** manuale di una forma rotonda nella realtà (disco o tavolo visto
+dall'alto, ruota, luna, oblò), anche divisa tra più stanze:
 `rstool.py widescreen aspect-measure <img...> [--compose 2x2] [--box x,y,w,h] [--color #rrggbb]
---out review/aspect-misura.png` dà larghezza/altezza della forma sui pixel originali (riquadro e
-momenti, quanto somiglia a un'ellisse piena) e il candidato più vicino tra 1,0 e 1,2: un cerchio
-disegnato per pixel allungati di 1,2 misura ~1,2. In caso di dubbio guarda l'originale sull'emulatore di
-riferimento (skill `engine-integration` §1b) con la correzione d'aspetto dell'epoca.
-Registra la scelta con i motivi (`graphics.pixel_aspect` e una decisione con la data).
+--out review/aspect-misura.png` dà larghezza/altezza sui pixel originali (riquadro e momenti,
+quanto somiglia a un'ellisse piena) e il candidato più vicino; salvane il JSON e ripassalo ad
+`aspect-auto --measure`. Se resta il dubbio guarda l'originale sull'emulatore di riferimento
+(skill `engine-integration` §1b) con la correzione d'aspetto dell'epoca.
 Default: **pixel quadrati** (`stretch` 1.0). Se l'allungamento serve, imposta
 `Desc::pixelAspect`: il Layer scala in verticale con righe filtrate (320x200 a 3x con 1,2 →
 960x720), allarga la viewport 16:9 di conseguenza e converte il mouse; `remaster_aspect=false`

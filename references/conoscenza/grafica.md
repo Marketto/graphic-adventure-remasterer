@@ -154,6 +154,12 @@ Risultato sulle 96 scene: classi giuste dal 64% all'86% (statiche dal 44% al 79%
 Su viste in prospettiva e documenti il foglio a confronto non aiuta. È stata decisiva la misura
 di un oggetto rotondo visto dall'alto, diviso tra quattro stanze e ricomposto: larghezza/altezza
 1,20-1,23, quindi pixel pensati per un CRT 4:3 (`rstool.py widescreen aspect-measure ... --compose 2x2`).
+Oggi la ricerca è automatica (`rstool.py widescreen aspect-auto ... --evidence <dump>/bg <dump>/obj`):
+sul banco di prova (97 fondali, 946 oggetti, ~50 s) ha trovato 78 forme rotonde distinte: 33 più
+larghe (in prospettiva) e 27 più alte (non rotonde) scartate, 18 utili con moda 1,225, 8 vicine
+a 1,2 contro 2 vicine a 1,0, tra cui gli archi della pianta divisa tra le stanze (1,20-1,29);
+decisione automatica 1,2, uguale a quella misurata a mano. Le forme in prospettiva sono la
+maggioranza: conta la distribuzione delle forme frontali, mai la singola forma.
 
 ## 5. Scritte, insegne e firme
 

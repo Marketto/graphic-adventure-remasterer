@@ -30,6 +30,16 @@ def _friendly(fn, *args):
         sys.exit(f"errore: {e}")
 
 
+def cmd_aspect_auto(a):
+    res = platforms.aspect_auto(a.platform, a.w, a.h, a.year, a.art, a.evidence, a.measure, a.sheet)
+    if a.record:
+        data = need_project(a.workdir)
+        platforms.record_aspect(data, res)
+        project.save(data, a.workdir)
+        res["recorded"] = project.path(a.workdir)
+    out(res)
+
+
 def need_project(workdir):
     data = project.load(workdir)
     if data is None:
@@ -262,6 +272,14 @@ def main(argv=None):
     x.add_argument("--platform", required=True); x.add_argument("--w", type=int, required=True); x.add_argument("--h", type=int, required=True)
     x.add_argument("--year", type=int); x.add_argument("--art", choices=["pixel", "digitized"])
     x.set_defaults(fn=lambda a: out(platforms.pixel_aspect(a.platform, a.w, a.h, a.year, a.art)))
+    x = sg.add_parser("aspect-auto", help="proporzione del pixel decisa da sola (tabella + forme rotonde misurate nel dump + misure); chiede solo nei casi dubbi")
+    x.add_argument("--platform", required=True); x.add_argument("--w", type=int, required=True); x.add_argument("--h", type=int, required=True)
+    x.add_argument("--year", type=int); x.add_argument("--art", choices=["pixel", "digitized"])
+    x.add_argument("--evidence", nargs="+", help="cartelle o immagini del dump (fondali, oggetti, icone) dove cercare forme rotonde")
+    x.add_argument("--measure", nargs="+", help="JSON salvati da `aspect-measure`")
+    x.add_argument("--sheet", default="review/aspect.png", help="foglio di confronto (prodotto solo se si deve chiedere)")
+    x.add_argument("--record", action="store_true", help="scrive graphics.pixel_aspect in remaster.json (e la decisione, se automatica)")
+    x.set_defaults(fn=cmd_aspect_auto)
     x = sg.add_parser("aspect-sheet", help="stesse scene a pixel quadrati e allungati, affiancate")
     x.add_argument("images", nargs="+"); x.add_argument("--out", default="review/aspect.png")
     x.add_argument("--stretch", type=float, nargs="+", default=[1.0, 1.2])

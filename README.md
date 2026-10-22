@@ -36,8 +36,9 @@ Variabili: `ANTHROPIC_API_KEY` (o login del CLI), `ELEVENLABS_API_KEY` per il do
 2. **Analisi gratuita**: compatibilità, provenienza dei file (avviso sui collegamenti a siti di
    terze parti), lavoro esistente, lingue e voci esistenti per la tua edizione, estrazione
    (dal Layer, o senza Layer con un adattatore del repository privato: `engine extract`),
-   inventario, proporzione dei pixel (anche misurata su una forma rotonda: `widescreen
-   aspect-measure`), classificazione delle scene per il 16:9, conteggi e stime
+   inventario, proporzione dei pixel decisa da sola (`widescreen aspect-auto`: tabella
+   dell'epoca e forme rotonde misurate nel dump; chiede solo nel dubbio, con il foglio di
+   confronto; misura manuale con `widescreen aspect-measure`), classificazione delle scene per il 16:9, conteggi e stime
    (`plan estimate`). Poi **solo le domande a pagamento con il costo stimato** (fal.ai per le
    bande, ElevenLabs se il doppiaggio nella tua lingua non esiste, tetto di spesa; se il gioco è
    tratto da un film, una serie o un cartone, per ogni personaggio riconoscibile se vuoi una voce

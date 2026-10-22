@@ -116,8 +116,11 @@ Nessuna domanda all'utente: si verifica tutto. Lancia in parallelo (in backgroun
   **opera d'origine sempre verificata** (film, serie, animazione: `style-bible` §1b) con i
   personaggi riconoscibili, l'interprete originale e il doppiatore dell'epoca per ogni lingua di
   destinazione, fonti citate, in `source_work` di `remaster.json`;
-- `widescreen-planner` (skill `widescreen`): **proporzione dei pixel** (data di uscita,
-  piattaforma, monitor dell'epoca; foglio di confronto solo se non sono pixel quadrati) e
+- `widescreen-planner` (skill `widescreen`): **proporzione dei pixel, automatica**
+  (`rstool.py widescreen aspect-auto --platform P --w W --h H --year Y --evidence <dump>/bg <dump>/obj --record`:
+  tabella di piattaforma, modo video e monitor dell'epoca più le forme rotonde misurate nel dump;
+  **nessuna domanda** se decide da sola: la decisione e la prova vanno nel riepilogo della Fase
+  1c; si chiede, con il foglio di confronto, solo se resta `decided_by: "ask"`) e
   **classificazione 16:9** (`rstool.py widescreen classify ... --par <allungamento deciso>`):
   scorrimento → allargati; interni chiusi statici → bordi; esterni aperti → bande inventate.
 
@@ -143,6 +146,9 @@ Una schermata, solo se servono (`rstool.py project missing` le elenca solo a sti
   necessario; serve un account con **licenza commerciale** (`voice.license_confirmed`), il piano
   gratuito non usa la Voice Library via API; niente cloni di doppiatori reali; si procede un
   capitolo alla volta → `voice.enabled` true/false;
+- **proporzione dei pixel** solo se `aspect-auto` ha lasciato un dubbio (`decided_by: "ask"`:
+  `project missing` la elenca con la proposta, i dubbi e il foglio `review/aspect.png` da mostrare);
+  se ha deciso da solo non si chiede;
 - se almeno uno è sì: **tetto di spesa** totale (`budget.cap_usd`, `budget.cap_credits`);
 - solo se il doppiaggio è sì e `source_work.characters` non è vuoto: per **ogni personaggio
   riconoscibile**, «voce il più simile possibile a quella dell'opera d'origine?» (nella lingua
@@ -166,7 +172,9 @@ da sola i pacchetti che rende necessari: aggancio del Layer a un motore nuovo (`
 scala verticale per i pixel non quadrati (`pixel-aspect`), barra dell'interfaccia sotto l'area di
 gioco (`ui-bar`), importazione del testo ufficiale da un'altra edizione (`text-import-<lingua>`),
 restauro delle voci originali (`voice-restore`), sincronia labiale per le voci nuove (`lipsync`). Aggiungi sotto la tabella cosa
-resta com'era e i rischi. Chiedi: **approvi, o togli qualcosa?** Ciò che l'utente toglie va in
+resta com'era e i rischi. Nel riepilogo sopra la tabella metti anche la **proporzione dei
+pixel** decisa da sola, con la prova (`rstool.py project show` la riporta: candidato della tabella,
+forme rotonde trovate, moda), così l'utente la vede e può contestarla. Chiedi: **approvi, o togli qualcosa?** Ciò che l'utente toglie va in
 `project set` (es. `extras.manual false`) e la tabella si rigenera. Approvato:
 `rstool.py plan packages analysis/conti.json --register` (registro in `remaster.json`),
 `project set plan.approved true`, decisione con la data in `docs/stato.md`.
