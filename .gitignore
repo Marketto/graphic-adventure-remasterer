@@ -13,3 +13,5 @@ __pycache__/
 *.img
 # copie di lavoro temporanee degli agenti
 /.claude/worktrees/
+# testi privati del gioco per il controllo locale (mai committato)
+/.ipguard/private.local

@@ -7,8 +7,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: No game content or references to protected works
+        with:
+          fetch-depth: 50
+      - name: No game content, secrets or references to protected works
         run: python3 tools/ip_guard.py
+      - name: Commit messages too
+        run: git log -n 50 --format=%B > /tmp/msgs.txt && python3 tools/ip_guard.py --message /tmp/msgs.txt
   tests:
     runs-on: ubuntu-latest
     steps:
