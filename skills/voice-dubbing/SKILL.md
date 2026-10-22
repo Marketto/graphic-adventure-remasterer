@@ -67,13 +67,17 @@ stesso personaggio, oggetti parlanti, personaggi in più capitoli → stessa voc
 ## 2. Casting
 - Per ogni personaggio nuovo una scheda (età, timbro, accento voluto, ruolo comico) e
   **2-3 voci** proposte; sceglie l'utente.
-- **Provini con battute vere** del gioco (2-3), nel **registro tipico** del personaggio: per un
-  personaggio ironico battute ironiche, per un burbero battute burbere; mai frasi inventate o
-  neutre, che non dicono come la voce regge il ruolo. Con il modello e le impostazioni che
-  userà il lotto (API diretta, §intro) e con la regia ricavata come al §3.
-- **Altezza**: si preferisce una voce che sta già nel registro giusto. Al massimo una rifinitura
-  di ≤ 2 semitoni con formanti preservate (filtro ffmpeg `rubberband=pitch=…:formant=preserved`
-  nel cast); **mai vocoder tipo WORLD** né spostamenti più grandi: suonano robotici.
+- **Provini con una sola battuta vera** del gioco per voce, la stessa per tutte le candidate,
+  nel **registro tipico** del personaggio: per un personaggio ironico una battuta ironica, per un
+  burbero una burbera; mai frasi inventate o neutre, che non dicono come la voce regge il ruolo.
+  Con il modello e le impostazioni che userà il lotto (API diretta, §intro) e con la regia
+  ricavata come al §3. Se dopo l'ascolto l'utente (o tu, dalle misure) resta **in dubbio su una
+  o più voci**, proponi una **battuta addizionale** solo per quelle, di registro diverso (es. una
+  battuta di pericolo dopo una ironica), con il costo stimato; mai più battute a priori.
+- **Altezza**: si sceglie una voce che sta già nel registro giusto e si controlla con la regia
+  (tag che non alzano il tono). **Niente correzione di tono a posteriori**: sul banco di prova
+  sia i vocoder tipo WORLD sia rubberband a -2 semitoni con formanti preservate sono risultati
+  metallici all'ascolto; l'esito si giudica a orecchio, non solo con le misure.
 - **Personaggio riconoscibile di un film, una serie o un cartone** (`source_work.characters`) con
   `imitate_voice` true: le candidate si scelgono misurando il riferimento (§2b); con false o
   null si fa il casting normale dalla scheda.
@@ -163,7 +167,8 @@ Procedura:
 5. **Raffina** sulle 2-3 migliori: stability, similarity, style, speed (§0 per i limiti) e
    **toni interpretativi** dal modo di recitare nei riferimenti (ritmo, ironia, pause, attacchi),
    annotati nella scheda del personaggio come guida per la regia per battuta (§3), mai citando la persona.
-6. **Provini** come al §2: 2-3 voci con una battuta vera, sceglie l'utente; solo voci della
+6. **Provini** come al §2: 2-3 voci con una sola battuta vera (una addizionale solo per le voci
+   in dubbio), sceglie l'utente; solo voci della
    libreria, nessuna voce progettata "a somiglianza" con Voice Design partendo dal materiale.
 
 ## 3. Regia
@@ -209,8 +214,9 @@ fonetica, parole tutte maiuscole (la sintesi le compita); punteggiatura pensata 
 
 ## 5. Stima e generazione per capitolo
 - Stima: caratteri del testo recitato **con i tag** × ~0,43 crediti (misurato: 45.000
-  caratteri ≈ 19.200 crediti), più ~2.000 crediti di provini se ci sono molti personaggi
-  nuovi. Contala sui **testi unici** (le clip originali ripetono spesso la stessa frase: sul
+  caratteri ≈ 19.200 crediti), più i provini (una battuta di ~100 caratteri × 2 prese
+  per voce candidata ≈ 250-500 crediti a voce con un modello che recita i tag; le battute
+  addizionali si stimano a parte, solo per le voci in dubbio). Contala sui **testi unici** (le clip originali ripetono spesso la stessa frase: sul
   banco di prova +15% di clip rispetto ai testi) e sulla **lunghezza nella lingua di arrivo**
   (italiano ≈ +10-15% sull'inglese): `rstool.py voice estimate <dump>/text.jsonl --expand 1.12`
   (deduplica di default, `--no-dedupe` per contare ogni clip). Confronta con i crediti rimasti
