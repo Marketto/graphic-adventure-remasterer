@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from remaster_tools import (assets, audio, audio_midi, audio_sf2, controls, detect, extract, falai, font, gfx, hints, keys,  # noqa: E402
                             manual, plan, platforms, project, rawframe, recipe, release, review, style,
-                            text, theme, timing, transcribe, video, voice, voiceref, voiceseg,
+                            regia, text, theme, timing, transcribe, video, voice, voiceref, voiceseg,
                             widescreen)
 
 
@@ -448,8 +448,18 @@ def main(argv=None):
     x = sg.add_parser("generate"); x.add_argument("script"); x.add_argument("--cast", required=True); x.add_argument("--out", required=True)
     x.add_argument("--lang", required=True); x.add_argument("--limit", type=int); x.add_argument("--dry-run", action="store_true")
     x.add_argument("--mix", help="audio/mix.json (default: audio.mix del progetto)")
+    x.add_argument("--direction", help="regia.tsv rivista di `voice direct` (colonna tag, recita)")
     x.set_defaults(fn=lambda a: out(voice.generate(a.script, a.cast, a.out, a.lang, limit=a.limit, dry_run=a.dry_run,
-                                                   lufs=audio.load_mix(_mix_source(a))[0]["voice"])))
+                                                   lufs=audio.load_mix(_mix_source(a))[0]["voice"],
+                                                   direction=a.direction,
+                                                   project_voice=(project.load(a.workdir) or {}).get("voice"))))
+    x = sg.add_parser("direct", help="regia per battuta: scheda di contesto e tag proposto da rivedere")
+    x.add_argument("script", help="copione TSV di `voice script`"); x.add_argument("--out", required=True, help="regia.tsv")
+    x.add_argument("--context", type=int, default=2, help="battute prima/dopo nella stessa scena")
+    x.add_argument("--lang", default="it"); x.add_argument("--rules", help="regole JSON (parole chiave, punteggiatura, cps)")
+    x.add_argument("--cast", help="cast.json: le voci con \"register\": \"deep\" non ricevono tag energici")
+    x.add_argument("--retag", action="store_true", help="ripropone anche dove il copione ha già un tag")
+    x.set_defaults(fn=lambda a: out(regia.direct(a.script, a.out, a.context, a.lang, a.rules, a.cast, not a.retag)))
     x = sg.add_parser("reencode", help="ricodifica dalle MP3 conservate (nessuna spesa), es. dopo un cambio del mix")
     x.add_argument("script"); x.add_argument("--cast", required=True); x.add_argument("--out", required=True)
     x.add_argument("--mix", help="audio/mix.json (default: audio.mix del progetto)")
