@@ -71,6 +71,9 @@ if (_remaster) {
 
 // input (Events::poll), per ogni evento letto
 if (_remaster && _remaster->handleEvent(e)) continue;   // F8 + coordinate mouse
+// 16:9: un clic (pressione) fuori dallo schermo originale, nelle bande, va scartato e non
+// riportato al bordo della scena (si attiverebbe un oggetto o un'uscita sul bordo); movimenti e
+// rilasci passano sempre (il rilascio chiude un trascinamento iniziato dentro la scena)
 // spostamenti del cursore decisi dal gioco (coordinate di gioco → schermo, anche con l'allungamento)
 if (_remaster) _remaster->warpMouse(x, y); else g_system->warpMouse(x, y);
 
@@ -132,6 +135,20 @@ media pesata delle righe che copre, quindi niente righe duplicate a scatti. La m
 (F8) passa per lo stesso filtro. Il mouse torna alle coordinate di gioco con la stessa
 proporzione (`y = Y × screenH / altezza`, senza salti); `warpMouse()` fa il contrario e porta il
 cursore al centro della riga di gioco. Il motore non cambia: lavora sempre a 320x200.
+
+## Testo, charmap e font bitmap HD
+- Il testo della patch è UTF-8: prima di misurarlo e disegnarlo il Layer lo converte nei codici dei
+  glifi con `fonts/charmap.tsv` (più `fonts/<font>.charmap.tsv` per il font in uso, se c'è). Un
+  carattere assente o con glifo vuoto: `?` e una riga nel log.
+- I glifi aggiunti dalla patch (accentate in codici liberi, maiuscole accentate rifatte) mancano nel
+  font originale: in modalità originale il motore li disegna **riducendo l'atlante HD** (centro di
+  ogni blocco `scala×scala`, riempimento = R, contorno = G senza R), così toggle e classico mostrano
+  lo stesso glifo.
+- Le maiuscole accentate HD salgono sopra la riga (`by` negativo): il disegno del glifo non deve
+  tagliare alla cella o al rettangolo del testo (taglia solo al bordo del fotogramma), e il
+  rettangolo da ridisegnare va allargato di quanto il glifo sporge.
+- Etichette dei verbi: `ui/verbs.<lang>.tsv` (posizione e larghezza massima, contratto RAC); oltre
+  la larghezza il motore riduce la spaziatura tra le lettere di 1–2 px, uguale in classico e in HD.
 
 ## Limiti noti (da completare per motore)
 - L'interpolazione riguarda lo scorrimento e i frame intermedi tra un tick e l'altro; gli

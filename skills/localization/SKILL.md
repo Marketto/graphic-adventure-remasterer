@@ -68,10 +68,23 @@ vecchio → nuovo) perché l'utente possa scorrerle. Poi
   ridisegna `hd-graphics` (fondale localizzato `<scena>.<lang>.png`).
 
 ## 5. Glifi
-`rstool.py text glyphs text/*.tsv` elenca i caratteri usati per lingua → passali a
-`rstool.py font build`. Codepage: la codepage del gioco se basta (CP437/850 per l'Europa
-occidentale), altrimenti font per lingua (`fonts/<font>.<lang>.dat`) e testi in UTF-8
-convertiti dal Layer.
+`rstool.py text glyphs text/*.tsv` elenca i caratteri usati per lingua. I font in gioco sono l'HD
+dei font bitmap originali (`hd-graphics` §4): passa i testi a
+`rstool.py font from-bitmap <dump> --name <font> --compose-accents --texts remaster/text/*.tsv`
+e chiudi con `rstool.py font coverage remaster/fonts --texts remaster/text/*.tsv` (deve dare `ok`).
+- Lettere mancanti: prima da un'altra edizione dell'utente dello stesso gioco (`--extra-edition`),
+  poi costruite (base + accento dello stesso font) in codici liberi; la corrispondenza
+  Unicode → glifo sta in `fonts/charmap.tsv` (override `fonts/<font>.charmap.tsv`), il Layer
+  converte il testo UTF-8 con quella mappa.
+- **Maiuscole accentate** (`È`, `À`, `Ò`…) a piena altezza con l'accento sopra la riga; mai
+  sostituirle con `E'` o con la minuscola. Una `É` usata al posto della `È` nei testi originali è
+  un problema dei testi (correggila in `text/<lang>.tsv`), non del font.
+- Codepage: quella del gioco se basta, altrimenti font per lingua (`fonts/<font>.<lang>.dat`).
+- **Verbi dell'interfaccia** che sbordano: `ui/verbs.<lang>.tsv` (id, x, y, larghezza massima; il
+  motore riduce la spaziatura di 1–2 px oltre la larghezza). Se c'è un'edizione tradotta ufficiale,
+  prendi le posizioni da lì; misura le larghezze col font del gioco (tabelle delle larghezze del
+  font originale) e, se non basta, accorcia la parola d'accordo col glossario.
+- Testi lunghi nei menu e negli aiuti: font leggibile con tutti gli accenti (vedi `hd-graphics` §4).
 
 ## 5b. Contenuti tagliati
 Confronta gli script della lingua dell'utente con quelli delle altre lingue sul disco: le

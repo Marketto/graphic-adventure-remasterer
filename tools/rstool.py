@@ -12,7 +12,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from remaster_tools import (assets, audio, audio_midi, audio_sf2, controls, detect, extract, falai, font, gfx, hints, keys,  # noqa: E402
+from remaster_tools import (assets, audio, audio_midi, audio_sf2, controls, detect, extract, falai, font, font_bitmap, gfx, hints, keys,  # noqa: E402
                             manual, plan, platforms, project, rawframe, recipe, release, review, style,
                             regia, text, theme, timing, transcribe, video, voice, voiceref, voiceseg,
                             widescreen)
@@ -262,6 +262,20 @@ def main(argv=None):
     x.add_argument("--size", type=int, default=36); x.add_argument("--scale", type=int, default=3)
     x.add_argument("--codepage", default="cp850"); x.add_argument("--outline", type=int, default=0)
     x.set_defaults(fn=cmd_font)
+    x = sg.add_parser("from-bitmap", help="HD dei font bitmap originali (3x, angoli vivi)")
+    x.add_argument("src", help="dump del font: JSON o cartella di PNG indicizzati <hex>.png")
+    x.add_argument("--name", required=True); x.add_argument("--out", default="remaster/fonts")
+    x.add_argument("--scale", type=int, default=3); x.add_argument("--codepage", default="cp437")
+    x.add_argument("--extra-edition", help="dump dello stesso font da un'altra edizione dell'utente")
+    x.add_argument("--compose-accents", action="store_true",
+                   help="costruisce le accentate mancanti e rifà le maiuscole accorciate a piena altezza")
+    x.add_argument("--texts", nargs="*", default=[], help="testi (TSV) i cui caratteri vanno garantiti")
+    x.add_argument("--reserve", default="", help="codici hex usati dal motore, separati da virgola")
+    x.add_argument("--slot-codepage", default="cp850")
+    x.set_defaults(fn=cmd_font_bitmap)
+    x = sg.add_parser("coverage", help="caratteri dei testi coperti da charmap e atlanti")
+    x.add_argument("fonts"); x.add_argument("--texts", nargs="+", required=True)
+    x.set_defaults(fn=cmd_font_coverage)
 
     s = g.add_parser("widescreen", help="16:9")
     sg = s.add_subparsers(dest="action", required=True)
@@ -616,6 +630,23 @@ def cmd_compare(a):
 def cmd_font(a):
     os.makedirs(a.out, exist_ok=True)
     out(font.build(a.ttf, os.path.join(a.out, a.name), a.size, a.scale, a.codepage, a.outline))
+
+
+def cmd_font_bitmap(a):
+    chars = "".join(text.glyphs(a.texts).values()) if a.texts else ""
+    r = font_bitmap.from_bitmap(a.src, a.out, a.name, a.scale, a.codepage, a.extra_edition,
+                                a.compose_accents, chars, [c for c in a.reserve.split(",") if c],
+                                a.slot_codepage)
+    out(r)
+    if r["verify_mismatch"]:
+        sys.exit(1)
+
+
+def cmd_font_coverage(a):
+    r = font_bitmap.coverage(a.fonts, a.texts)
+    out(r)
+    if not r["ok"]:
+        sys.exit(1)
 
 
 def _json(path):
