@@ -23,6 +23,9 @@ remaster/
   gfx/spr/index.dat        indice sprite (formato RSPR, sotto)
   gfx/spr/<key>.png|jpg    frame HD, key = frameKey (PNG con alpha; un JPEG è opaco nei blocchi originali)
   fonts/<font>.dat|png     atlante font HD (formato RFNT, sotto)
+  fonts/charmap.tsv        mappa carattere Unicode -> codice del glifo per tutti i font (sotto)
+  fonts/<font>.charmap.tsv override della mappa per un solo font (alias propri)
+  ui/verbs.<lang>.tsv      etichette dei verbi dell'interfaccia: posizione e larghezza massima (sotto)
   text/<lang>.tsv          testi corretti/tradotti: "<textKey>\t<testo UTF-8>"
   voice/<lang>/<textKey>.ogg   battute doppiate; possono coprire solo alcune parti del gioco
                            (doppiaggio parziale, voice.scope): una riga senza file ricade sul
@@ -108,8 +111,44 @@ char[4] "RFNT"
 u16 versione = 1, u16 scala, u16 altezza riga, u16 ascendente, u16 spessore contorno
 256 x { u16 ax, ay, w, h; s16 bx, by; u16 avanzamento }   (per codice della codepage)
 ```
-PNG: canale R = copertura riempimento, canale G = copertura contorno.
+PNG: canale R = copertura del riempimento, canale G = copertura della **sagoma completa**
+(riempimento + contorno/ombra; 0 nei font a 1 bpp). Il contorno disegnato è G senza R.
 Per alfabeti oltre i 256 codici è previsto `fonts/<font>.<lang>.dat` con la codepage della lingua (riservato).
+
+Atlanti da font bitmap originali (`rstool.py font from-bitmap`): scala 3, altezza riga =
+ascendente = altezza del font × 3, spessore contorno 3 (font con contorno) o 0; ogni glifo ha 1 px
+originale di margine nell'atlante, quindi `bx = (ox − 1)·3`, `by = (oy − 1)·3` dalla penna (angolo
+in alto a sinistra) e `avanzamento = adv·3`. Ridotto a 1x (centro di ogni blocco 3×3) il glifo
+coincide con quello originale o costruito: è il modo in cui il motore disegna in modalità
+originale i glifi che il font originale non ha.
+
+**Maiuscole accentate**: lettera maiuscola intera (piena altezza) + accento sopra, anche oltre la
+cima della riga (`by` negativo, `oy` < 0). Mai il corpo accorciato per far stare l'accento nella
+cella: accanto alle minuscole si legge minuscola. Il motore non taglia ciò che sporge dalla cella.
+
+### `fonts/charmap.tsv`
+Testo UTF-8, una voce per riga, `#` commento:
+```
+U+00E8<TAB>8A
+```
+Colonna 1 punto di codice (`U+` + 4–6 cifre esadecimali), colonna 2 codice del glifo (00–FF,
+esadecimale) valido in tutti gli atlanti `fonts/*.dat`. Più caratteri possono puntare allo stesso
+codice (alias). `fonts/<font>.charmap.tsv`, stesso formato, sostituisce le voci della mappa generale
+per quel font. Contenuto tipico: ASCII identico, 0x80–0xFF secondo la codepage dei byte del gioco,
+più i caratteri aggiunti in codici liberi (di preferenza la loro posizione CP850, mai un codice che
+il motore usa per scopi propri). Carattere assente o glifo vuoto: il motore disegna `?` e lo
+registra nel log. Controllo: `rstool.py font coverage remaster/fonts --texts remaster/text/*.tsv`
+(tutti i caratteri dei testi di tutte le lingue in ogni font).
+
+### `ui/verbs.<lang>.tsv`
+Etichette dell'interfaccia (verbi) che nella lingua tradotta sbordano o vanno spostate:
+```
+# id verbo<TAB>x<TAB>y[<TAB>larghezza massima]   (pixel del gioco)
+11	53	159	43
+```
+Senza riga il verbo resta dove lo mette il gioco. Oltre la larghezza massima il motore riduce la
+spaziatura tra le lettere (1–2 px, stessa resa in classico e in HD); se non basta, si accorcia il
+testo in `text/<lang>.tsv`. Se esiste un'edizione tradotta ufficiale, le posizioni si prendono da lì.
 
 ## manifest.json
 ```json
