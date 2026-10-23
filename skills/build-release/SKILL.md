@@ -48,6 +48,12 @@ release/
 - Web: il loader chiede all'utente di scegliere la cartella/immagine del gioco dal suo
   dispositivo; nulla del gioco è incluso nel pacchetto.
 - Mai includere file del gioco originale, nemmeno "di comodo" (font, palette, script).
+- **Motore e patch sempre separati**, anche nella distribuzione: l'eseguibile del motore modificato
+  (per piattaforma, o il sito web) e la patch del gioco (pacchetto asset o ricette, versionata
+  `patch-N` col suo manifest) sono artefatti distinti, scaricati, importati e aggiornati ognuno per
+  conto suo. Un motore nuovo non obbliga a riscaricare la patch, e viceversa; sul web stanno in
+  chiavi di cache separate, e la pagina mostra le versioni (motore, patch) e se ci sono i file del
+  gioco in tre stati distinti. Il manifest della patch dichiara la versione minima del motore.
 
 ## Versione web e pagina unica (utente da telefono)
 - Sito (GitHub Pages): solo motore + pagina di importazione; il giocatore importa nel browser la
