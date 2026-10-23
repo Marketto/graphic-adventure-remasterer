@@ -26,6 +26,8 @@ remaster/
   fonts/charmap.tsv        mappa carattere Unicode -> codice del glifo per tutti i font (sotto)
   fonts/<font>.charmap.tsv override della mappa per un solo font (alias propri)
   ui/verbs.<lang>.tsv      etichette dei verbi dell'interfaccia: posizione e larghezza massima (sotto)
+  ui/bar-side.left|right.png  barra fissa in 16:9, opzione A: pannelli decorativi ai lati della barra
+  ui/inventory.tsv         barra fissa in 16:9, opzione B: slot dell'inventario esteso (x, y, w, h)
   text/<lang>.tsv          testi corretti/tradotti: "<textKey>\t<testo UTF-8>"
   voice/<lang>/<textKey>.ogg   battute doppiate; possono coprire solo alcune parti del gioco
                            (doppiaggio parziale, voice.scope): una riga senza file ricade sul

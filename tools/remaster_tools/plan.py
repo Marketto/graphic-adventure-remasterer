@@ -90,7 +90,12 @@ COEFFS = {
     "tok_release": 120000,            # builds, patch, installer, checksums
     "tok_engine_hook": 150000,        # hook the Layer into an engine it does not know yet (dump, keys)
     "tok_pixel_aspect": 40_000,        # set pixelAspect in the engine, mouse, check (the Layer scales)
-    "tok_ui_bar": 50000,              # interface bar below the play area widened to 16:9
+    "tok_ui_bar": 50000,              # fixed bar in 16:9, option A: decorative side panels (or undecided)
+    "tok_ui_bar_wide": 140000,        # option B: full-width bar, verbs laid out again, wider inventory grid
+    "tok_ui_bar_icons": 60000,        # option C: verb icons in the style of the game (drawn, checked, wired)
+    "ui_bar_verbs": 9,                # verbs of the bar when the counts do not say (`verbs`)
+    "icon_price_usd": 0.04,           # one generated icon (indicative: check the service)
+    "icon_attempts": 4,               # attempts per icon at most (style to match by hand)
     "tok_lipsync": 60000,             # lip-sync data for the new voices (from the audio) or fallback
     "tok_per_import_line": 12,        # official text of another edition: import and align, per line
     "import_residual_share": 0.15,    # share of the text missing in the other edition (to translate)
@@ -267,9 +272,31 @@ def estimate(counts, coeffs=None, project=None):
                  "max_images": worst, "max_usd": round(worst * c["fal_price_usd"], 2),
                  "likely_images": likely, "likely_usd": round(likely * c["fal_price_usd"], 2)})
     screen_h, pf_h = _playfield(counts)
-    if ws_on and screen_h and pf_h and pf_h < screen_h:
-        E("ui-bar", "▭", f"Barra dell'interfaccia ({screen_h - pf_h} px sotto l'area di gioco) allargata a 16:9",
-          "graphics-artist", 0, "", 0, c["tok_ui_bar"], depends=["engine-layer", "fonts-ui"], splittable=False)
+    ub = ((project.get("graphics") or {}).get("widescreen") or {}).get("ui_bar") or {}
+    opt = ub.get("option")
+    if ws_on and opt != "none" and ((screen_h and pf_h and pf_h < screen_h) or counts.get("ui_bar_unfilled")
+                                    or opt in ("A", "B", "C")):
+        bar = f"{screen_h - pf_h} px sotto l'area di gioco" if screen_h and pf_h and pf_h < screen_h else "barra fissa"
+        dep = ["engine-layer", "fonts-ui"]
+        if opt in ("B", "C"):
+            E("ui-bar-B", "▬", f"Barra allargata a 16:9 ({bar}): verbi ridistribuiti, inventario con più slot",
+              "build-engineer", 0, "", 0, c["tok_ui_bar_wide"], depends=dep, splittable=False)
+        else:
+            what = "pannelli laterali (A)" if opt == "A" else "opzione A/B/C da scegliere, stima di A"
+            E("ui-bar", "▭", f"Barra dell'interfaccia ({bar}) in 16:9: {what}",
+              "graphics-artist", 0, "", 0, c["tok_ui_bar"], depends=dep, splittable=False)
+        if opt == "C":
+            verbs = _n(counts, "verbs") or c["ui_bar_verbs"]
+            E("ui-bar-icons", "🔣", "Icone dei verbi nello stile del gioco (dalla grafica del gioco)",
+              "graphics-artist", verbs, "icone", c["tok_ui_bar_icons"] / verbs, 0, depends=["ui-bar-B"],
+              splittable=False)
+            if ub.get("icons") == "paid":
+                worst = verbs * c["icon_attempts"]
+                it = items[-1]
+                it.update(label="Icone dei verbi nello stile del gioco (generate, con preventivo)", paid="fal",
+                          usd=round(worst * c["icon_price_usd"], 2),
+                          quote={"icons": verbs, "attempts": c["icon_attempts"], "price_usd": c["icon_price_usd"],
+                                 "max_images": worst, "max_usd": round(worst * c["icon_price_usd"], 2)})
 
     lines, chars = _n(counts, "text_lines"), _n(counts, "text_chars")
     if lines or chars:

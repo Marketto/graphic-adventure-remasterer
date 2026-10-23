@@ -179,9 +179,10 @@ def classify(src_dir, screen_w, screen_h, par=1.0, out_path=None, names=None, pl
     counts["scroll-narrow-open"] = sum(1 for s in scenes if s["class"] == "scroll-narrow" and s.get("sides") != "closed")
     bar = None
     if playfield_h and playfield_h < screen_h:
-        bar = {"playfield_h": playfield_h, "bar_h": screen_h - playfield_h,
-               "note": "area di gioco più bassa dello schermo: la barra dell'interfaccia sotto va allargata "
-                       "anch'essa a 16:9 (bande neutre o ridisegnata), vedi skill widescreen"}
+        bar = {"playfield_h": playfield_h, "bar_h": screen_h - playfield_h, "option": None,
+               "options": dict(UI_BAR_OPTIONS),
+               "note": "area di gioco più bassa dello schermo: in 16:9 la barra fissa resta 4:3 con bande nere; "
+                       "proponi A/B/C con mockup e verifica di fattibilità (skill widescreen, «Barre fisse in 16:9»)"}
     plan = {"geometry": geo, "scroll_wide_rule": SCROLL_WIDE_RULE, "ui_bar": bar, "scenes": scenes,
             "counts": counts}
     if out_path:
@@ -189,6 +190,78 @@ def classify(src_dir, screen_w, screen_h, par=1.0, out_path=None, names=None, pl
         with open(out_path, "w", encoding="utf-8") as f:
             json.dump(plan, f, indent=2, ensure_ascii=False)
     return plan
+
+
+UI_BAR_OPTIONS = (
+    ("A", "riempitivo: barra invariata, pannelli decorativi laterali nello stile della barra o del tema"),
+    ("B", "barra allargata: pannello a tutta larghezza, verbi ridistribuiti, inventario con più slot visibili"),
+    ("C", "B + icone dei verbi nello stile del gioco (dalla grafica del gioco o generate con preventivo)"),
+    ("none", "nessun intervento: bande neutre accanto alla barra"),
+)
+UI_BAR_CHOICES = tuple(k for k, _ in UI_BAR_OPTIONS)
+
+
+def _frames(paths):
+    arrs = [np.asarray(_load(p), dtype=np.int16) for p in paths]
+    sizes = {a.shape for a in arrs}
+    if len(sizes) != 1:
+        raise ValueError(f"le catture devono avere la stessa misura: {sorted(sizes)}")
+    return np.stack(arrs)
+
+
+def fixed_rows(paths, tol=8, share=0.97):
+    """Rows of the screen that stay the same in captures (4:3) of DIFFERENT rooms: the interface
+    (verbs, inventory, status panel, frame). Returns the fixed band at the bottom and at the top;
+    `playfield_h` is what is left to the scene. Needs at least 3 rooms (with 2 a dark corner
+    common to both would look fixed)."""
+    if len(paths) < 3:
+        raise ValueError("servono catture di almeno 3 stanze diverse")
+    st = _frames(paths)
+    med = np.median(st, axis=0)
+    same = (np.abs(st - med).max(axis=3) <= tol).all(axis=0)      # (h, w): pixel identical everywhere
+    fixed = same.mean(axis=1) >= share
+    h = fixed.shape[0]
+    bottom = 0
+    while bottom < h and fixed[h - 1 - bottom]:
+        bottom += 1
+    top = 0
+    while top < h - bottom and fixed[top]:
+        top += 1
+    return {"frames": len(paths), "size": [st.shape[2], h], "bottom": bottom, "top": top,
+            "playfield_h": h - bottom - top, "bar": bool(bottom or top),
+            "fixed_share": round(float(fixed.mean()), 3)}
+
+
+def bar_check(paths, screen_w, screen_h, playfield_h, par=1.0, dark=0.06, share=0.9):
+    """Captures of the game ALREADY in 16:9: is the fixed bar left 4:3 with black bands beside it?
+    The picture of the game (4:3 centre) is screen_w x screen_h*par scaled to the capture height;
+    the side columns of the bar rows are checked for near-black pixels (luminance < `dark`).
+    `bar_unfilled`: the bar needs one of the options A/B/C (the scene above may be filled already)."""
+    out = []
+    for p in paths:
+        f = imaging.to_f(_load(p))
+        lum = f @ np.array([0.299, 0.587, 0.114])
+        H, W = lum.shape
+        cw = int(round(screen_w * H / (screen_h * par)))
+        side = (W - cw) // 2
+        y0 = int(round(playfield_h * H / screen_h))
+        r = {"file": p, "side_px": max(0, side)}
+        if side < 2 or y0 >= H:
+            r.update(unfilled=False, why="cattura senza margini laterali o senza barra")
+            out.append(r)
+            continue
+        def black(rows, cols):
+            return round(float((lum[rows, cols] < dark).mean()), 3)
+        bar_l, bar_r = black(slice(y0, H), slice(0, side)), black(slice(y0, H), slice(W - side, W))
+        scene = black(slice(0, y0), np.r_[0:side, W - side:W])
+        r.update(bar_black_left=bar_l, bar_black_right=bar_r, scene_black=scene,
+                 unfilled=bar_l >= share and bar_r >= share)
+        r["why"] = ("barra fissa non riempita: bande nere accanto alla barra" if r["unfilled"]
+                    else "barra già riempita ai lati")
+        out.append(r)
+    n = sum(1 for r in out if r["unfilled"])
+    return {"captures": out, "unfilled": n, "bar_unfilled": n > 0,
+            "options": dict(UI_BAR_OPTIONS) if n else None}
 
 
 def inventable(scene):

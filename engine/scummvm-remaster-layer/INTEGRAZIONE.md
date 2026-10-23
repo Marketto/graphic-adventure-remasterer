@@ -150,6 +150,28 @@ cursore al centro della riga di gioco. Il motore non cambia: lavora sempre a 320
 - Etichette dei verbi: `ui/verbs.<lang>.tsv` (posizione e larghezza massima, contratto RAC); oltre
   la larghezza il motore riduce la spaziatura tra le lettere di 1–2 px, uguale in classico e in HD.
 
+## Barra fissa in 16:9 (verbi, inventario, pannelli)
+Il Layer offre meccanismi generici; disposizione e immagini stanno nei file della patch.
+- **Riquadro della barra separato dalla scena**: il motore dichiara le righe della barra
+  (`playfield_h` o il rettangolo misurato con `widescreen bar-rows`); il Layer compone la scena
+  nella viewport 16:9 e la barra in un riquadro proprio, così la scena si allarga e la barra no
+  (o viceversa).
+- **Opzione A, pannelli decorativi**: immagini `ui/bar-side.left.png` / `ui/bar-side.right.png`
+  (HD, altezza della barra) disegnate ai lati del riquadro, in classico e in HD; nessun clic.
+- **Opzione B, barra allargata**: il riquadro occupa tutta la larghezza; i verbi si ridispongono
+  da `ui/verbs.<lang>.tsv` (posizione, larghezza massima, già nel contratto RAC; colonne
+  facoltative per l'icona). Il Layer disegna sfondo e verbi e traduce un clic in coordinate
+  originali del verbo (il motore resta l'unico a decidere l'azione).
+- **Griglia d'inventario estesa**: `ui/inventory.tsv` (slot: x, y, w, h) con più slot della pagina
+  originale; il Layer chiede al motore la lista degli oggetti dell'inventario (hook
+  `inventoryItems()`), disegna gli slot in più e mappa il clic sull'oggetto del motore
+  (`selectInventoryItem(id)`), senza toccare la pagina dello script; se la paginazione è dello
+  script, gli slot in più restano spenti e si usa A.
+- **Ritorno al 4:3** quando il motore ridisegna da sé la barra (scelte di dialogo, animazioni
+  degli script), nelle scene senza barra e con il toggle originale; nei salvataggi non entra nulla
+  del Layer.
+- Driver di test: `act verb <n>`, `act slot <n>` per cliccare verbi e slot nelle due modalità.
+
 ## Limiti noti (da completare per motore)
 - L'interpolazione riguarda lo scorrimento e i frame intermedi tra un tick e l'altro; gli
   spostamenti degli sprite sono interpolati solo se il motore ridisegna gli oggetti con

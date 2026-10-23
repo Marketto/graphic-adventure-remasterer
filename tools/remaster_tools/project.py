@@ -117,7 +117,53 @@ def parse_value(raw: str):
         return raw
 
 
+UI_BAR_CHOICES = ("A", "B", "C", "none")
+UI_BAR_ICONS = ("game", "paid")
+
+
+def _check_ui_bar(dotted: str, value):
+    """`graphics.widescreen.ui_bar` = {option: A|B|C|none, notes, icons: game|paid}."""
+    if not dotted.endswith("widescreen.ui_bar") and ".widescreen.ui_bar." not in "." + dotted:
+        return
+    tail = dotted.split("widescreen.ui_bar", 1)[1].lstrip(".")
+    if not tail:
+        if value is None:
+            return
+        if not isinstance(value, dict):
+            raise ValueError("widescreen.ui_bar va scritto come {option, notes}")
+        for k, v in value.items():
+            _check_ui_bar(dotted + "." + k, v)
+        return
+    if tail == "option" and value not in UI_BAR_CHOICES:
+        raise ValueError(f"widescreen.ui_bar.option «{value}» non valida: {', '.join(UI_BAR_CHOICES)}")
+    if tail == "icons" and value not in UI_BAR_ICONS:
+        raise ValueError(f"widescreen.ui_bar.icons «{value}» non valida: {', '.join(UI_BAR_ICONS)}")
+
+
+def ui_bar_question(data):
+    """The fixed bar in 16:9 (A/B/C/none) is asked with the other 16:9 choices when the analysis
+    found a play area lower than the screen (or the 16:9 check found black bands beside the bar)."""
+    g = data.get("graphics") or {}
+    ws = g.get("widescreen") or {}
+    if not (g.get("enabled") and ws.get("enabled")):
+        return []
+    counts = (data.get("analysis") or {}).get("counts")
+    if isinstance(counts, str):
+        try:
+            with open(counts, encoding="utf-8") as f:
+                counts = json.load(f)
+        except (OSError, ValueError):
+            counts = {}
+    counts = counts if isinstance(counts, dict) else {}
+    scr, pf = counts.get("screen") or [], counts.get("playfield_h")
+    has_bar = bool(counts.get("ui_bar_unfilled")) or (len(scr) == 2 and pf and int(pf) < int(scr[1]))
+    if has_bar and ((ws.get("ui_bar") or {}).get("option") is None):
+        return ["barra fissa in 16:9: A riempitivo / B allargata / C B + icone / none (mockup e fattibilità)"]
+    return []
+
+
 def set_key(data, dotted: str, value):
+    _check_ui_bar(dotted, value)
     node = data
     parts = dotted.split(".")
     for p in parts[:-1]:
@@ -282,6 +328,7 @@ def missing_answers(data):
     ws = g.get("widescreen", {})
     if g.get("enabled") and ws.get("enabled") and ws.get("fal_ai") is None:
         out.append("fal.ai per le bande 16:9 (con preventivo)")
+    out += ui_bar_question(data)
     v = data.get("voice", {})
     if v.get("enabled") is None and needs_dub_question(data):
         out.append("doppiaggio ElevenLabs (con preventivo)")
