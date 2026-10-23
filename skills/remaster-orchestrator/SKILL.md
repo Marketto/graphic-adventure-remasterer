@@ -147,6 +147,11 @@ Una schermata, solo se servono (`rstool.py project missing` le elenca solo a sti
   × prezzo dal preventivo (`ws-fal` della stima, o `rstool.py widescreen fal-estimate`), caso
   peggiore e probabile; si usa solo dove il metodo locale non convince →
   `graphics.widescreen.fal_ai` true/false;
+- **barra fissa in 16:9** (insieme alle altre scelte del 16:9, se l'analisi trova verbi,
+  inventario o pannelli che restano 4:3 con bande nere): opzioni A riempitivo / B barra allargata /
+  C B + icone dei verbi, ognuna con esito della verifica di fattibilità, mockup gratuiti su 2 scene
+  reali e stima (C con il preventivo delle icone se generate) → `graphics.widescreen.ui_bar`
+  `{option, notes, icons}` (skill widescreen, «Barre fisse in 16:9»);
 - **doppiaggio ElevenLabs** solo se **non esiste** il doppiaggio nella lingua dell'utente:
   caratteri del copione, crediti (~0,43 a carattere più i rifacimenti), costo indicativo e piano
   necessario; serve un account con **licenza commerciale** (`voice.license_confirmed`), il piano
@@ -186,7 +191,7 @@ del gioco con "✅ nei crediti" / "⏸️ oltre i crediti" e le parti fuori da `
 stimato, costo, token stimati; gratuito e a pagamento separati, totali in fondo. L'analisi aggiunge
 da sola i pacchetti che rende necessari: aggancio del Layer a un motore nuovo (`engine-hook`),
 scala verticale per i pixel non quadrati (`pixel-aspect`), barra dell'interfaccia sotto l'area di
-gioco (`ui-bar`), importazione del testo ufficiale da un'altra edizione (`text-import-<lingua>`),
+gioco secondo l'opzione scelta (`ui-bar` per A o non ancora scelta, `ui-bar-B` per B, `ui-bar-B` + `ui-bar-icons` per C), importazione del testo ufficiale da un'altra edizione (`text-import-<lingua>`),
 restauro delle voci originali (`voice-restore`), sincronia labiale per le voci nuove (`lipsync`). Aggiungi sotto la tabella cosa
 resta com'era e i rischi. Nel riepilogo sopra la tabella metti anche la **proporzione dei
 pixel** decisa da sola, con la prova (`rstool.py project show` la riporta: candidato della tabella,
