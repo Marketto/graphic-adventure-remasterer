@@ -43,7 +43,9 @@ deve sempre poter tornare all'originale in tempo reale (tasto di toggle, default
   "in verifica" finché l'utente non lo conferma giocando.
 - **Spese** (voci, immagini generative): preventivo (unità × tentativi × prezzo, crediti rimasti)
   e approvazione esplicita prima; stime e verifiche gratuite si fanno senza chiedere; dopo si
-  registrano speso e rimasto.
+  registrano speso e rimasto. **Il lavoro gratuito si fa senza chiedere**; ogni lavoro a pagamento
+  parte da un **campione** (es. un personaggio in alcune pose, 3-5 scene varie) con il suo piccolo
+  preventivo, e solo dopo che l'utente l'ha visto si preventiva e si lancia il lotto.
 - `docs/stato.md`: fatto / da fare / **decisioni prese con l'utente**, con la data. Ogni scelta
   dell'utente (un valore, una voce, una regola) si scrive lì appena presa.
 - Dati del gioco e derivati mai in luoghi pubblici (Pages, artifact pubblici, gist, release di
