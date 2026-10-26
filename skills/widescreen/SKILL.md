@@ -138,6 +138,21 @@ mai. Se sì, dopo il metodo locale e solo per le scene in cui le varianti locali
    al massimo 2 tentativi per scena, poi si torna al metodo locale. Da evitare i modelli che
    modificano l'intera immagine (spostano l'inquadratura).
 Le varianti `v-fal<n>` entrano nella stessa galleria delle altre: decide l'utente.
+Lezioni sul riempimento con FLUX Fill (secondo progetto):
+- **Lati neri nell'ingresso = bande nere nell'uscita**: il modello legge le zone vuote come
+  letterbox e le lascia nere. Riempi prima le bande col ripiego locale (`v-lama`/quilting) e fai
+  ridipingere quelle.
+- **Quadro largo intero = impaginazione**: con tutta la scena 16:9 e due fasce da riempire il modello
+  disegna riquadri da fumetto o finestre su un'altra scena. Un lato per volta, su un ritaglio quasi
+  quadrato (banda + la parte di scena accanto, larghezza ≈ 1,34 × altezza); nel prompt "one
+  continuous scene: no frames, no panels, no borders, no black bars".
+- **Misure multiple di 32** (e lato ≥ 256): altrimenti il servizio restituisce un'altra proporzione
+  (642x216 → 640x256) e al ritorno nulla combacia.
+- Un lato può riuscire e l'altro no: tieni il lato buono e il ripiego locale sull'altro.
+- Rete limitata: se passa solo l'host della coda (`queue.fal.run`) e non quelli dello storage e dei
+  risultati, invia immagini e maschere come data URI e chiedi `sync_mode` (uscita come data URI).
+- Interni con oggetti di stanza agli angoli (edifici, mobili disegnati come oggetti): la banda deve
+  raccordarsi con la scena **composta** negli stati possibili, non col fondale nudo.
 
 **3. Ritocchi** (per qualunque metodo): correggi ciò che i modelli inventano: **lettere di
 insegne tagliate** (il testo giusto viene dai dati del gioco, mai dal modello), **firme negli

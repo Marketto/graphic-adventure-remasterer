@@ -36,6 +36,13 @@ Scelta:
 - **Riduzione da 4x a 3x** con LANCZOS (BOX per gli sprite), poi JPEG q90 senza sottocampionamento della crominanza (4:4:4). Il 4:2:0 sporca i bordi colorati.
 - **Lezione importante.** Sugli sprite le differenze tra modelli erano piccole: le macchie e le ombre scure della versione precedente venivano dal ritocco successivo (vedi §6), non dal modello. Prima di cambiare upscaler bisogna isolare quale passo della pipeline causa il difetto.
 
+- **Dettaglio generativo sull'HD (secondo progetto, scelto come predefinito per i fondali):**
+  `fal-ai/clarity-upscaler` sul fondale HD 3x già fatto (bande comprese), upscale 2 → 6x, creativity
+  0,4, resemblance 0,8, guidance 4, 18 passi, seed fisso. Linee pulite, superfici e cieli molto più
+  definiti, composizione conservata (deriva globale ≈ 0, spostamento mediano ≈ 0,3 px a 3x); qualche
+  oggetto piccolo viene ridisegnato. 0,03 $/MP d'uscita, ~7 $ per ~95 stanze. La variante "bassa"
+  (0,25 / 0,9) con blocco del colore e riduzione a 3x ha misure perfette ma differenza invisibile.
+
 ## 3. Pipeline degli sfondi
 
 1. **Conversione dello sfondo originale in PNG** con la stessa palette che usa il motore. Se si usa una palette diversa, i pixel HD non coincidono con il test di uguaglianza del motore.
@@ -91,6 +98,12 @@ Costo: circa 0,134 $ a immagine a 2K. Rimasto come alternativa più costosa.
 - **Riduzione dei costi:** la tela si manda a metà della risoluzione HD, cioè 1,5x l'originale, che basta per bande di 36 px. Con `sync_mode` le immagini non restano nello storico del servizio.
 - **Passata completa: circa 100 stanze, meno di 200 immagini, meno di 10 $.** Circa due terzi delle stanze sono state accettate con le bande Fill, le altre sono tornate al ripiego, soprattutto stanze buie e a scorrimento.
 - **Prompt:** descrive un fondale dipinto, finito e a colori, chiedendo di continuare pareti, pavimenti, cieli e oggetti tagliati dal bordo. Include esplicitamente "not a sketch, not line art, no white paper, no people, no text, no signature, no logos". Se i bordi sono scuri si aggiunge una frase "scena buia", perché in quei casi il modello disegnava schizzi bianchi su carta.
+
+- **Lezioni del secondo progetto** (dettagli in `skills/widescreen` §2): lati neri nell'ingresso →
+  il modello li tiene neri (letterbox), quindi si parte dal ripiego locale; con il quadro 16:9 intero
+  disegna riquadri da fumetto, quindi un lato per volta su un ritaglio quasi quadrato; misure
+  multiple di 32; con la sola coda raggiungibile, data URI + `sync_mode`. Su un bazar affollato un
+  lato è riuscito e l'altro no (cortile inventato, striscione ripetuto): ibrido lato fal + lato locale.
 
 ### 4.6 Controllo automatico (`band_check`) e i suoi limiti
 Per ogni banda il controllo misura, rispetto alla colonna di bordo dell'originale:
@@ -180,6 +193,8 @@ maggioranza: conta la distribuzione delle forme frontali, mai la singola forma.
 - **Sprite sovrapposti.** Il buffer degli id ha due livelli (sprite in cima e sprite sotto). Il bordo semitrasparente di una testa si fonde con l'HD del corpo sotto, invece che con il pixel originale ingrandito.
 - **Prospettiva.** Con una scala diversa da 100, lo sprite HD si ricampiona bilineare nella posizione esatta, invece di saltare o ripetere righe come faceva l'originale.
 - **Se un colore del fotogramma non si mappa sulla palette corrente, si usa l'originale.** Uno sprite che peggiora si toglie dall'indice e il motore torna da solo all'originale.
+- **Clarity sugli sprite (scartato):** su un foglio di 19 fotogrammi la camminata sfarfalla 2-3 volte
+  più della pipeline locale, il dettaglio inventato è granuloso e l'alfa a blocchi lascia la scaletta.
 - **Resa "cinematografica" (poi abbandonata).** Era calcolata solo dalla sagoma, quindi stabile tra fotogrammi: inchiostro più spesso, ombra cel-shading dal lato opposto alla luce, luce di bordo, contorno esterno. È stata approvata a forza 0.8 con contorno 1.4, ma causava ombre e macchie scure. È stata sostituita da APISR GRL con il solo contorno smussato.
 
 ## 7. Font

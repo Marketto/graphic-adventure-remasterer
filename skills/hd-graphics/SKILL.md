@@ -1,6 +1,6 @@
 ---
 name: hd-graphics
-description: Pipeline locale per rifare in HD fondali, sprite, interfaccia, cursori, font e filmati di un'avventura 2D d'epoca nel rispetto della style bible (upscaler APISR/Real-ESRGAN su CPU, contorno smussato e inchiostro degli sprite, img2img opzionale, atlanti font, filmati ricodificati), producendo asset conformi al contratto RAC. Usala nella fase asset del remaster.
+description: Pipeline per rifare in HD fondali, sprite, interfaccia, cursori, font e filmati di un'avventura 2D d'epoca nel rispetto della style bible (upscaler APISR/Real-ESRGAN su CPU, contorno smussato e inchiostro degli sprite, img2img opzionale, dettaglio generativo Clarity come predefinito per i fondali, atlanti font, filmati ricodificati; propone sempre migliore, gratuita, prova su campione e ibrido), producendo asset conformi al contratto RAC. Usala nella fase asset del remaster.
 ---
 
 # Grafica HD
@@ -31,6 +31,23 @@ Nessuna GPU richiesta: la pipeline collaudata gira su CPU (2 core, 7 GB di RAM b
    dalla ricetta. Mai necessario per l'HD di base.
 La riduzione finale da 4x alla scala del pacchetto usa LANCZOS per fondali e filmati e BOX per
 gli sprite (niente aloni sui contorni).
+5. **Dettaglio generativo a pagamento (fal.ai, Clarity Upscaler)**: ridipinge il dettaglio
+   conservando la composizione. Predefinito per i fondali dei giochi a bassa risoluzione (vedi §1),
+   **non** per gli sprite (§2). Solo con preventivo approvato.
+
+## Come si propone una strategia (per ogni tipo di asset)
+Mai una sola strada: all'utente si presentano sempre, con costo e tempo stimati,
+1. **la soluzione statisticamente migliore** (quella che ha dato i risultati migliori nei progetti
+   già fatti, scritta qui come predefinita per quel tipo di asset e di risoluzione);
+2. **l'alternativa gratuita** (pipeline locale);
+3. **una prova su campione** di 3-20 elementi vari (scena chiara, buia, con scritte, a scorrimento;
+   per gli sprite una camminata intera) con **tutte le strategie che finora hanno soddisfatto**,
+   affiancate all'attuale, a costo di pochi centesimi;
+4. **un compromesso ibrido** (es. generativo solo dove migliora, locale altrove; o generativo per
+   i fondali e locale per gli sprite).
+La scelta e la data vanno nelle decisioni del progetto. Il confronto si guarda **ingrandito e alla
+scala in cui il dettaglio esiste** (ritagli 1:1 o 2x): ridotto alla larghezza di un telefono, due
+varianti anche molto diverse sembrano uguali.
 
 ## 0. Estrazione
 Dal motore con l'opzione di dump del Remaster Layer (`remaster_dump=<cartella>`): fondali per scena + palette, ogni frame di sprite come
@@ -56,6 +73,33 @@ Dettagli e misure: `${CLAUDE_PLUGIN_ROOT}/references/conoscenza/grafica.md` (§2
    (`--no-resume` per rifarla); il modello usato è scritto in `<scena>.jpg.json`.
 6. Le bande 16:9 si ingrandiscono **con lo stesso modello** dei fondali:
    `rstool.py widescreen extend ... --model <stesso file>` (o la stessa `REMASTER_MODEL_BG`).
+
+### Strategia predefinita per i fondali: dettaglio generativo sull'HD (Clarity, variante "media")
+Per fondali dipinti di giochi fino a 320x200/640x480 il risultato migliore ottenuto finora (scelto
+dall'utente sul campione e poi su tutte le stanze) è:
+1. prima la pipeline locale qui sopra (HD a 3x, bande 16:9 comprese: si passa il fondale largo);
+2. poi `fal-ai/clarity-upscaler` su quell'HD con **upscale_factor 2 (→ 6x), creativity 0,4,
+   resemblance 0,8, guidance_scale 4, num_inference_steps 18, seed fisso**; prompt "fondale dipinto
+   a mano anni '90, stessa composizione e colori" (+ "scena notturna" e "daylight" nel negativo per
+   le scene buie, decise dalla luminanza media); negativo: persone, testo, cornici, foto, 3D, sfocato;
+3. l'uscita grezza a 6x è il risultato: **non** bloccare colori/luce sul fondale precedente e
+   **non** ridurre a 3x prima di averlo fatto vedere (entrambi cancellano proprio il dettaglio
+   aggiunto). La scala di visualizzazione si sistema nel motore.
+- **Costo**: 0,03 $ per megapixel d'uscita (~0,07 $ per un fondale largo 1284x432 → 2568x864; un
+  gioco da ~95 stanze ~7 $). Preventivo dai megapixel reali di tutti i fondali, +25% di margine.
+- **Varianti scartate**: creativity 0,25 / resemblance 0,9 ("bassa") più blocco del colore e
+  riduzione a 3x: misure perfette ma differenza invisibile. Con 0,4 qualche oggetto piccolo viene
+  ridisegnato (una maschera appesa, la griglia di un veicolo): controlla scritte e oggetti
+  riconoscibili e rimettili dal fondale precedente con maschera morbida se cambiano.
+- **Controlli**: con questa variante le soglie geometriche a blocchi (p95 > 1,5 px, max > 6 px)
+  segnalano quasi tutte le stanze (dettaglio ridipinto = blocchi senza corrispondenza): servono la
+  deriva globale (≈ 0) e lo spostamento mediano (≈ 0,3 px a 3x) più la revisione a vista, con
+  elenchi a parte di scene con luce/colore cambiati oltre il 10% e di scene con scritte.
+- **Oggetti di stanza** disegnati sopra il fondale (stati diversi, animati) restano nello stile
+  precedente: elencali e verificali in gioco accanto al fondale nuovo.
+- Tecnica del servizio (rete limitata, immagini piccole, minimi): `widescreen` §2 e
+  `references/conoscenza/grafica.md` §4.5.
+
 Controlli automatici (`rstool.py gfx check`): stessa composizione (SSIM sul ridotto ≥ 0.85),
 nessuna deriva cromatica (ΔE medio ≤ 6), nessuna scritta inventata. Verifica sempre nel log del
 motore che l'HD sia stato caricato: un'edizione con dimensioni diverse lo fa scartare in silenzio.
@@ -83,6 +127,12 @@ motore che l'HD sia stato caricato: un'edizione con dimensioni diverse lo fa sca
   alpha) torna a scalini. Per contorni pienamente morbidi serve un aggancio nel motore che
   ricostruisca l'alpha dalla maschera originale anche nei blocchi vicini (come nel progetto di
   riferimento); solo allora `--format jpg` ha senso.
+- **Clarity sugli sprite (prova su 19 fotogrammi, scartata)**: anche con i fotogrammi riuniti in
+  un foglio (meno sfarfallio e niente minimi per chiamata) la camminata sfarfalla 2-3 volte più
+  della pipeline locale, il dettaglio inventato su figure di pochi pixel è granuloso (errore
+  ridotto a 1x doppio) e l'alfa a blocchi dell'originale lascia il contorno a scaletta. I volti
+  restano cartoon. Per gli sprite resta la pipeline deterministica qui sotto; il generativo solo
+  con stabilizzazione temporale provata su una camminata intera.
 - Una resa "cinematografica" calcolata dalla sagoma (ombra cel-shading, luce di bordo) era stata
   approvata e poi **abbandonata**: creava ombre e macchie scure. Prima di cambiare modello,
   isola quale passo della pipeline causa il difetto (prova `--no-ink`, poi senza `--model`).
