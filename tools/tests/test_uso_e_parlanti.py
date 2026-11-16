@@ -18,10 +18,10 @@ def _game(tmp):
     scr.mkdir()
     (scr / "harbour.scr").write_text(
         "ZONE crate\n  SOUND creak.sfx\n  ANIM gull\n# SOUND foghorn.sfx\n[\nZONE oldboat\n  SOUND bell.sfx\n]\n"
-        "ZONE pier /* SOUND splash.sfx */ ANIM wave\nIF MET_KEEPER\n  SAY keeper_hint\nSET OPENED\n", encoding="utf-8")
+        "ZONE pier /* SOUND splash.sfx */ ANIM wave\nSAY \"Ahoy // matey\" rope.sfx\nIF MET_KEEPER\n  SAY keeper_hint\nSET OPENED\n", encoding="utf-8")
     ast = tmp / "assets"
     ast.mkdir()
-    for n in ("creak.sfx", "foghorn.sfx", "bell.sfx", "splash.sfx", "never.sfx", "gull.ani", "wave.ani", "waves.ani"):
+    for n in ("creak.sfx", "foghorn.sfx", "bell.sfx", "splash.sfx", "never.sfx", "gull.ani", "wave.ani", "waves.ani", "rope.sfx"):
         (ast / n).write_bytes(n.encode())
     (ast / "copy.ani").write_bytes(b"gull.ani")
     return scr, ast
@@ -41,6 +41,7 @@ def test_census_states_and_candidates(tmp_path):
     assert st["splash.sfx"]["status"] == "commented"           # inline block
     assert st["never.sfx"]["status"] == "unused"
     assert st["wave.ani"]["status"] == "used"
+    assert st["rope.sfx"]["status"] == "used"                  # "//" inside a string is not a comment
     assert st["waves.ani"]["status"] == "unused"               # whole tokens only, no substring match
     assert st["gull.ani"]["duplicate_of"] == "copy.ani"        # same bytes, first one wins
     assert res["dead_flag_branches"] == 1                      # MET_KEEPER is required but never set
@@ -53,8 +54,8 @@ def test_gate_blocks_unused_and_warns(tmp_path):
     usage.census(str(scr), str(ast), syntax=SYN, out_csv=str(tmp_path / "u.csv"))
     batch = tmp_path / "b.json"
     batch.write_text(json.dumps({"items": [
-        {"name": "creak.sfx", "duration": 0.2, "out": "creak_11025"},
-        {"name": "creak.sfx", "duration": 0.8, "out": "creak_11025"},
+        {"name": "creak.sfx", "kind": "sfx", "duration": 0.2, "out": "creak_11025"},
+        {"name": "creak.sfx", "kind": "sfx", "duration": 0.8, "out": "creak_11025"},
         {"name": "bell.sfx", "duration": 1.0}, {"name": "never.sfx", "duration": 1.0}]}))
     r = usage.gate(str(tmp_path / "u.csv"), str(batch))
     assert not r["ok"] and {b["item"] for b in r["blocked"]} == {"bell.sfx", "never.sfx"}

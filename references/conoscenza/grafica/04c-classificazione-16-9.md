@@ -13,7 +13,7 @@ classificatore della prima versione sbagliava più di metà delle scene statiche
   probabile primo piano (`full_height`), ma da sola non decide (vale per metà dei casi);
 - le **stanze fittizie** larghe 8-16 px vanno in `skip`, non si estendono;
 - una mappa larga che scorre resta `scroll-wide` anche se il nome dice "mappa";
-- `scroll-narrow` ora ha `sides` (`open`/`closed`): solo i lati aperti si inventano, e il
+- `scroll-narrow` ora ha `sides` (`open`/`closed`): solo i lati aperti si inventano (i chiusi si continuano in locale), e il
   preventivo fal.ai conta solo quelli.
 Risultato: classi giuste da circa due terzi a più di quattro quinti, decisione "inventare o no"
 da tre quarti a quasi tutte; i nomi delle stanze valgono qualche punto in più.

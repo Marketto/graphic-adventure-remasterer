@@ -9,15 +9,15 @@
 ## Battute da non registrare
 
 - Messaggi per chi prova il gioco (debug, tester) e righe senza lettere.
-- Righe con un valore variabile, che si fanno con il metodo dei pezzi (§1.7).
+- Righe con un valore variabile, che si fanno con il metodo dei pezzi (skill `voice-dubbing` §5b).
 - Suoni senza sottotitolo (versi, folla): sono effetti, non parlato.
 - Personaggi senza voce nel cast: il rapporto li elenca e li salta.
 - Le battute escluse si elencano in un documento per capitolo, con il motivo.
 
 ## Crediti, preventivi, rifacimenti
 
-- **Costo reale: circa 0,4 crediti a carattere**, tag compresi. Per esempio, 45.000 caratteri sono costati ~19.200 crediti; un rifacimento di 232 caratteri ne è costato 92. Il preventivo si fa con (caratteri + tag) × ~0,43. Il "1 carattere = 1 credito" della documentazione generale sovrastima.
-- **Effetti sonori: ~10 crediti al secondo.**
+- **Costo reale: circa 0,43 crediti a carattere** (valore del codice, `voice.credits_per_char` nel progetto per cambiarlo), tag compresi. Per esempio, 45.000 caratteri sono costati ~19.200 crediti; un rifacimento di 232 caratteri ne è costato 92. Il preventivo si fa con (caratteri + tag) × ~0,43. Il "1 carattere = 1 credito" della documentazione generale sovrastima.
+- **Effetti sonori: ~11 crediti al secondo.**
 - **Crediti che non bastano: doppiaggio per parti.** Invece di "tutto o niente" si doppiano solo
   le prime parti del gioco (capitoli, atti, dischi, percorsi) che stanno nei crediti, in ordine di
   gioco; le altre restano con il comportamento originale (clip originale o sottotitolo), perché il

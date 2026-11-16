@@ -4,7 +4,7 @@
   Molti motori d'epoca scorrono a scatti di mezzo schermo quando i piedi arrivano a pochi pixel dal bordo.
   - Al loro posto: zona morta al centro (circa ±10% della larghezza; in verticale la fascia dove stanno i piedi) e inseguimento morbido esponenziale (costante ~150 ms), sempre dentro i bordi della stanza, alla frequenza dello scorrimento fluido.
   - Si seguono i piedi **disegnati** (interpolati tra due passi), non quelli logici, così personaggio e sfondo si muovono insieme.
-- **Gli scorrimenti decisi dagli script passano per primi**, per esempio un salto tra due vagoni. Per il resto di quella camminata la zona morta torna ai limiti originali, così la camera non annulla la scelta dello script.
+- **Gli scorrimenti decisi dagli script passano per primi**, per esempio un salto da una piattaforma all'altra. Per il resto di quella camminata la zona morta torna ai limiti originali, così la camera non annulla la scelta dello script.
 - **Ingresso nella stanza.** Se la regola originale lascia il personaggio a bordo schermo o fuori, la vista parte centrata su di lui. Capita entrando da destra in una stanza larga.
 - **Paesaggio che scorre dietro un veicolo** (finestrini, tetto, vagoni visti da fuori). Gli originali lo ottengono quasi sempre con un ciclo di colori.
   - Il fondale HD si ricava **dal ciclo originale, non si inventa**: ogni fase del ciclo è un disegno a sé (con ciclo a 3 colori e 4 fasi: colore = cifra k in base 3 della voce di palette).
@@ -15,7 +15,7 @@
 - **Prestazioni sui veicoli.** Le voci di palette coperte dal paesaggio HD vanno congelate: se almeno l'80% dei loro pixel di sfondo sta nel vetro, sono ferme come con `freeze`. Altrimenti un ciclo che cambia molte voci a ogni passo ricompone tutta l'immagine e il personaggio rallenta.
 - **Passi di gioco arretrati.** Se un fotogramma dura più di un passo di gioco, si eseguono subito i passi scaduti (fino a 3 per fotogramma), finché stanza e modo di input non cambiano. Senza, camminata e animazioni rallentano con il disegno. Dopo una pausa lunga si riparte da adesso.
 - **Zone trappola** (eseguono comandi quando i piedi entrano o escono):
-  - controllare che ENTER ed EXIT non siano scambiati nel motore, confrontandoli con il senso logico degli script e con il motore gemello;
+  - controllare che ENTER ed EXIT non siano scambiati nel motore, confrontandoli con il senso logico degli script e con un altro motore della stessa famiglia;
   - azzerare la trappola al cambio di stanza, perché i comandi d'uscita della stanza lasciata non devono partire nella nuova.
 - **Porte strette e ultimo passo.** Verso un punto più vicino di un passo intero va fatto l'ultimo passo corto, controllando il punto d'arrivo vero e non quello del passo intero. Altrimenti il personaggio si ferma davanti a una porta larga pochi pixel.
 - **Diagnosi di un blocco**:

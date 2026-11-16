@@ -362,6 +362,19 @@ def test_extensions_local_first_and_fal_only_with_budget(dump, tmp_path):
         paid(np.zeros((10, 20, 3), np.uint8), np.ones((10, 20)))  # budget exhausted: no second call
     est = falai.estimate(100)
     assert est["max_images"] == 200 and est["max_usd"] == 10.0 and est["likely_usd"] < est["max_usd"]
+    # closed interiors: continued locally by default, never sent to the paid service (not in the quote)
+    pl = json.load(open(plan_path, encoding="utf-8"))
+    closed = [x["scene"] for x in pl["scenes"] if x["class"] == "closed-static"]
+    assert closed, "il dump di prova deve avere un interno chiuso"
+    if closed:
+        calls.clear()
+        plan2 = widescreen.make_extensions(plan_path, str(tmp_path / "hd"), str(tmp_path / "var2"), 3, lama=fake_lama,
+                                           paid_fill=lambda *a: calls.append(1), only=closed)
+        sc = next(x for x in plan2["scenes"] if x["scene"] == closed[0])
+        assert "inpaint" in [v["kind"] for v in sc["variants"]] and not calls
+        with pytest.raises(ValueError):
+            widescreen.make_extensions(plan_path, str(tmp_path / "hd"), str(tmp_path / "var3"), 3, lama=fake_lama,
+                                       only=closed, closed_static="grey")
 
 
 # ------------------------------------------------------------------ patchable engine

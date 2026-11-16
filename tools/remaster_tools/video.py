@@ -34,7 +34,8 @@ COPY_OK = {
     "ogv": {"vorbis"},
 }
 REENCODE = {"mkv": ["-c:a", "flac"], "mp4": ["-c:a", "aac", "-b:a", "192k"], "ogv": ["-c:a", "libvorbis", "-q:a", "6"]}
-US_PER_PIXEL_CPU = 80  # APISR RRDB/GRL on a 2-core CPU, measured per input pixel (references/conoscenza/grafica/02-upscaler-modelli-provati-e-scelta.md)
+from .plan import COEFFS as _C  # noqa: E402
+US_PER_PIXEL_CPU = _C["apisr_us_per_pixel"]  # one value with plan.py; APISR RRDB/GRL on a 2-core CPU, measured per input pixel (references/conoscenza/grafica/02-upscaler-modelli-provati-e-scelta.md)
 
 
 def _need(tool):

@@ -76,9 +76,9 @@ Procedura:
    dall'intervallo plausibile per genere ed età (possibile errore d'ottava o etichetta sbagliata),
    genere o età dichiarati diversi (`--strict` le esclude), meno di 5 candidate dell'età giusta
    (cercane altre prima di scegliere).
-5. **Raffina** sulle 2-3 migliori: stability, similarity, style, speed (§0 per i limiti) e
+5. **Raffina** sulle 2-3 migliori: stability, similarity, style, speed (skill `voice-dubbing` §0 per i limiti) e
    **toni interpretativi** dal modo di recitare nei riferimenti (ritmo, ironia, pause, attacchi),
-   annotati nella scheda del personaggio come guida per la regia per battuta (§3), mai citando la persona.
-6. **Provini** come al §2: 2-3 voci con una sola battuta vera (una addizionale solo per le voci
+   annotati nella scheda del personaggio come guida per la regia per battuta (skill `voice-dubbing` §3), mai citando la persona.
+6. **Provini** come nella skill `voice-dubbing` §2: 2-3 voci con una sola battuta vera (una addizionale solo per le voci
    in dubbio), sceglie l'utente; solo voci della
    libreria, nessuna voce progettata "a somiglianza" con Voice Design partendo dal materiale.

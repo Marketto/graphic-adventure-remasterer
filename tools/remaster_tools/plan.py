@@ -49,7 +49,7 @@ COEFFS = {
     "bg_avg_pixels": 320 * 200,       # pixels of a background when bg_pixels is missing
     "sprite_avg_pixels": 3000,        # pixels of a sprite frame when sprite_pixels is missing
     "ws_local_s_per_scene": 150,      # LaMa 1x + quilting + recipes + checks, per scene to invent
-    "ws_border_s_per_scene": 5,       # closed-static: borders only
+    "ws_border_s_per_scene": 5,       # closed-static with closed_static black/borders
     "audio_s_per_track": 30,          # fluidsynth render + group normalization, per track (faster than real time) (tuned on the first real trial)
     "audio_s_per_sfx": 3,             # resample + clean + normalization, per effect
     "restore_s_per_line": 0.3,          # ffmpeg restoration of one short original clip (tuned on the first real trial)

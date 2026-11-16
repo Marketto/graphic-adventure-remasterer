@@ -38,9 +38,14 @@ class _Lazy:
     def __setattr__(self, k, v):
         setattr(self._load(), k, v)
 
+    def __dir__(self):
+        return dir(self._load())
 
-for _n in _MODULES:
-    globals()[_n] = _Lazy(_n)
+    def __repr__(self):
+        return f"<lazy module remaster_tools.{self._name}>"
+
+
+globals().update({_n: _Lazy(_n) for _n in _MODULES})
 
 
 def out(obj):
@@ -312,7 +317,7 @@ def main(argv=None):
     x = sg.add_parser("from-bitmap", help="HD dei font bitmap originali (3x, angoli vivi)")
     x.add_argument("src", help="dump del font: JSON o cartella di PNG indicizzati <hex>.png")
     x.add_argument("--name", required=True); x.add_argument("--out", default="remaster/fonts")
-    x.add_argument("--scale", type=int, default=None, help="default: graphics.scale del progetto, altrimenti 3"); x.add_argument("--codepage", default="auto:cp437")
+    x.add_argument("--scale", type=int, default=None, help="default: graphics.scale del progetto, altrimenti 3"); x.add_argument("--codepage", default="cp437", help="tabella dei glifi del font (non sempre quella dei testi)")
     x.add_argument("--extra-edition", help="dump dello stesso font da un'altra edizione dell'utente")
     x.add_argument("--compose-accents", action="store_true",
                    help="costruisce le accentate mancanti e rifà le maiuscole accorciate a piena altezza")
@@ -558,7 +563,8 @@ def main(argv=None):
     x.add_argument("--dedupe", action=argparse.BooleanOptionalAction, default=True, help="ogni testo una volta (default)")
     x.add_argument("--expand", type=float, default=1.0, help="lunghezza della lingua di arrivo (it su en ≈ 1.12)")
     x.add_argument("--retake", type=float, default=1.15); x.add_argument("--codepage", default="auto:cp850")
-    x.set_defaults(fn=lambda a: out(voice.estimate(a.source, a.dedupe, a.expand, a.retake, a.codepage)))
+    x.set_defaults(fn=lambda a: out(voice.estimate(a.source, a.dedupe, a.expand, a.retake, a.codepage,
+                                                     cpc=a.credits_per_char)))
     x = sg.add_parser("speaker-audit", help="chi parla davvero (ritratto mostrato, genere/età della voce, copie per "
                       "ogni personaggio giocabile) prima di un lotto")
     x.add_argument("script"); x.add_argument("--cast", required=True); x.add_argument("--voice-dir")
@@ -700,14 +706,15 @@ def _project_defaults(a):
     need_cp = isinstance(getattr(a, "codepage", None), str) and a.codepage.startswith("auto:")
     if getattr(a, "scale", 0) is not None and not need_cp and a.group != "voice":
         return
-    data = project.load(getattr(a, "workdir", ".")) or {}
+    try:
+        data = project.load(getattr(a, "workdir", ".")) or {}
+    except (ValueError, OSError) as e:
+        sys.exit(f"errore: remaster.json non leggibile ({e})")
     if getattr(a, "scale", 0) is None:
         a.scale = int((data.get("graphics") or {}).get("scale") or 3)
     if need_cp:
         a.codepage = (data.get("game") or {}).get("codepage") or a.codepage[5:]
-    cpc = (data.get("voice") or {}).get("credits_per_char")
-    if cpc:
-        voice.CREDITS_PER_CHAR = float(cpc)
+    a.credits_per_char = float((data.get("voice") or {}).get("credits_per_char") or 0) or None
 
 
 def cmd_compare(a):
@@ -761,6 +768,11 @@ def cmd_ui_palette(a):
     out({"roles": roles, "file": theme.save_roles(roles, a.out)})
 
 
+def _closed_static(a):
+    data = project.load(a.workdir) or {}
+    return ((data.get("graphics") or {}).get("widescreen") or {}).get("closed_static")
+
+
 def cmd_ws_extend(a):
     rec = gfx.load_recipe(a.recipe, "background_extension") if a.recipe else None
     paid = None
@@ -785,7 +797,7 @@ def cmd_ws_extend(a):
     plan = widescreen.make_extensions(a.plan, a.hd, a.out, a.scale, rec, lama=a.lama, quilting=not a.no_quilt,
                                       sharpen=not a.no_sharpen, paid_fill=paid,
                                       recipes=_json(a.recipes) if a.recipes else None, only=a.only,
-                                      model=a.model)
+                                      model=a.model, closed_static=_closed_static(a))
     res = {"scenes_with_variants": sum(1 for s in plan["scenes"] if s.get("variants")), "variants_dir": a.out}
     if paid is not None:
         res["fal_images_used"] = budget.used

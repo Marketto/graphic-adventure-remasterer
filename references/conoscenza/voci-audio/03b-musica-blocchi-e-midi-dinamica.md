@@ -8,7 +8,7 @@ parser non legge oltre la fine del file. Con la musica interattiva (punti di rip
 durata dei file sovrastima l'ascolto: i minuti sono un limite superiore.
 
 ## Musica MIDI dinamica: strategia "orchestra"
-Regola (decisione dell'utente, 22/10/2026): quando la musica è MIDI **a comando dinamico** (salti,
+Regola: quando la musica è MIDI **a comando dinamico** (salti,
 cicli, volumi e trasposizioni delle parti decisi dagli script, effetti MIDI sullo stesso
 sintetizzatore) il MIDI **resta al motore** e si rifà il **SoundFont**: niente rendering in file,
 niente generatori di musica. Un brano breve reso come file suonava circa 4 volte più a lungo, di fila

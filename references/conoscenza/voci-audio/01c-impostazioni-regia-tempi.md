@@ -21,7 +21,7 @@
 Ci sono tre livelli distinti:
 
 1. **testo originale**, da cui si calcola la chiave del file (CRC32 senza spazi): la chiave non cambia mai;
-2. **sottotitolo corretto** a schermo (vedi §2);
+2. **sottotitolo corretto** a schermo (vedi `02-correzione-dei-testi.md`);
 3. **testo recitato** (`recita`), cioè la forma che la sintesi pronuncia bene. Non cambia il sottotitolo.
 
 Le correzioni di pronuncia sono una lista ordinata di (espressione regolare → testo detto):

@@ -1,3 +1,6 @@
 #!/bin/sh
 # Private game repository: block accidental mass or large deletions (see guard_deletions.py).
-exec python3 "$(git rev-parse --show-toplevel)/.githooks/guard_deletions.py"
+# A previous hook of the repository, if any, is kept as pre-commit.local and runs first.
+dir="$(git rev-parse --show-toplevel)/.githooks"
+if [ -x "$dir/pre-commit.local" ]; then "$dir/pre-commit.local" || exit 1; fi
+exec python3 "$dir/guard_deletions.py"

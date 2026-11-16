@@ -10,7 +10,7 @@ Valgono per tutte le skill e gli agenti. Le skill le richiamano con una riga e n
    - Ogni spesa si registra con `project spend`.
 3. **Motore e contenuto separati.** Nel motore vanno solo meccanismi generici: nessuna eccezione per una stanza, una battuta o un oggetto. Le correzioni stanno nei file della patch. I file originali non si toccano.
 4. **Stile da preservare.** Alfabeti finti, accenti e parlate dei personaggi, gag nei testi e refusi voluti non si correggono.
-5. **Scelte dell'utente su una pagina.** Tra più varianti l'utente sceglie da una pagina locale (`rstool.py review choose`): variante, "altro" o nota per ogni voce, poi incolla in chat il messaggio pronto.
+5. **Scelte dell'utente su una pagina.** Tra più varianti l'utente sceglie da una pagina locale (`rstool.py review choose`, o la galleria specifica dell'area come `review gallery` per il 16:9): variante, "altro" o nota per ogni voce, poi incolla in chat il messaggio pronto.
    - Si propone senza sostituire: l'originale o la versione di prima restano tra le scelte.
 6. **Chi parla davvero.** Ritratto mostrato, personaggi giocabili, genere ed età della voce: `voice speaker-audit` prima di ogni lotto.
 7. **Repository.**

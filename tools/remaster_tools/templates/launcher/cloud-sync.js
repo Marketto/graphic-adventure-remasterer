@@ -1,10 +1,10 @@
 // Save-game sync for a web/WebView launcher with Dropbox (App folder access), no server.
 // Copy into the private game repository, fill APP_KEY there (empty here: without a key the UI hides
 // the section), and wire the hooks: readSaves()/writeSaves() over the engine's IndexedDB file system,
-// zip()/unzip() (any small zip library) and the UI callbacks. Rules: references/conoscenza/motore/22.
+// zip()/unzip() (any small zip library) and the UI callbacks. Rules: references/conoscenza/motore/22-launcher-e-salvataggi-cloud.md.
 const APP_KEY = "";                       // set only in the private repository
 const ZIP_PATH = "/saves.zip";            // single zip of every save, inside the app folder
-const LS = { verifier: "cs.verifier", refresh: "cs.refresh", rev: "cs.rev", base: "cs.base" };
+const LS = { verifier: "cs.verifier", refresh: "cs.refresh", base: "cs.base" };
 let accessToken = null;                   // in memory only, never logged
 
 const b64url = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -34,32 +34,46 @@ const link = code => token({ grant_type: "authorization_code", code: code.trim()
   .then(t => { store.set(LS.verifier, null); return t; });
 const ensureToken = () => accessToken ? Promise.resolve(accessToken)
   : store.get(LS.refresh) ? token({ grant_type: "refresh_token", refresh_token: store.get(LS.refresh) }) : Promise.reject(new Error("not linked"));
-function forget() { accessToken = null; [LS.refresh, LS.rev, LS.base].forEach(k => store.set(k, null)); }
+function forget() { accessToken = null; [LS.refresh, LS.base].forEach(k => store.set(k, null)); }
 async function unlink() {
-  try { await api("https://api.dropboxapi.com/2/auth/token/revoke", null); } catch (e) {}
+  try { await api("https://api.dropboxapi.com/2/auth/token/revoke", null, undefined, true); } catch (e) {}
   forget();
 }
 
-async function api(url, arg, body) {
+async function api(url, arg, body, retried = false) {
   const t = await ensureToken();
   const h = { Authorization: "Bearer " + t };
   if (arg) h["Dropbox-API-Arg"] = JSON.stringify(arg);
   if (body) h["Content-Type"] = "application/octet-stream";
   const r = await fetch(url, { method: "POST", headers: h, body });
-  if (r.status === 401) { accessToken = null; return api(url, arg, body); }
+  if (r.status === 401) {
+    accessToken = null;
+    if (!retried) return api(url, arg, body, true);      // one refresh, then give up
+    forget();
+    throw new Error("unauthorized");
+  }
   return r;
 }
 
 // One sync. hooks: {readSaves() -> {path: Uint8Array}, writeSaves(files, remove), zip(files), unzip(bytes),
 // hash(bytes) -> string, mtime(side, path), gameRunning() -> bool, confirmOverwrite() -> Promise<bool>}
-async function sync(h) {
+let running = null;
+function sync(h, opts = {}) {             // one sync at a time; while the game runs nothing happens
+  if (h.gameRunning()) return Promise.resolve({ skipped: "game running" });
+  if (!running) running = doSync(h, opts).finally(() => { running = null; });
+  return running;
+}
+
+async function doSync(h, { interactive = true } = {}) {
   const local = await h.readSaves();
   const lh = Object.fromEntries(await Promise.all(Object.entries(local).map(async ([p, b]) => [p, await h.hash(b)])));
   const base = JSON.parse(store.get(LS.base) || "{}");
   let remote = {}, rh = {}, rev = null;
   const dl = await api("https://content.dropboxapi.com/2/files/download", { path: ZIP_PATH });
   if (dl.ok) {
-    rev = JSON.parse(dl.headers.get("Dropbox-API-Result")).rev;
+    const meta = dl.headers.get("Dropbox-API-Result");    // needs the header exposed by CORS
+    if (!meta) throw new Error("download: Dropbox-API-Result missing");
+    rev = JSON.parse(meta).rev;
     remote = await h.unzip(new Uint8Array(await dl.arrayBuffer()));
     rh = Object.fromEntries(await Promise.all(Object.entries(remote).map(async ([p, b]) => [p, await h.hash(b)])));
   } else if (dl.status !== 409) throw new Error("download " + dl.status);
@@ -67,19 +81,19 @@ async function sync(h) {
   const merged = {};
   for (const [p, side] of Object.entries(plan.take)) merged[p] = side === "local" ? local[p] : remote[p];
   const fromRemote = Object.entries(plan.take).filter(([, s]) => s === "remote").map(([p]) => p);
-  if ((fromRemote.length || plan.remove.some(p => p in local)) && !h.gameRunning())   // never while playing
+  if (h.gameRunning()) return { skipped: "game started during sync" };   // base untouched: retried later
+  if (fromRemote.length || plan.remove.some(p => p in local))
     await h.writeSaves(Object.fromEntries(fromRemote.map(p => [p, remote[p]])), plan.remove.filter(p => p in local));
   const mh = Object.fromEntries(Object.keys(merged).map(p => [p, plan.take[p] === "local" ? lh[p] : rh[p]]));
   if (changeHash(mh) !== changeHash(rh)) {
     const mode = rev ? { ".tag": "update", update: rev } : "add";   // conflict instead of silent overwrite
     let up = await api("https://content.dropboxapi.com/2/files/upload", { path: ZIP_PATH, mode, mute: true }, await h.zip(merged));
-    if (up.status === 409 && await h.confirmOverwrite())
+    if (up.status === 409 && interactive && await h.confirmOverwrite())
       up = await api("https://content.dropboxapi.com/2/files/upload", { path: ZIP_PATH, mode: "overwrite", mute: true }, await h.zip(merged));
     if (!up.ok) throw new Error("upload " + up.status);
     rev = (await up.json()).rev;
   }
-  store.set(LS.rev, rev);
-  store.set(LS.base, JSON.stringify(mh));
+  store.set(LS.base, JSON.stringify(mh));   // only after a complete sync
   return { conflicts: plan.conflicts, downloaded: fromRemote.length, removed: plan.remove.length };
 }
 
@@ -87,7 +101,7 @@ async function sync(h) {
 function schedule(h, onError) {
   const run = () => sync(h).catch(onError);
   setInterval(run, 60000);
-  document.addEventListener("visibilitychange", () => document.visibilityState === "hidden" && run());
-  addEventListener("pagehide", run);
+  document.addEventListener("visibilitychange", () => document.visibilityState === "hidden" && sync(h, { interactive: false }).catch(onError));
+  addEventListener("pagehide", () => sync(h, { interactive: false }).catch(onError));   // never ask while closing
   return Promise.race([run(), new Promise(r => setTimeout(r, 15000))]);
 }

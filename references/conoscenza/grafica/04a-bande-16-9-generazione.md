@@ -1,7 +1,7 @@
 # Bande 16:9: generazione (LaMa, quilting, Gemini, fal.ai)
-**Regola generalizzata per la suite (decisa con l'utente, 21/10/2026).** Si parte sempre dalle
-tecniche locali collaudate qui (§4.2 LaMa a 1x, §4.3 quilting, §4.7 ricette, §4.9 nitidezza) e
-l'outpainting a pagamento (§4.5) si usa **solo se l'utente lo sceglie**, chiedendolo
+**Regola.** Si parte sempre dalle tecniche locali collaudate (LaMa a 1x e quilting qui sotto, ricette
+locali e indice di nitidezza in `04b-bande-16-9-controlli-e-ricette.md`) e l'outpainting a pagamento
+(fal.ai, qui sotto) si usa **solo se l'utente lo sceglie**, chiedendolo
 dopo l'analisi, con preventivo e approvazione per ogni lotto. In pratica fal.ai è
 stato scelto per molte stanze, ma resta un'opzione, non il default.
 
@@ -15,7 +15,7 @@ digitalizzata a pixel quadrati), e si verifica guardando oggetti tondi affiancat
 Lavorando sull'HD, LaMa (big-lama TorchScript, ~200 MB) produce bande molto sfocate.
 
 ## LaMa a 1x più upscaler
-Problema risolto: LaMa sbaglia meno la composizione se lavora alla risoluzione nativa. LaMa ricostruisce 36 px per lato a 1x. L'upscaler porta poi a 3x la striscia con 24 px di contesto dell'originale, sfumata su 24 px verso il centro HD. Il centro non viene mai toccato.
+Problema risolto: LaMa sbaglia meno la composizione se lavora alla risoluzione nativa. LaMa ricostruisce la banda (e px per lato) a 1x. L'upscaler porta poi a 3x la striscia con 24 px di contesto dell'originale, sfumata su 24 px verso il centro HD. Il centro non viene mai toccato.
 
 ## Image quilting guidato da LaMa
 Problema: LaMa indovina la disposizione (dove vanno cielo, muro, prato) ma dipinge liscio, con un effetto da "schizzo" su un fondale dipinto a mano.
@@ -40,6 +40,6 @@ Costo: circa 0,134 $ a immagine a 2K. Rimasto come alternativa più costosa.
   - **Fill pro:** è vero outpainting con maschera (il centro non viene toccato) e allinea bene, con scarto 1-10.
   - **Kontext pro e Qwen:** sono modifiche guidate dell'intera immagine, cambiano l'inquadratura (scarto fino a 100) e lasciano bande scure o sfocate. Scartati.
 - **Prezzi indicativi:** Fill pro ~0,05 $, Kontext pro ~0,04 $, Qwen 0,03-0,045 $ a immagine.
-- **Riduzione dei costi:** la tela si manda a metà della risoluzione HD, cioè 1,5x l'originale, che basta per bande di 36 px. Con `sync_mode` le immagini non restano nello storico del servizio.
+- **Riduzione dei costi:** la tela si manda a metà della risoluzione HD, cioè 1,5x l'originale, che basta per bande strette (qualche decina di pixel a 1x). Con `sync_mode` le immagini non restano nello storico del servizio.
 - **Passata completa: circa 100 stanze, meno di 200 immagini, meno di 10 $.** Circa due terzi delle stanze sono state accettate con le bande Fill, le altre sono tornate al ripiego, soprattutto stanze buie e a scorrimento.
 - **Prompt:** descrive un fondale dipinto, finito e a colori, chiedendo di continuare pareti, pavimenti, cieli e oggetti tagliati dal bordo. Include esplicitamente "not a sketch, not line art, no white paper, no people, no text, no signature, no logos". Se i bordi sono scuri si aggiunge una frase "scena buia", perché in quei casi il modello disegnava schizzi bianchi su carta.

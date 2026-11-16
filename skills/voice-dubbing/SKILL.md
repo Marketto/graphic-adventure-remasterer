@@ -29,9 +29,8 @@ segreti d'ambiente), così le impostazioni del cast arrivano davvero.
   accelerando l'audio dopo.
 - **Recitazione, non lettura**: niente sussurri né voci "inquietanti", anche nelle battute
   misteriose (a voce piena).
-- Ogni chiamata che costa crediti si fa **una volta sola**: su errore ci si ferma e si dice
-  perché; mai riprovare da soli, mai cambiare voce da soli.
-- Generazione di un capitolo intero solo dopo **approvazione esplicita** con la stima dei crediti.
+- Spese e chiamate a pagamento: regola comune 2 (una volta sola, approvazione esplicita con la
+  stima); in più, mai cambiare voce da soli.
 - Mono 44,1 kHz, -18 LUFS, silenzi tolti a inizio e fine (livelli del mix: skill `audio-remaster`).
 
 ## 1. Censimento: chi parla (prima di ogni capitolo)
@@ -140,8 +139,8 @@ fonetica, parole tutte maiuscole (la sintesi le compita); punteggiatura pensata 
 - Script a tempo (scene temporizzate, filmati con sottotitoli) devono aspettare la fine della battuta: hook nel motore.
 
 ## 5. Stima e generazione per capitolo
-- Stima: caratteri del testo recitato **con i tag** × ~0,43 crediti (misurato: 45.000
-  caratteri ≈ 19.200 crediti), più i provini (una battuta di ~100 caratteri × 2 prese
+- Stima: caratteri del testo recitato **con i tag** × ~0,43 crediti (`voice.credits_per_char`
+  per cambiarlo), più i provini (una battuta di ~100 caratteri × 2 prese
   per voce candidata ≈ 250-500 crediti a voce con un modello che recita i tag; le battute
   addizionali si stimano a parte, solo per le voci in dubbio). Contala sui **testi unici** (le clip originali ripetono spesso la stessa frase: spesso
   il 10-20% di clip in più rispetto ai testi) e sulla **lunghezza nella lingua di arrivo**
@@ -159,8 +158,7 @@ Leggi `${CLAUDE_PLUGIN_ROOT}/references/skill-dettagli/voice-dubbing-stima-per-p
 ## 5b. Battute con valori variabili
 "Ho ancora N monete": genera una volta la parte fissa (con i tag), poi solo il numero, in cifre, con
 il resto della frase come contesto per l'intonazione; componi in locale e salva con la chiave del
-testo che contiene il numero (il motore la cerca per prima). In un caso reale la spesa è scesa di
-circa 20 volte.
+testo che contiene il numero (il motore la cerca per prima).
 
 ## 5c. Stesso testo, personaggi diversi
 La chiave è il CRC del testo: "Grazie..." detto da due personaggi ha un solo file. Il motore cerca
@@ -182,8 +180,8 @@ sbagliate. Le battute da rifare vanno in `voice/retake.tsv` e si rifanno in bloc
 Soglia: WER oltre il 20% o qualunque parola mancante → da ascoltare. Falsi positivi noti: nomi
 propri trascritti con un'altra grafia e parlate volute.
 Verifica gratuita dopo l'integrazione: altezza media della voce dei file integrati confrontata
-con il personaggio a schermo (una battuta del protagonista a ~100 Hz invece di 150-190 Hz ha
-rivelato la voce sbagliata).
+con il personaggio a schermo (una battuta molto più grave o più acuta delle altre dello stesso
+personaggio è quasi sempre la voce sbagliata).
 Scrivi `docs/<capitolo>-rapporto-voci.md` (battuta, voce, durata, esito).
 
 ## 6b. Sincronia labiale

@@ -5,6 +5,8 @@ description: Identifica il motore del gioco e il suo supporto in ScummVM, AGS o 
 
 # Compatibilità del motore e lavoro esistente
 
+Regole trasversali (uso prima del lavoro, spese, motore/contenuto, scelte, repository): `${CLAUDE_PLUGIN_ROOT}/references/regole-comuni.md`.
+
 La suite non contiene elenchi di giochi o di motori: ogni informazione su un titolo si cerca
 al momento, sul web e nei file dell'utente, e resta nella cartella privata del progetto.
 

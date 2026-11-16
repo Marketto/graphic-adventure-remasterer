@@ -13,7 +13,7 @@ da un punto in cui la patch può sostituirlo, senza toccare i file originali:
 | font | `addText` con atlante HD | `fonts/` |
 | musica ed effetti | hook nel driver audio del motore | `music/`, `sfx/` |
 | manuale e aiuti | lettori generici nel motore del gioco | `manual/`, `hint/` |
-| altre correzioni del contenuto | lettori generici (§1d) | es. `text/dialoghi.tsv` |
+| altre correzioni del contenuto | lettori generici (skill `engine-integration` §1d) | es. `text/dialoghi.tsv` |
 Verifica (obbligatoria prima degli asset):
 1. `rstool.py assets canary <dump> --out /tmp/canary --lang <lang> [--voices 20]`: pacchetto
    che marca tutto (testi tra «», cornice magenta su fondali e sprite, un bip sulle voci).

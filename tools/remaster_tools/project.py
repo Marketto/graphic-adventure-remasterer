@@ -550,9 +550,9 @@ def roadmap(data):
     order = {"running": 0, "failed": 1, "stopped": 2, "pending": 3, "deferred": 4, "done": 5}
     rows = ["# Roadmap", "", "| Voce | Stato | Avanzamento | Nota |", "|---|---|---|---|"]
     for p in sorted(wp, key=lambda p: order.get(p.get("status"), 9)):
-        prog = p.get("progress") or ""
-        rows.append(f"| {p.get('label') or p['id']} | {ROADMAP_EMOJI.get(p.get('status'), '?')} | {prog} | "
-                    f"{(p.get('note') or '').replace('|', '/')} |")
+        cell = lambda v: str(v or "").replace("|", "/").replace("\n", " ")  # noqa: E731
+        rows.append(f"| {cell(p.get('label') or p.get('id') or '?')} | {ROADMAP_EMOJI.get(p.get('status'), '❓')} | "
+                    f"{cell(p.get('progress'))} | {cell(p.get('note'))} |")
     rows += ["", "Legenda: " + " · ".join(f"{e} {k}" for k, e in ROADMAP_EMOJI.items())]
     return "\n".join(rows) + "\n"
 
@@ -563,24 +563,43 @@ def _now():
 
 def install_hooks(repo):
     """Copy into the private game repository the git pre-commit hook against accidental deletions
-    (.githooks/ + tools/guard_deletions.py, core.hooksPath) and the agent Stop hook that reports pending
-    work (.claude/hooks/, registered in .claude/settings.json), from references/templates/progetto-privato."""
+    (.githooks/ + guard_deletions.py, core.hooksPath) and the agent Stop hook that reports pending work
+    (.claude/hooks/, registered in .claude/settings.json), from references/templates/progetto-privato.
+    An existing pre-commit is kept as pre-commit.local and still runs first."""
     import shutil
     import subprocess
+    if subprocess.run(["git", "-C", repo, "rev-parse", "--git-dir"], capture_output=True).returncode:
+        raise ValueError(f"{repo} non è un repository git")
     root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     tpl = os.path.join(root, "references", "templates", "progetto-privato")
+    done, notes = [], []
+    pre = os.path.join(repo, ".githooks", "pre-commit")
+    new_pre = open(os.path.join(tpl, ".githooks", "pre-commit"), encoding="utf-8").read()
+    if os.path.exists(pre) and open(pre, encoding="utf-8", errors="replace").read() != new_pre:
+        shutil.move(pre, pre + ".local")
+        notes.append("pre-commit esistente conservato come pre-commit.local (eseguito prima)")
     files = [(os.path.join(tpl, ".githooks", "pre-commit"), os.path.join(".githooks", "pre-commit")),
              (os.path.join(root, "tools", "guard_deletions.py"), os.path.join(".githooks", "guard_deletions.py")),
              (os.path.join(tpl, ".claude", "hooks", "lavoro-in-sospeso.sh"), os.path.join(".claude", "hooks", "lavoro-in-sospeso.sh"))]
-    done = []
     for src, rel in files:
         dst = os.path.join(repo, rel)
         os.makedirs(os.path.dirname(dst), exist_ok=True)
         shutil.copy2(src, dst)
         done.append(rel)
     settings = os.path.join(repo, ".claude", "settings.json")
-    if not os.path.exists(settings):
-        shutil.copy2(os.path.join(tpl, ".claude", "settings.json"), settings)
+    with open(os.path.join(tpl, ".claude", "settings.json"), encoding="utf-8") as f:
+        stop = json.load(f)["hooks"]["Stop"]
+    cur = {}
+    if os.path.exists(settings):
+        with open(settings, encoding="utf-8") as f:
+            cur = json.load(f)
+    hooks = cur.setdefault("hooks", {}).setdefault("Stop", [])
+    if "lavoro-in-sospeso.sh" not in json.dumps(hooks):
+        hooks.extend(stop)
+        with open(settings, "w", encoding="utf-8") as f:
+            json.dump(cur, f, indent=2)
         done.append(os.path.join(".claude", "settings.json"))
-    subprocess.run(["git", "-C", repo, "config", "core.hooksPath", ".githooks"], capture_output=True)
-    return {"installed": done}
+    r = subprocess.run(["git", "-C", repo, "config", "core.hooksPath", ".githooks"], capture_output=True, text=True)
+    if r.returncode:
+        raise RuntimeError(f"git config core.hooksPath: {r.stderr.strip()}")
+    return {"installed": done, "notes": notes}

@@ -5,6 +5,8 @@ description: Porta le scene di un'avventura 2D al 16:9 (proporzione dei pixel, c
 
 # 16:9
 
+Regole trasversali (uso prima del lavoro, spese, motore/contenuto, scelte, repository): `${CLAUDE_PLUGIN_ROOT}/references/regole-comuni.md`.
+
 ## Geometria e proporzione dei pixel
 Leggi `${CLAUDE_PLUGIN_ROOT}/references/skill-dettagli/widescreen-geometria-e-proporzione.md` prima di fissare risoluzione, estensione e proporzione dei pixel.
 
@@ -37,6 +39,9 @@ e la barra si tratta come in «Barre fisse in 16:9» qui sotto: non si allarga m
 
 ## Estensione di `open-static`: prima le tecniche locali collaudate
 Leggi `${CLAUDE_PLUGIN_ROOT}/references/skill-dettagli/widescreen-estensione-open-static.md` quando generi le bande delle stanze aperte.
+Gli interni chiusi in modo `extend` usano le stesse tecniche locali (LaMa a 1x, quilting, ricette)
+senza fal.ai: le rette di pareti e pavimento vanno continuate dritte, il soffitto e il pavimento non
+devono cambiare colore nella banda.
 
 ## Barre fisse in 16:9
 Leggi `${CLAUDE_PLUGIN_ROOT}/references/skill-dettagli/widescreen-barre-fisse.md` quando una barra fissa (verbi, inventario) resta 4:3 con bande nere accanto.
@@ -54,7 +59,7 @@ completano nella banda (`references/conoscenza/grafica/11-oggetti-puntatori-icon
 ## Uscita per il motore
 `remaster/gfx/bg/<scena>.wide.png` + `<scena>.wide.json`:
 ```json
-{"left": 36, "right": 36, "class": "open-static", "camera": "center", "approved": "2026-10-15"}
+{"left": <e>, "right": <e>, "class": "open-static", "camera": "center", "approved": "AAAA-MM-GG"}
 ```
 Per `scroll-wide` c'è solo il `.wide.json` con `"camera": "clamp"`: il motore mostra più fondale esistente.
 I nomi dei file usano la chiave della scena con `/` sostituito da `_`.

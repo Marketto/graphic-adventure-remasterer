@@ -50,7 +50,7 @@ remaster/
                            water <ampiezza> <lunghezza> <giri/s> mask=<png>, parallax mask=<png>
                            <striscia.png> <vel> ..., ground <png> <vel> <fuga_y>, glass <chiavi sprite>;
                            i motori vecchi lo ignorano, in modalità classica restano gli effetti
-                           originali (references/conoscenza/motore/20)               [hook per motore]
+                           originali (references/conoscenza/motore/20-effetti-di-scena-e-filtri.md)               [hook per motore]
   gfx/spr/timed.tsv        sprite HD a tempo: "<key>\t<n fotogrammi>\t<ms>" → <key>_<n>.png  [hook per motore]
   gfx/spr/freeform.tsv     chiavi degli sprite che disegnano oltre la sagoma originale       [hook per motore]
   ui/cursor/<nome>.png     puntatori HD RGBA (hotspot in <nome>.json); l'oggetto in mano usa la sua
@@ -64,7 +64,7 @@ remaster/
                            <nuovo>" (\n per più righe); il log dice quante volte si applica  [hook per motore]
   script/extended.txt      stesse righe, attive solo con l'opzione extended            [hook per motore]
   script/part-flags.txt    flag ricordati tra le parti: "<da>\t<a>\t<flag>\t<condizione>[\topzione=…]",
-                           salvati in una riga opzionale dei salvataggi (references/conoscenza/motore/21)
+                           salvati in una riga opzionale dei salvataggi (references/conoscenza/motore/21-contenuti-tagliati-extended.md)
                                                                                 [hook per motore]
   gfx/inbetween/<key>.png  frame intermedi delle animazioni                       [riservato]
   fonts/<font>.<lang>.dat  atlante per lingue oltre la codepage del gioco          [riservato]

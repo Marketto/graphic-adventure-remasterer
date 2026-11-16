@@ -5,6 +5,8 @@ description: Rende completabile e rimasterizzabile il motore dentro un fork di S
 
 # Integrazione nel motore
 
+Regole trasversali (uso prima del lavoro, spese, motore/contenuto, scelte, repository): `${CLAUDE_PLUGIN_ROOT}/references/regole-comuni.md`.
+
 Riferimenti: `${CLAUDE_PLUGIN_ROOT}/references/conoscenza/README.md` (cartella `motore/`, un file per argomento) e
 `${CLAUDE_PLUGIN_ROOT}/engine/scummvm-remaster-layer/` (modulo comune + guida).
 
@@ -38,7 +40,7 @@ all'inizio di ogni sessione nel fork, prevalgono su qualunque altra istruzione):
   `fuzz.sh <parte>` (stanze + tutte le zone; serve anche al dump degli sprite).
 - Ogni modifica si prova **in due configurazioni**: originale e remaster (`test.ini`,
   `test_hd.ini`); per il rendering screenshot di almeno una stanza per parte.
-- Comandi utili in più (vedi la nota del motore §13): `rtap` (pressione e rilascio nello stesso
+- Comandi utili in più (vedi `references/conoscenza/motore/14-driver-di-test-automatico-e.md`): `rtap` (pressione e rilascio nello stesso
   frame, come un tocco), `state`/`flags`/`item` (leggere e impostare lo stato), `scene` (ordine di
   disegno), `gui` (pilotare i menu di ScummVM), `framelog` (con riga `TICK` e contatore `lowres=`),
   `verifyscroll`, `dumpall` (salva tutti gli sprite dichiarati dalla stanza: elenco di ciò che manca
@@ -146,7 +148,7 @@ Guida con codice d'esempio: `${CLAUDE_PLUGIN_ROOT}/engine/scummvm-remaster-layer
 - Per le scene statiche il Layer aggiunge i lati (`<scena>.wide.png`) o i bordi.
 - Mouse: le coordinate nelle aree aggiunte vengono bloccate al bordo dell'area di gioco.
 - Gli sprite esistono solo nell'area originale: un oggetto che esce dal bordo viene tagliato lì
-  (oppure ridisegnali nelle bande, vedi la nota del motore §5); le bande prendono la dissolvenza del pixel originale più vicino.
+  (oppure ridisegnali nelle bande, vedi `references/conoscenza/motore/06-viewport-16-9-sprite-nelle.md`); le bande prendono la dissolvenza del pixel originale più vicino.
 - Opzione per tornare al 4:3 (`remaster_widescreen=false`).
 - Proporzione dei pixel: quadrati per default; un allungamento verticale solo se deciso
   nell'analisi (skill `widescreen`, "Geometria"). Con `Desc::pixelAspect` != 1 il Layer scala

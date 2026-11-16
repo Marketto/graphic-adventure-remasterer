@@ -5,6 +5,8 @@ description: Eseguibili per le piattaforme scelte e patch distribuibile senza fi
 
 # Build e rilascio
 
+Regole trasversali (uso prima del lavoro, spese, motore/contenuto, scelte, repository): `${CLAUDE_PLUGIN_ROOT}/references/regole-comuni.md`.
+
 ## Build
 Le build si fanno in CI, non a mano: copia `${CLAUDE_PLUGIN_ROOT}/ci/remaster-build.yml` in
 `.github/workflows/` del fork e `ci/android-libs.sh` in `.github/remaster/`, poi imposta

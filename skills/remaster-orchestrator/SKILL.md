@@ -161,10 +161,10 @@ Subagente `build-engineer` con skill `engine-integration`, un pacchetto alla vol
    interpolazione dei frame, sostituzione asset per chiave (contratto in `${CLAUDE_PLUGIN_ROOT}/references/asset-contract.md`);
 4. **motore patchabile**: ogni testo, voce e immagine passa da un punto sostituibile dalla
    patch (pacchetto `canary` + `assets coverage`, skill `engine-integration` §1f);
-5. **controlli fluidi** (§1g): cursore a ogni fotogramma, nessun salto, azioni a scatto una volta
+5. **controlli fluidi** (skill `engine-integration` §1g): cursore a ogni fotogramma, nessun salto, azioni a scatto una volta
    per pressione;
 6. salvataggi e menu: verificare `canSaveGameStateCurrently`, menu globale, slot;
-7. **interfaccia nello stile del gioco** (§6b): tema GUI dai colori e dai font dell'interfaccia
+7. **interfaccia nello stile del gioco** (skill `engine-integration` §6b): tema GUI dai colori e dai font dell'interfaccia
    originale, 2-3 varianti da far scegliere.
 
 ## Fase 3 — Asset (pacchetti paralleli, anche insieme alla Fase 2)

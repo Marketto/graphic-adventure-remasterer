@@ -18,5 +18,5 @@ qa/input.log`. Controlla, in modalità originale e remaster, a 1x e a 3x, in 4:3
 - **clic**: un tocco o un clic veloce (pressione e rilascio nello stesso frame) non si perde
   e non diventa un trascinamento (soglia in pixel di gioco); doppio clic non doppia l'azione;
 - sul telefono e sul web: stesso controllo con eventi touch.
-Confronta anche la sensazione con l'originale sull'emulatore di riferimento (§1b): accelerazione
+Confronta anche la sensazione con l'originale sull'emulatore di riferimento (skill `engine-integration` §1b): accelerazione
 del mouse e velocità del puntatore non devono cambiare più del necessario.

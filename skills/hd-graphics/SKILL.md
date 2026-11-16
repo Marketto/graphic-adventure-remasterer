@@ -5,6 +5,8 @@ description: HD locale di fondali, sprite, oggetti, icone, puntatori, font e fil
 
 # Grafica HD
 
+Regole trasversali (uso prima del lavoro, spese, motore/contenuto, scelte, repository): `${CLAUDE_PLUGIN_ROOT}/references/regole-comuni.md`.
+
 Prerequisiti: `analysis/style-bible.md` approvata; `analysis/style-recipes.json` solo se si userà
 l'img2img (esempio commentato in `${CLAUDE_PLUGIN_ROOT}/references/style-recipes.example.json`).
 Nessuna GPU richiesta: la pipeline collaudata gira su CPU (2 core, 7 GB di RAM bastano).

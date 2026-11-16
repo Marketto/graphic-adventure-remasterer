@@ -1,8 +1,8 @@
 # Contenuti tagliati: versione "extended"
 
 Molti giochi contengono battute, scene e suoni scritti ma spenti. Si possono offrire in una modalità
-"extended" (o "director's cut"): un interruttore nel launcher e nel menu, **acceso di predefinito
-se l'utente lo sceglie**, che non cambia nulla quando è spento.
+"extended" (o "director's cut"): un interruttore nel launcher e nel menu. Se l'utente vuole la
+modalità, sceglie anche se è accesa di predefinito; spenta, il gioco è identico all'originale.
 
 ## Censimento (gratuito, prima di proporre)
 `rstool.py usage scan` con il profilo della sintassi degli script:
@@ -10,13 +10,13 @@ se l'utente lo sceglie**, che non cambia nulla quando è spento.
 - **flag richiesti ma mai impostati**: rami di dialogo e zone mai raggiungibili;
 - **risposte che portano a domande inesistenti** (spesso un refuso nel nome: è un bug, non un taglio);
 - **zone spente** che nessuno accende, animazioni mai avviate;
-- **comandi che il motore legge ma non esegue**: confrontare con l'eseguibile originale o con il motore gemello, perché a volte l'originale li mostrava e il port no (per esempio un commento di fine stanza);
+- **comandi che il motore legge ma non esegue**: confrontare con l'eseguibile originale o con un altro motore della stessa famiglia, perché a volte l'originale li mostrava e il port no (per esempio un commento di fine stanza);
 - **stanze irraggiungibili**: grafo dalle stanze di partenza.
 
 ## Classificazione (una riga per candidato)
 | Classe | Esempio | Cosa fare |
 |---|---|---|
-| contenuto tagliato vero | una domanda all'oste coerente con la scena dopo | proporre per l'extended |
+| contenuto tagliato vero | una domanda a un personaggio, coerente con la scena dopo | proporre per l'extended |
 | bug dell'originale | risposta verso un nome sbagliato | correggere sempre (righe della patch), non solo nell'extended |
 | avanzo | prove, versioni scartate dello stesso enigma, blocchi di debug, battute interne degli autori | non ripristinare |
 | incerto | condizione con comportamento indefinito | verificare col driver prima di proporre |

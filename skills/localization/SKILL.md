@@ -5,6 +5,8 @@ description: Lingue e testi: lingue esistenti, copione, refusi e accenti, traduz
 
 # Localizzazione
 
+Regole trasversali (uso prima del lavoro, spese, motore/contenuto, scelte, repository): `${CLAUDE_PLUGIN_ROOT}/references/regole-comuni.md`.
+
 ## 1. Lingue disponibili
 - Ufficiali: tabelle di rilevamento del motore (es. flag `GF_LANG_*` in ScummVM), cartelle
   lingua nei dati (cartelle per lingua), basi dati pubbliche delle edizioni pubblicate.

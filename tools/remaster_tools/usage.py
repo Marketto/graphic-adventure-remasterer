@@ -9,6 +9,8 @@ The script syntax is a small profile (JSON), because every engine comments diffe
    "blocks": [["/*", "*/"]],             substring blocks, may span lines
    "extensions": [".scr", ".loc"],       script files to read (empty = every text file)
    "encoding": "cp850",
+   "string_quotes": ["\""],             comment markers inside these quotes are text, not comments
+   "match_stem": true,                   also count the name without extension (false: exact names only)
    "strict_ext": {"sfx": ".sfx"},        kind -> the name counts only when written with that extension
    "flag_set": "\\b(?:SET|TOGGLE)\\s+(\\w+)",   optional regexes, group 1 = flag name
    "flag_need": "\\b(?:FLAGS|IF)\\s+(\\w+)"}
@@ -20,7 +22,22 @@ import os
 import re
 
 DEFAULT_SYNTAX = {"line_comment": ["#", "//"], "inline_comment": [], "line_blocks": [], "blocks": [["/*", "*/"]],
-                  "extensions": [], "encoding": "utf-8", "strict_ext": {}, "flag_set": "", "flag_need": ""}
+                  "extensions": [], "encoding": "utf-8", "strict_ext": {}, "flag_set": "", "flag_need": "",
+                  "string_quotes": ['"'], "match_stem": True}
+
+
+def _find(rest, token, quotes):
+    """Position of token outside quoted strings, -1 if absent."""
+    q = None
+    for i, ch in enumerate(rest):
+        if q:
+            if ch == q:
+                q = None
+        elif ch in quotes:
+            q = ch
+        elif rest.startswith(token, i):
+            return i
+    return -1
 TOKEN = re.compile(r"[A-Za-z0-9_\-&$.]+")
 PRIORITY = {"used": 0, "commented": 1, "unused": 2}
 MIN_SFX_SECONDS = 0.5      # generated effects shorter than this come out padded or truncated
@@ -41,7 +58,9 @@ def split_lines(text, syn):
     for n, line in enumerate(text.splitlines(), 1):
         s = line.lstrip()
         if in_line_block is None and in_block is None and lb_open and s.startswith(lb_open):
-            in_line_block = next(cl for op, cl in syn["line_blocks"] if s.startswith(op))
+            op, cl = next((op, cl) for op, cl in syn["line_blocks"] if s.startswith(op))
+            if cl not in s[len(op):]:          # opened and closed on the same line: only that line
+                in_line_block = cl
             yield n, "", line
             continue
         if in_line_block is not None:
@@ -62,8 +81,10 @@ def split_lines(text, syn):
             if syn["line_comment"] and rest.lstrip().startswith(tuple(syn["line_comment"])):
                 dead.append(rest)
                 break
-            cut = [(rest.find(op), op, cl) for op, cl in syn["blocks"] if op in rest]
-            cut += [(rest.find(c), c, None) for c in syn["inline_comment"] if c in rest]
+            qs = tuple(syn.get("string_quotes") or ())
+            cut = [(_find(rest, op, qs), op, cl) for op, cl in syn["blocks"]]
+            cut += [(_find(rest, c, qs), c, None) for c in syn["inline_comment"]]
+            cut = [c for c in cut if c[0] >= 0]
             if not cut:
                 live.append(rest)
                 break
@@ -153,7 +174,7 @@ def census(script_dir, asset_dir=None, asset_list=None, syntax=None, loaded_log=
     strict = {k: v.lower() for k, v in syn["strict_ext"].items()}
     for a in assets:
         names = [a["name"].lower()]
-        if a["kind"] not in strict:
+        if a["kind"] not in strict and syn.get("match_stem", True):
             names.append(a["stem"])
         else:
             names = [a["stem"] + strict[a["kind"]], a["name"].lower()]
@@ -227,20 +248,32 @@ def read_census(path):
 
 
 def gate(census_csv, batch_path, allow=("used",), min_sfx_seconds=MIN_SFX_SECONDS):
-    """Check a generation batch against the census before spending: blocks items the game never uses,
-    flags commented-only items (need the extended mode), effects shorter than the generator minimum
-    and output names written twice (same effect at two playback rates needs <name>_<rate>)."""
+    """Check a generation batch against the census before spending. Blocks every item whose status is not
+    in `allow` (default: only used; add "commented" for the extended mode), unknown or ambiguous names.
+    Warns about effects (kind/type "sfx") shorter than the generator minimum and output names written
+    twice (same effect at two playback rates needs <name>_<rate>). Batch: a list of items or {"items": [...]}."""
     cen = read_census(census_csv)
     with open(batch_path, encoding="utf-8") as f:
         batch = json.load(f)
-    items = batch.get("items", batch) if isinstance(batch, dict) else batch
-    blocked, warnings, per, seen = [], [], {"used": 0, "commented": 0, "unused": 0, "unknown": 0}, {}
+    items = batch.get("items") if isinstance(batch, dict) else batch
+    if not isinstance(items, list) or not all(isinstance(it, dict) for it in items):
+        raise ValueError("lotto: serve una lista di oggetti o {\"items\": [...]}")
+    by_stem = {}
+    for k in cen:
+        by_stem.setdefault(os.path.splitext(k)[0], []).append(k)
+    blocked, warnings, seen = [], [], {}
+    per = {"used": 0, "commented": 0, "unused": 0, "unknown": 0, "ambiguous": 0}
     for it in items:
         name = str(it.get("asset") or it.get("name") or it.get("key") or "")
         src = name.lower()
-        st = (cen.get(src) or cen.get(os.path.splitext(src)[0]) or
-              next((r for k, r in cen.items() if os.path.splitext(k)[0] == os.path.splitext(src)[0]), None))
-        status = st["status"] if st else "unknown"
+        st, status = cen.get(src), None
+        if st is None:
+            cands = by_stem.get(os.path.splitext(src)[0], [])
+            if len(cands) == 1:
+                st = cen[cands[0]]
+            elif cands:
+                status = "ambiguous"
+        status = status or (st["status"] if st else "unknown")
         per[status] += 1
         if status not in allow:
             blocked.append({"item": name, "status": status})
@@ -248,8 +281,11 @@ def gate(census_csv, batch_path, allow=("used",), min_sfx_seconds=MIN_SFX_SECOND
         if outname in seen:
             warnings.append(f"{outname}: nome d'uscita ripetuto (stesso suono a frequenze diverse? usa <nome>_<freq>)")
         seen[outname] = 1
-        d = it.get("duration") or it.get("seconds")
-        if d is not None and it.get("type", it.get("kind", "sfx")) == "sfx" and float(d) < min_sfx_seconds:
-            warnings.append(f"{name}: {float(d):.2f} s < {min_sfx_seconds} s: genera {min_sfx_seconds} s e taglia dopo")
-    return {"ok": not blocked, "per_status": per, "blocked": blocked, "warnings": warnings,
-            "allow": list(allow)}
+        d = it.get("duration", it.get("seconds"))
+        if d is not None and (it.get("kind") or it.get("type")) == "sfx":
+            try:
+                if float(d) < min_sfx_seconds:
+                    warnings.append(f"{name}: {float(d):.2f} s < {min_sfx_seconds} s: genera {min_sfx_seconds} s e taglia dopo")
+            except (TypeError, ValueError):
+                warnings.append(f"{name}: durata non numerica ({d!r})")
+    return {"ok": not blocked, "per_status": per, "blocked": blocked, "warnings": warnings, "allow": list(allow)}

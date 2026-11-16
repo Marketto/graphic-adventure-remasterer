@@ -1,6 +1,6 @@
 # Viewport 16:9, sprite nelle bande e bande cliccabili
 
-- **Finestra estesa**: (640 + 2·36) x 400 pixel di gioco. Il gioco resta 640x400: il renderer compone la finestra larga e riempie le bande con lo sfondo allargato `<nome>_w`, se esiste, altrimenti di nero. Il colore delle bande segue la dissolvenza del pixel originale più vicino. Le stanze "chiuse" restano con bande nere.
+- **Finestra estesa**: (W + 2·e) x H pixel di gioco, con e la banda per lato (`widescreen geometry`). Il gioco resta W x H: il renderer compone la finestra larga e riempie le bande con lo sfondo allargato `<nome>_w`, se esiste, altrimenti di nero. Il colore delle bande segue la dissolvenza del pixel originale più vicino. Gli interni chiusi usano bande continuate come gli altri; il nero resta solo come ripiego.
 - **Il centro dell'immagine allargata sostituisce anche lo sfondo HD normale**: così le colonne di bordo dell'originale (spesso artefatti) non si vedono.
 - **Sprite nelle bande** (solo nelle stanze con `_w`, solo in HD):
   - Si disegna di nuovo, con lo stesso blitter, la parte degli oggetti di scena che esce dal backbuffer. Si usano due strisce da 36 colonne, con i loro id degli sprite.

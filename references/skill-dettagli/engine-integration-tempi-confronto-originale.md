@@ -27,4 +27,4 @@ fino a 4 volte più veloce).
    misure, emulatore e impostazioni in `docs/test.md`.
 Per i test automatici con molte attese si può forzare un passo corto nella configurazione.
 Lo stesso riferimento serve per l'aspetto (proporzione dei pixel, skill `widescreen`) e per
-la sensazione dei controlli (§1g).
+la sensazione dei controlli (skill `engine-integration` §1g).

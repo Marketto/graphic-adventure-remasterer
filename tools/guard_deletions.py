@@ -13,11 +13,15 @@ import sys
 
 
 def _git(*args):
-    return subprocess.run(["git", *args], capture_output=True, text=True).stdout
+    r = subprocess.run(["git", *args], capture_output=True, text=True)
+    if r.returncode:
+        raise RuntimeError(f"git {' '.join(args)}: {r.stderr.strip()}")
+    return r.stdout
 
 
 def staged_deletions():
-    return [p for p in _git("diff", "--cached", "--name-only", "--diff-filter=D", "-z").split("\0") if p]
+    # --no-renames: a mass move counts as deletions too
+    return [p for p in _git("diff", "--cached", "--no-renames", "--name-only", "--diff-filter=D", "-z").split("\0") if p]
 
 
 def problems(paths, size_of, is_binary, max_files=20, max_bytes=1_000_000, max_binary=100_000, protected=()):
@@ -39,14 +43,18 @@ def main():
     if os.environ.get("ALLOW_DELETIONS") == "1" or os.environ.get("CONSENTI_CANCELLAZIONI") == "1":
         return 0
     env = os.environ.get
-    paths = staged_deletions()
+    try:
+        paths = staged_deletions()
+    except RuntimeError as e:
+        print(f"guard_deletions: {e}")
+        return 1
     if not paths:
         return 0
 
     def size_of(p):
         try:
             return int(_git("cat-file", "-s", f"HEAD:{p}").strip() or 0)
-        except ValueError:
+        except (RuntimeError, ValueError):
             return 0
 
     def is_binary(p):

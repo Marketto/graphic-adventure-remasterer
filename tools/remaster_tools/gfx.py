@@ -413,11 +413,15 @@ def _entries(spec):
     out = set()
     for part in str(spec).split(","):
         part = part.strip()
-        if "-" in part:
-            a, b = part.split("-")
-            out |= set(range(int(a), int(b) + 1))
-        elif part:
-            out.add(int(part))
+        if not part:
+            continue
+        a, _, b = part.partition("-")
+        lo, hi = int(a), int(b or a)
+        if not (0 <= lo <= hi <= 255):
+            raise ValueError(f"voci di palette non valide: {part} (0-255, da basso ad alto)")
+        out |= set(range(lo, hi + 1))
+    if not out:
+        raise ValueError("nessuna voce di palette")
     return out
 
 
@@ -431,11 +435,11 @@ def effect_mask(src, entries, out, scale=3, grow=0):
         raise ValueError("serve lo sfondo originale a colori indicizzati (modo P)")
     ent = _entries(entries)
     lut = [255 if i in ent else 0 for i in range(256)]
-    m = Image.frombytes("L", im.size, bytes(lut[b] for b in im.tobytes()))
+    m = Image.frombytes("L", im.size, im.tobytes()).point(lut)
     if grow:
         m = m.filter(ImageFilter.MaxFilter(2 * int(grow) + 1))
     m = m.resize((im.width * scale, im.height * scale), Image.NEAREST)
     os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
     m.save(out)
-    cover = sum(1 for b in m.tobytes() if b) / (m.width * m.height)
+    cover = m.histogram()[255] / (m.width * m.height)
     return {"mask": out, "entries": len(ent), "coverage": round(cover, 4)}

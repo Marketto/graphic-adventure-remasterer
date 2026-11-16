@@ -177,29 +177,36 @@ def choice_page(spec_path, out_path, title=None):
     out_dir = os.path.dirname(os.path.abspath(out_path))
     os.makedirs(out_dir, exist_ok=True)
 
+    from urllib.parse import quote
+
     def media(fp):
         rel = os.path.relpath(os.path.join(os.path.dirname(os.path.abspath(spec_path)), fp), out_dir)
         e = os.path.splitext(fp)[1].lower()
-        src = html.escape(rel)
+        src = html.escape(quote(rel.replace(os.sep, "/")))
         if e in (".ogg", ".mp3", ".wav", ".flac", ".m4a"):
             return f'<audio controls preload="none" src="{src}"></audio>'
         if e in (".mp4", ".webm"):
             return f'<video controls preload="none" src="{src}"></video>'
         return f'<img loading="lazy" src="{src}" alt="">'
 
-    cards = []
+    cards, warn = [], []
     for it in spec["items"]:
+        names = [str(v.get("name", "")).lower() for v in it.get("variants", [])]
+        if names and not any(n in ("originale", "attuale", "original", "current") for n in names):
+            warn.append(f"{it['id']}: manca l'originale o la versione attuale tra le varianti")
         iid = html.escape(str(it["id"]))
         opts = []
         for v in it.get("variants", []):
             nm = html.escape(str(v["name"]))
+            cap = html.escape(str(v.get("caption", "")))
             files = v.get("files") or ([v["file"]] if v.get("file") else [])
             opts.append(f'<label class="v"><input type="radio" name="{iid}" value="{nm}"><b>{nm}</b>'
-                        f'{"".join(media(x) for x in files)}<span>{html.escape(v.get("caption", ""))}</span></label>')
+                        f'{"".join(media(x) for x in files)}<span>{cap}</span></label>')
         opts.append(f'<label class="v"><input type="radio" name="{iid}" value="altro"><b>Altro</b></label>')
-        cards.append(f'<section data-id="{iid}"><h2>{html.escape(it.get("label", it["id"]))}</h2>'
-                     f'<p>{html.escape(it.get("note", ""))}</p><div class="g">{"".join(opts)}</div>'
+        cards.append(f'<section data-id="{iid}"><h2>{html.escape(str(it.get("label", it["id"])))}</h2>'
+                     f'<p>{html.escape(str(it.get("note", "")))}</p><div class="g">{"".join(opts)}</div>'
                      f'<input class="n" placeholder="nota (facoltativa)"></section>')
+    js_title = json.dumps("Scelte (" + str(title) + "):").replace("<", "\\u003c")
     page = f"""<!doctype html><html lang="it"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{html.escape(title)}</title><style>
 body{{font:16px system-ui,sans-serif;margin:0 auto;max-width:1100px;padding:12px;background:#f6f4ef;color:#222}}
@@ -213,12 +220,13 @@ section{{background:#fff;border-radius:10px;padding:10px 12px;margin:10px 0}}h2{
 </style><h1>{html.escape(title)}</h1>{''.join(cards)}
 <p><button id="mk">Prepara il messaggio</button> <button id="cp">Copia</button></p><textarea id="out" readonly></textarea>
 <script>
+const TITLE={js_title};
 const mk=()=>{{const r=[];document.querySelectorAll('section').forEach(s=>{{const c=s.querySelector('input[type=radio]:checked');
 const n=s.querySelector('.n').value.trim();if(c||n)r.push(s.dataset.id+': '+(c?c.value:'-')+(n?' — '+n:''));}});
-document.getElementById('out').value='Scelte ({html.escape(title)}):\\n'+r.join('\\n');}};
+document.getElementById('out').value=TITLE+'\\n'+r.join('\\n');}};
 document.getElementById('mk').onclick=mk;document.getElementById('cp').onclick=()=>{{mk();const t=document.getElementById('out');
 t.select();(navigator.clipboard?navigator.clipboard.writeText(t.value):Promise.reject()).catch(()=>document.execCommand('copy'));}};
 </script></html>"""
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(page)
-    return {"page": out_path, "items": len(spec["items"])}
+    return {"page": out_path, "items": len(spec["items"]), "warnings": warn}

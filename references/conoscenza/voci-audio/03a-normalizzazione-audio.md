@@ -1,5 +1,5 @@
 # Normalizzazione di audio e musica
-Regola generalizzata (21/10/2026): le tracce si **normalizzano per gruppo** (musica, effetti,
+Regola: le tracce si **normalizzano per gruppo** (musica, effetti,
 parlato: musica e parlato file per file, effetti con un guadagno unico per il gruppo, così resta
 la differenza voluta tra un effetto piano e uno forte) e **poi** si fissa il **livello di mix**
 tra i gruppi, scelto ascoltando prove con musica, effetto e battuta insieme. I valori sotto sono
@@ -21,6 +21,6 @@ quelli che hanno funzionato in pratica.
   - limiter morbido.
 
   La frequenza di riproduzione non è nel file ma nello script che lo suona, quindi si produce un file per ogni coppia (suono, frequenza) usata. Il motore usa il file nuovo se esiste e altrimenti torna all'originale.
-- Musica MIDI **lineare** convertita in WAV con FluidSynth e una soundfont, poi normalizzata come le tracce CD (quella a comando dinamico resta al motore: §3.1b).
+- Musica MIDI **lineare** convertita in WAV con FluidSynth e una soundfont, poi normalizzata come le tracce CD (quella a comando dinamico resta al motore: `03b-musica-blocchi-e-midi-dinamica.md`).
 
 ---

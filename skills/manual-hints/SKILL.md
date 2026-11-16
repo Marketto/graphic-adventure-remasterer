@@ -5,6 +5,8 @@ description: Manuale di gioco (ripulito, tradotto, nel menu e come pagina HTML) 
 
 # Manuale e aiuti in gioco
 
+Regole trasversali (uso prima del lavoro, spese, motore/contenuto, scelte, repository): `${CLAUDE_PLUGIN_ROOT}/references/regole-comuni.md`.
+
 Entrambi sono **dati della patch** letti da meccanismi generici del motore (regola "motore e
 contenuto separati", skill `engine-integration` §1d): nessun testo del manuale o degli aiuti
 dentro il codice. Tutto ciò che deriva dal gioco sta nel repository **privato** del gioco.

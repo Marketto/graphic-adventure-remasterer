@@ -5,6 +5,8 @@ description: Ricava stile artistico, ispirazioni e riferimenti d'epoca del gioco
 
 # Style bible
 
+Regole trasversali (uso prima del lavoro, spese, motore/contenuto, scelte, repository): `${CLAUDE_PLUGIN_ROOT}/references/regole-comuni.md`.
+
 Obiettivo: ogni pixel nuovo deve sembrare dipinto dagli stessi autori, con gli strumenti di
 oggi. La style bible è il riferimento vincolante per `hd-graphics` e `widescreen`.
 
