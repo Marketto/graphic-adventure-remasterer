@@ -15,6 +15,7 @@ RSTOOL = os.path.join(os.path.dirname(HERE), "rstool.py")
 
 from remaster_tools import voiceref, voiceseg  # noqa: E402
 from test_voce_simile import SR, speech, write_wav  # noqa: E402
+import _cli  # noqa: E402
 
 # who speaks when in the invented "trailer": (start, end, f0)
 TURNS = [(0.0, 2.0, 110), (2.5, 4.5, 230), (5.0, 7.0, 110), (7.5, 9.5, 230)]
@@ -195,7 +196,7 @@ def test_old_measures_without_mfcc_still_match():
 
 
 def test_cli_measure_match_and_segments_reference(tmp_path):
-    run = lambda *a: json.loads(subprocess.run([sys.executable, RSTOOL, *a], capture_output=True, text=True,
+    run = lambda *a: json.loads(_cli.run([*a], capture_output=True, text=True,
                                                check=True).stdout)
     write_wav(tmp_path / "r.wav", speech(120))
     d = tmp_path / "c"
@@ -213,6 +214,6 @@ def test_cli_measure_match_and_segments_reference(tmp_path):
     r = run("voice", "reference", "--segments", str(tmp_path / "seg.tsv"), "--select", "1,3",
             "--out", str(tmp_path / "ref2.json"))
     assert r["fragments"] == 2 and len(r["sources"]) == 2
-    bad = subprocess.run([sys.executable, RSTOOL, "voice", "reference", "--segments", str(tmp_path / "seg.tsv"),
+    bad = _cli.run(["voice", "reference", "--segments", str(tmp_path / "seg.tsv"),
                           "--out", str(tmp_path / "x.json")], capture_output=True, text=True)
     assert bad.returncode != 0 and "--group" in bad.stderr and "Traceback" not in bad.stderr

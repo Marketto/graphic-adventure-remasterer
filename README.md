@@ -7,8 +7,8 @@ grafica, testi, audio e voci, e produce eseguibili e una patch distribuibile che
 copia originale del giocatore. Un tasto (F8) passa in ogni momento dalla versione originale a
 quella rimasterizzata.
 
-Le regole e le tecniche vengono da un remaster completo usato come banco di prova; qui sono
-riportate in forma generica in `references/conoscenza/`.
+Le regole e le tecniche vengono da remaster completi fatti con la suite (il "banco di prova");
+qui sono riportate in forma generica in `references/conoscenza/`.
 
 > Questo repository è **pubblico** e non contiene giochi, dati di gioco, riferimenti a opere
 > protette né asset derivati. Ogni remaster vive in un repository **privato** a parte.
@@ -60,22 +60,24 @@ Variabili: `ANTHROPIC_API_KEY` (o login del CLI), `ELEVENLABS_API_KEY` per il do
 ## Contenuto
 | Cartella | Cosa |
 |---|---|
-| `skills/` | orchestratore + 10 skill (motore, style bible, grafica HD, 16:9, localizzazione, audio, doppiaggio, integrazione nel motore, manuale e aiuti, rilascio) |
+| `skills/` | orchestratore + 11 skill (motore, style bible, grafica HD, 16:9, localizzazione, audio, doppiaggio, integrazione nel motore, manuale e aiuti, launcher e cloud, rilascio) |
 | `agents/` | 10 subagenti specializzati, tra cui un QA indipendente e un revisore |
 | `commands/remaster.md` | comando `/remaster` |
-| `tools/rstool.py` | pipeline a riga di comando: progetto (con tetto e registro delle spese e dei pacchetti di lavoro), piano (stime di tempi, costi e token, pacchetti per sotto-sessioni, tabella, stato), rilevamento (con avviso sui collegamenti a siti di terze parti), estrazione senza Layer con adattatore e validazione del dump, emulatore di riferimento, misura dei tempi, fluidità dei controlli, chiavi e copertura degli asset, pacchetto canary, stile, grafica (upscaler APISR/Real-ESRGAN su CPU, sprite con contorno e inchiostro), filmati, font, proporzione dei pixel (candidata e misurata), 16:9 (classificatore con nomi delle stanze e lati aperti/chiusi, LaMa, quilting, ricette, controlli, fal.ai opzionale), gallerie di revisione e regressione visiva, testi, audio (gruppi e mix, restauro del parlato originale, brani ed effetti tra i MIDI), voci (stima sui testi unici, trascrizione locale, tratti dei parlanti in file lunghi con trascrizione e impronte locali, misure di un parlato di riferimento, misure riusabili delle candidate e classifica delle voci esistenti più simili con controlli su musica, ottava ed età: `voice segments`, `voice reference`, `voice measure`, `voice match`), tema GUI, aiuti, manuale (con OCR dei PDF scansionati), ricette (esempio in `references/recipe.example.json`), rilascio e peso del pacchetto |
+| `tools/rstool.py` | pipeline a riga di comando (moduli caricati solo quando servono): **censimento d'uso** prima di ogni lavoro (`usage scan`: usati, solo commentati per la versione extended, mai usati, flag mai impostati; `usage gate` sui lotti a pagamento), progetto (con tetto e registro delle spese e dei pacchetti di lavoro, roadmap con emoji, hook del repository privato), piano (stime di tempi, costi e token, pacchetti per sotto-sessioni, tabella, stato), rilevamento (con avviso sui collegamenti a siti di terze parti), estrazione senza Layer con adattatore e validazione del dump, emulatore di riferimento, misura dei tempi, fluidità dei controlli, chiavi e copertura degli asset, pacchetto canary, stile, grafica (upscaler APISR/Real-ESRGAN su CPU, sprite con contorno e inchiostro), filmati, font, proporzione dei pixel (candidata e misurata), 16:9 (classificatore con nomi delle stanze e lati aperti/chiusi, LaMa, quilting, ricette, controlli, fal.ai opzionale), gallerie di revisione, pagina di scelta tra varianti (`review choose`) e regressione visiva, maschere degli effetti di scena (`gfx effect-mask`), testi, audio (gruppi e mix, restauro del parlato originale, brani ed effetti tra i MIDI), voci (chi parla davvero: `voice speaker-audit`, stima sui testi unici, trascrizione locale, tratti dei parlanti in file lunghi con trascrizione e impronte locali, misure di un parlato di riferimento, misure riusabili delle candidate e classifica delle voci esistenti più simili con controlli su musica, ottava ed età: `voice segments`, `voice reference`, `voice measure`, `voice match`), tema GUI, aiuti, manuale (con OCR dei PDF scansionati), ricette (esempio in `references/recipe.example.json`), rilascio e peso del pacchetto |
 | `tools/ip_guard.py` | controllo che il repository resti privo di contenuti e riferimenti a giochi |
+| `tools/guard_deletions.py` | blocca i commit che cancellano per errore molti file o file grandi (anche nel repository privato) |
+| `tools/remaster_tools/templates/launcher/` | unione a tre vie e sincronizzazione Dropbox dei salvataggi per il launcher |
 | `engine/scummvm-remaster-layer/` | patch per ScummVM (`engines/remaster/`) + guida di integrazione |
 | `ci/` | workflow GitHub Actions multipiattaforma, librerie Android, build locale |
 | `app/` | app standalone con Claude Agent SDK |
-| `references/` | contratto degli asset (RAC v1), ricetta di stile d'esempio, distribuzione lecita, modello di richiesta di permesso, `conoscenza/` (tecniche del banco di prova) |
+| `references/` | contratto degli asset (RAC v1), ricetta di stile d'esempio, distribuzione lecita, modello di richiesta di permesso, `conoscenza/` (esperienza pratica in forma generica) |
 
-## Conoscenza dal banco di prova
+## Conoscenza
 | Nota | Contenuto |
 |---|---|
-| `references/conoscenza/motore-e-test.md` | motore e contenuto separati, renderer HD, sprite via buffer di id, testo HD, 16:9 con sprite e zone nelle bande, scorrimento fluido, tempi misurati sull'emulatore della piattaforma (DOSBox nel banco di prova), input moderno e fluidità dei controlli, salvataggi con miniature, aiuti in gioco, driver di test e casi di regressione, pagina web che si aggiorna da sola, versioni |
-| `references/conoscenza/grafica.md` | confronto degli upscaler (APISR, Real-ESRGAN...), pipeline dei fondali, bande 16:9 (LaMa a 1x, quilting, FLUX Fill via fal.ai, ricette locali), controlli e costi, insegne e firme inventate, sprite e font |
-| `references/conoscenza/voci-testi-audio-flusso.md` | doppiaggio ElevenLabs (chi parla, cast, voce simile ai personaggi di un'opera d'origine senza cloni, regia, testo detto, pause, crediti, lotti in CI, verifica), correzione dei testi, normalizzazione per gruppo e mix, flusso con agenti (router, revisore, hook, PR, rilasci, spese) |
+| `references/conoscenza/` | esperienza pratica in file brevi per argomento (indice in `README.md`): `motore/` (motore e contenuto separati, renderer HD, 16:9, scorrimento, camera e veicoli, tempi, input, salvataggi, aiuti, driver di test, effetti di scena, filtri, contenuti tagliati, launcher e cloud, web, rilasci), `grafica/` (upscaler, fondali, bande 16:9, insegne, sprite, oggetti e puntatori, font, costi), `voci-audio/` (doppiaggio, chi parla davvero, testi, normalizzazione, musica, effetti sonori, flusso con agenti) |
+| `references/regole-comuni.md` | regole trasversali in un solo posto (uso prima del lavoro, spese, motore/contenuto, scelte dell'utente, repository, privacy) |
+| `references/skill-dettagli/` | parti delle skill che servono solo in casi particolari, lette su richiesta |
 
 ## Requisiti sul tuo PC
 Python 3.10+ con `numpy` e `Pillow`; `ffmpeg`; `git` e toolchain C++ per ScummVM.
@@ -100,17 +102,16 @@ piattaforme video, DeepFilterNet per il restauro del parlato originale.
   invariati).
 - Build Linux in modalità release verificata; Windows, macOS, Web e Android da provare al primo
   giro di CI.
-- Prima prova reale della Fase 1 su un secondo gioco (un'avventura del 1993 a 320x200, senza
-  Layer): estrazione con adattatore, inventario, stile, piano e classificazione 16:9 tarata sulle
-  sue 96 scene etichettate a mano (classi giuste dal 64% all'86%, decisione "inventare o no"
-  dal 74% al 96%, `references/conoscenza/grafica.md` §4.11).
+- Prova reale della Fase 1 su un secondo gioco senza Layer: estrazione con adattatore, inventario,
+  stile, piano e classificazione 16:9 tarata su scene etichettate a mano
+  (`references/conoscenza/grafica/04c-classificazione-16-9.md`).
 - Non ancora provati con questo codice su un gioco vero: generazione grafica, ElevenLabs via API,
   fal.ai via API (il client è provato solo con un servizio finto).
 - Tema GUI: generato dal tema di ScummVM dello stesso commit e caricato nel ScummVM compilato
   sotto Xvfb, con colori, font e logo sostituiti (schermata verificata).
 - Da implementare per ogni gioco: i comandi `inputlog`, `mousepath`, `keyhold` del driver di
   test, che vanno scritti nel motore del gioco. Le tecniche in
-  `references/conoscenza/` invece sono state usate in produzione sul banco di prova.
+  `references/conoscenza/` invece sono state usate in produzione.
 
 ## Repository pubblico: regole
 - Nessun nome di giochi, personaggi, luoghi, sviluppatori o motori proprietari; nessun testo,

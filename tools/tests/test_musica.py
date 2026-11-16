@@ -15,6 +15,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from remaster_tools import audio, audio_midi, audio_sf2  # noqa: E402
+import _cli  # noqa: E402
 
 RSTOOL = os.path.join(os.path.dirname(__file__), "..", "rstool.py")
 need_ffmpeg = pytest.mark.skipif(not shutil.which("ffmpeg"), reason="ffmpeg assente")
@@ -180,7 +181,7 @@ def test_sf2_light_variant_and_errors(tmp_path):
 def test_cli_music_commands(tmp_path):
     tiny_sf2(tmp_path / "b.sf2", {(0, 0): "Piano"})
     (tmp_path / "r.json").write_text(json.dumps({"base": "b.sf2", "copies": [{"slot": [0, 1], "from_slot": [0, 0]}]}))
-    run = lambda *a: subprocess.run([sys.executable, RSTOOL, "audio", *a], capture_output=True, text=True, cwd=tmp_path)
+    run = lambda *a: _cli.run(["audio", *a], capture_output=True, text=True, cwd=tmp_path)
     r = run("sf2-compose", str(tmp_path / "r.json"), "--out", str(tmp_path / "o.sf2"))
     assert r.returncode == 0, r.stderr
     assert json.loads(run("sf2-info", str(tmp_path / "o.sf2")).stdout)["presets"][1]["program"] == 1

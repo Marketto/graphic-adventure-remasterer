@@ -25,42 +25,24 @@ deve sempre poter tornare all'originale in tempo reale (tasto di toggle, default
 - manuale e aiuti in gioco, salvo rinuncia dell'utente;
 - eseguibili per le piattaforme scelte + patch che NON contiene i file del gioco originale.
 
-## Regole di progetto (dall'esperienza del progetto di riferimento)
-- **Repository privato** del gioco (GitHub), creato all'inizio dal modello
-  `${CLAUDE_PLUGIN_ROOT}/references/templates/progetto-privato/`: `CLAUDE.md` con regole e
-  **router richiesta → skill → agente**, `docs/` (architettura, formati, build, rilascio,
-  strumenti, test, voci, stato), `.claude/` (hook Stop per il lavoro in sospeso, skill
-  `chiusura-lavoro` e `bug-gioco`, agente `revisore`), `engine/patches/` + commit base, `tools/`,
-  `assets/` (derivati dal gioco). Le sessioni successive ripartono da lì, non dalla chat.
-- Nulla di specifico del gioco va nel repository della suite (pubblico): lì si riportano solo
-  tecniche generalizzate, e `tools/ip_guard.py` deve passare.
-- **Flusso a PR**: rami `fix/…`, `feat/…`, `docs/…` da `origin/main`, un commit per unità logica,
-  revisione dell'agente `revisore`, PR con test eseguiti e non eseguiti; l'utente unisce.
-  Push subito, file grandi a blocchi < 50 MB. Gli agenti specializzati non committano: integra
-  e chiude chi coordina.
-- **Versioni** `patch-N` progressive (mai riusare o spostare un tag pubblicato), Release private;
-  una versione è rilasciata solo con CI verde e asset verificati. Un bug corretto resta
-  "in verifica" finché l'utente non lo conferma giocando.
-- **Spese** (voci, immagini generative): preventivo (unità × tentativi × prezzo, crediti rimasti)
-  e approvazione esplicita prima; stime e verifiche gratuite si fanno senza chiedere; dopo si
-  registrano speso e rimasto.
-- `docs/stato.md`: fatto / da fare / **decisioni prese con l'utente**, con la data. Ogni scelta
-  dell'utente (un valore, una voce, una regola) si scrive lì appena presa.
-- Dati del gioco e derivati mai in luoghi pubblici (Pages, artifact pubblici, gist, release di
-  repo pubblici). Il sito pubblico contiene solo il motore e la pagina di importazione.
-- L'utente può lavorare **dal telefono**: consegna anche una pagina HTML unica (motore web
-  incorporato, funziona da `file://`, importa immagine del CD/zip/7z e patch nel browser),
-  patch in un file unico + volumi da 29 MB, pulsanti a schermo per Menu e HD ⇄ Classica.
-- **Si decide guardando e ascoltando**: per ogni scelta di stile (sprite, font, voci, musica,
-  16:9) prepara 2-4 varianti affiancate e lascia scegliere; poi il valore scelto vale per tutto.
-- **Musica MIDI a comando dinamico** (il motore salta, ripete e cambia i volumi delle parti per
-  ordine degli script): nella proposta del piano raccomanda la strategia **"orchestra"** — il
-  MIDI resta al motore, SoundFont orchestrale composito da ricetta con le correzioni dei timbri
-  e della curva di velocità, variante leggera per web/telefono — con prove d'ascolto a pari
-  volume (originale, GM semplice, orchestra, leggera). Niente rendering in file né generatori
-  di musica (skill `audio-remaster`).
-- Prima di chiedere un test all'utente, **provalo tu** (motore e pagina web) e di' cosa non hai
-  potuto verificare (es. l'audio, se il browser di prova non lo ha).
+## Regole di progetto
+Valgono le regole comuni (`${CLAUDE_PLUGIN_ROOT}/references/regole-comuni.md`): uso prima del lavoro,
+spese, motore/contenuto, scelte su pagina, repository, privacy. In più, per l'orchestratore:
+- **Repository privato** del gioco dal modello `${CLAUDE_PLUGIN_ROOT}/references/templates/progetto-privato/`
+  (`CLAUDE.md` con router richiesta → skill → agente, `docs/`, `.claude/`, `engine/patches/`, `tools/`,
+  `assets/`), con gli hook di `rstool.py project hooks <repo>`. Le sessioni ripartono da lì, non dalla chat.
+  Nella suite (pubblica) solo tecniche generalizzate; `tools/ip_guard.py` deve passare.
+- **Flusso a PR** con revisione dell'agente `revisore`; versioni `patch-N` mai riusate; un bug corretto
+  resta "in verifica" finché l'utente non lo conferma giocando.
+- `docs/stato.md` (fatto, da fare, **decisioni dell'utente con la data**) e `docs/roadmap.md`
+  (`project roadmap`) aggiornati nella stessa PR.
+- Consigliato per chi gioca dal telefono: pagina HTML unica (motore web, importazione nel browser),
+  patch in un file unico più volumi sotto il limite di upload, pulsanti a schermo per Menu e HD ⇄ Classica.
+- **Si decide guardando e ascoltando**: 2-4 varianti affiancate (`review choose`), poi il valore scelto vale per tutto.
+- **Musica**: lineare (brani interi) → riorchestrazione dal MIDI e ibrido con il CD; MIDI dinamica (il
+  motore salta, ripete, cambia volumi) → strategia "orchestra" (MIDI al motore, SoundFont composito).
+  Dettagli nella skill `audio-remaster`.
+- Prima di chiedere un test all'utente, **provalo tu** e di' cosa non hai potuto verificare.
 
 ## Ripresa
 All'avvio esegui `rstool.py project show`. Se esiste un progetto, riassumi in una riga fase,
@@ -114,7 +96,7 @@ Nessuna domanda all'utente: si verifica tutto. Lancia in parallelo (in backgroun
   motore è già agganciato, altrimenti **senza Layer** con l'adattatore del repository privato
   (`rstool.py engine extract --adapter <script> --game <cartella> --out analysis/dump`, che valida
   il dump; formato in `tools/remaster_tools/extract.py`, tecnica in
-  `references/conoscenza/motore-e-test.md` §0), **inventario** (`rstool.py assets inventory`) e
+  `references/conoscenza/motore/01-estrazione-senza-layer-motore-non.md`), **inventario** (`rstool.py assets inventory`) e
   **piattaforma di riferimento** (`rstool.py engine reference --platform <piattaforma>`);
 - `style-analyst` (skill `style-bible`): stile, palette, autori, ispirazioni, riferimenti
   dell'epoca, `analysis/style-bible.md` e prompt di stile (gli attori servono come riferimento
@@ -128,7 +110,12 @@ Nessuna domanda all'utente: si verifica tutto. Lancia in parallelo (in backgroun
   **nessuna domanda** se decide da sola: la decisione e la prova vanno nel riepilogo della Fase
   1c; si chiede, con il foglio di confronto, solo se resta `decided_by: "ask"`) e
   **classificazione 16:9** (`rstool.py widescreen classify ... --par <allungamento deciso>`):
-  scorrimento → allargati; interni chiusi statici → bordi; esterni aperti → bande inventate.
+  scorrimento → allargati; interni chiusi → bande vere (pareti continuate); esterni aperti → bande inventate.
+- `asset-scout` (tu stesso, gratuito): **censimento d'uso** `rstool.py usage scan <script> --assets <file>
+  --syntax <profilo>` (usati, solo commentati, mai usati, doppioni) e **candidati extended**
+  (`analysis/extended-candidates.tsv`, classificati come in
+  `references/conoscenza/motore/21-contenuti-tagliati-extended.md`). Ogni stima di lavoro e di spesa
+  conta solo gli usati (più i commentati se l'utente sceglie la versione extended).
 
 Poi scrivi i **conteggi** in `analysis/conti.json` (campi: `backgrounds`, `bg_pixels`,
 `sprite_frames`, `text_lines`, `text_chars`, `voice_lines`, `voice_chars`, `music_tracks`,
@@ -142,44 +129,7 @@ default della lingua: se l'utente non ha il gioco nella sua lingua, `languages.t
 contiene già (`project set` lo propone da solo).
 
 ## Fase 1b — Domande solo sulle parti a pagamento, con il costo
-Una schermata, solo se servono (`rstool.py project missing` le elenca solo a stime pronte):
-- **fal.ai per le bande 16:9** (se ci sono scene da inventare): quante scene, unità × tentativi
-  × prezzo dal preventivo (`ws-fal` della stima, o `rstool.py widescreen fal-estimate`), caso
-  peggiore e probabile; si usa solo dove il metodo locale non convince →
-  `graphics.widescreen.fal_ai` true/false;
-- **barra fissa in 16:9** (insieme alle altre scelte del 16:9, se l'analisi trova verbi,
-  inventario o pannelli che restano 4:3 con bande nere): opzioni A riempitivo / B barra allargata /
-  C B + icone dei verbi, ognuna con esito della verifica di fattibilità, mockup gratuiti su 2 scene
-  reali e stima (C con il preventivo delle icone se generate) → `graphics.widescreen.ui_bar`
-  `{option, notes, icons}` (skill widescreen, «Barre fisse in 16:9»);
-- **doppiaggio ElevenLabs** solo se **non esiste** il doppiaggio nella lingua dell'utente:
-  caratteri del copione, crediti (~0,43 a carattere più i rifacimenti), costo indicativo e piano
-  necessario; serve un account con **licenza commerciale** (`voice.license_confirmed`), il piano
-  gratuito non usa la Voice Library via API; niente cloni di doppiatori reali; si procede una
-  parte alla volta → `voice.enabled` true/false. **Sempre anche l'opzione per parti**: se
-  l'analisi conosce le parti del gioco (`voice.parts` nei conti: capitoli, atti, dischi,
-  percorsi; come trovarle in `voice-dubbing` §5a) mostra il costo di **ciascuna parte** e i
-  cumulati; chiedi i crediti disponibili (`voice.credits_available`, letti con la modalità
-  `verifica` gratuita) e, se non bastano per tutto, proponi: piano superiore, modello economico per
-  le comparse, oppure solo le prime parti che stanno nei crediti (in ordine di gioco) → scelta in
-  `voice.scope` (`{"mode": "tutto"}` o `{"mode": "parti", "parts": [...]}`). Le righe delle parti
-  escluse restano originali in gioco (clip originale o sottotitolo). Parti ignote: si dice che il
-  doppiaggio si spezza per lotti e che per doppiarne solo una parte va prima fatta la ricerca;
-- **proporzione dei pixel** solo se `aspect-auto` ha lasciato un dubbio (`decided_by: "ask"`:
-  `project missing` la elenca con la proposta, i dubbi e il foglio `review/aspect.png` da mostrare);
-  se ha deciso da solo non si chiede;
-- se almeno uno è sì: **tetto di spesa** totale (`budget.cap_usd`, `budget.cap_credits`);
-- solo se il doppiaggio è sì e `source_work.characters` non è vuoto: per **ogni personaggio
-  riconoscibile**, «voce il più simile possibile a quella dell'opera d'origine?» (nella lingua
-  originale l'interprete, nelle altre il doppiatore dell'epoca) → `imitate_voice` true/false
-  (`project missing` lo chiede finché è null). Il sì significa: si scelgono e regolano voci
-  **esistenti** della libreria ElevenLabs, nessuna clonazione (`voice-dubbing` §2b).
-Nella stessa schermata, solo se l'analisi non l'ha trovato tra i file: la copia del **manuale**
-(PDF o foto) per il manuale nel remaster.
-Registra ogni risposta con `rstool.py project set <chiave> <valore>` e in `decisions[]`. Ogni
-spesa reale, lotto per lotto e sempre dopo il suo preventivo approvato, si registra con
-`rstool.py project spend <servizio> <importo> --unit usd|credits --note "<lotto>"`, che avvisa
-quando il tetto è superato (allora ci si ferma e si chiede).
+Leggi `${CLAUDE_PLUGIN_ROOT}/references/skill-dettagli/remaster-orchestrator-fase-1b-domande-a-pagamento.md` quando prepari le domande sulle parti a pagamento.
 
 ## Fase 1c — Piano tabellare e approvazione
 Genera i pacchetti e la tabella: `rstool.py plan table analysis/conti.json` (le parti a
@@ -201,35 +151,7 @@ forme rotonde trovate, moda), così l'utente la vede e può contestarla. Chiedi:
 `project set plan.approved true`, decisione con la data in `docs/stato.md`.
 
 ## Esecuzione a pacchetti: orchestrazione e monitoraggio
-Dalla Fase 2 in poi lavori **a pacchetti** del registro (`work_packages`), in parallelo dove le
-dipendenze lo permettono (stesso gruppo `G`), altrimenti in sequenza.
-- **Taglia**: ogni pacchetto è una sotto-sessione che deve restare **sotto 200k token**
-  (`plan.token_budget`); `plan packages` riempie fino all'80% e spezza i lotti grandi (fondali a
-  gruppi di N scene, copione per capitolo, traduzione a blocchi). Se una sotto-sessione va
-  oltre, la si porta comunque a termine entro **250k** (`plan.token_hard_limit`); oltre, si ferma
-  e si spezza il resto in un nuovo pacchetto.
-- **Avvio**: per ogni pacchetto pronto (`rstool.py plan status` → `ready`) lancia l'agente del
-  pacchetto **in background** (Agent/Task con esecuzione in background), con istruzioni
-  autosufficienti: skill da seguire, unità precise (quali scene, quale capitolo), file di
-  ingresso e di uscita, budget di token, cancelli da rispettare, cosa riportare (fatto, file,
-  problemi, token usati). Al massimo 3-4 sotto-sessioni insieme. Registra
-  `rstool.py plan update <id> --status running --task-id <id del task>`.
-- **La sessione principale resta libera**: non aspettare in primo piano. Parla con l'utente e,
-  quando chiede lo stato, rispondi con `rstool.py plan status` (fatti, in corso, pronti, fermi,
-  falliti) e una riga per pacchetto in corso.
-- **Avanzamento**: a ogni notifica o resoconto aggiorna `plan update <id> --tokens-used N
-  --note "..."`; a fine pacchetto verifica il risultato (file, test) e segna `--status done`
-  (o `failed` con il motivo). Gli agenti non committano: integri tu.
-- **Segnali di blocco** (`plan status --stale-min 30`): nessun avanzamento entro il tempo
-  (`stale`), stesso errore ripetuto, token oltre il 125% della stima (`warn_tokens`) o oltre il
-  limite (`over_budget`), pacchetto `failed`.
-- **Cosa fare**: `to_restart` → ferma il task se è ancora vivo, correggi le istruzioni (causa
-  dell'errore, unità già fatte da saltare, pacchetto più piccolo) e rilancialo; `to_stop`
-  (tentativi esauriti, limite di token superato) → fermalo, segna `stopped`, spezza o rimanda e
-  **dillo all'utente** con il motivo. Ogni riavvio o arresto si scrive nella nota del pacchetto.
-- I **cancelli** (galleria 16:9, cast voci, preventivo di ogni lotto a pagamento, rilascio)
-  restano: un pacchetto che arriva a un cancello si ferma, prepara il materiale e lo riporta;
-  chiedi tu all'utente e lanci il seguito solo dopo il sì.
+Leggi `${CLAUDE_PLUGIN_ROOT}/references/skill-dettagli/remaster-orchestrator-esecuzione-a-pacchetti.md` quando lanci i pacchetti di lavoro (subagenti, budget, monitoraggio).
 
 ## Fase 2 — Motore (pacchetti `engine-*`, `framerate`)
 Subagente `build-engineer` con skill `engine-integration`, un pacchetto alla volta per area:

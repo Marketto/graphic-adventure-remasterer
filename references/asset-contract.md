@@ -4,8 +4,7 @@ Il motore e gli strumenti si parlano solo attraverso questo contratto. Il motore
 come un asset è stato prodotto; gli strumenti non sanno come il motore lo disegna. Così ogni
 asset può essere rigenerato, sostituito o spento senza toccare il codice.
 
-Derivato da un remaster completo usato come banco di prova
-(`references/conoscenza/`).
+Derivato da remaster completi (`references/conoscenza/`).
 
 ## Radice
 Tutto sta in `<cartella del gioco>/remaster/`. Se la cartella manca, il gioco parte originale.
@@ -47,6 +46,26 @@ remaster/
   video/<nome>.mkv         filmato rimasterizzato (H.264, fps e durata originali, audio originale);
                            <nome> = file originale in minuscolo senza estensione; `.ogv` (Theora)
                            se il fork usa il decoder Theora di ScummVM; senza file: originale [hook per motore]
+  gfx/bg/<scene>.effects.txt  effetti di scena dichiarativi, una riga per effetto: freeze <voci>,
+                           water <ampiezza> <lunghezza> <giri/s> mask=<png>, parallax mask=<png>
+                           <striscia.png> <vel> ..., ground <png> <vel> <fuga_y>, glass <chiavi sprite>;
+                           i motori vecchi lo ignorano, in modalità classica restano gli effetti
+                           originali (references/conoscenza/motore/20)               [hook per motore]
+  gfx/spr/timed.tsv        sprite HD a tempo: "<key>\t<n fotogrammi>\t<ms>" → <key>_<n>.png  [hook per motore]
+  gfx/spr/freeform.tsv     chiavi degli sprite che disegnano oltre la sagoma originale       [hook per motore]
+  ui/cursor/<nome>.png     puntatori HD RGBA (hotspot in <nome>.json); l'oggetto in mano usa la sua
+                           icona HD; in modalità classica il puntatore originale         [hook per motore]
+  text/dialogue.tsv        correzioni di chi si vede accanto a una battuta: "<textKey>\tportrait=<n>
+                           \ttalker=<file ritratti>"; un fotogramma fuori intervallo = avviso e
+                           fotogramma 0, mai un crash                                  [hook per motore]
+  voice/<lang>/<textKey>_<pg>.ogg  copia della battuta per il personaggio giocabile <pg> (zone che
+                           chiunque può usare); il motore la preferisce a <textKey>.ogg      [hook per motore]
+  script/line-edits.txt    righe di script sostituite al caricamento: "<parte>\t<file>\t<vecchio>\t
+                           <nuovo>" (\n per più righe); il log dice quante volte si applica  [hook per motore]
+  script/extended.txt      stesse righe, attive solo con l'opzione extended            [hook per motore]
+  script/part-flags.txt    flag ricordati tra le parti: "<da>\t<a>\t<flag>\t<condizione>[\topzione=…]",
+                           salvati in una riga opzionale dei salvataggi (references/conoscenza/motore/21)
+                                                                                [hook per motore]
   gfx/inbetween/<key>.png  frame intermedi delle animazioni                       [riservato]
   fonts/<font>.<lang>.dat  atlante per lingue oltre la codepage del gioco          [riservato]
 ```

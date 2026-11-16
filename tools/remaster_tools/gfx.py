@@ -407,3 +407,35 @@ def check_dirs(orig_dir, hd_dir, min_ssim=0.85, max_de=6.0):
                 rows.append(q)
                 break
     return rows
+
+
+def _entries(spec):
+    out = set()
+    for part in str(spec).split(","):
+        part = part.strip()
+        if "-" in part:
+            a, b = part.split("-")
+            out |= set(range(int(a), int(b) + 1))
+        elif part:
+            out.add(int(part))
+    return out
+
+
+def effect_mask(src, entries, out, scale=3, grow=0):
+    """Mask of a scene effect (water, landscape behind windows) from the palette entries of the original
+    colour cycle: white where the indexed background uses those entries, scaled to HD (nearest), optional
+    growth in original pixels. Show it to the user before using it: a wrong mask covers furniture."""
+    from PIL import Image, ImageFilter
+    im = Image.open(src)
+    if im.mode != "P":
+        raise ValueError("serve lo sfondo originale a colori indicizzati (modo P)")
+    ent = _entries(entries)
+    lut = [255 if i in ent else 0 for i in range(256)]
+    m = Image.frombytes("L", im.size, bytes(lut[b] for b in im.tobytes()))
+    if grow:
+        m = m.filter(ImageFilter.MaxFilter(2 * int(grow) + 1))
+    m = m.resize((im.width * scale, im.height * scale), Image.NEAREST)
+    os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
+    m.save(out)
+    cover = sum(1 for b in m.tobytes() if b) / (m.width * m.height)
+    return {"mask": out, "entries": len(ent), "coverage": round(cover, 4)}

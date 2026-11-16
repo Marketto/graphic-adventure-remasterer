@@ -1,6 +1,6 @@
 ---
 name: build-release
-description: Produce gli eseguibili (Windows, Linux, macOS, Android, Web) e la patch distribuibile di un remaster costruito su un fork di ScummVM — CI multipiattaforma, pacchetto asset o ricette, installer che verifica la copia originale dell'utente, licenze e crediti. Usala nella fase di rilascio del remaster.
+description: Eseguibili per le piattaforme scelte e patch distribuibile senza file originali: CI, pacchetto o ricette, installer che verifica la copia dell'utente, licenze, crediti, rilascio efficiente. Usala nella fase di rilascio.
 ---
 
 # Build e rilascio
@@ -57,15 +57,20 @@ release/
 - **Pagina HTML unica** (~7 MB, wasm e dati del motore incorporati) che funziona da `file://`
   senza server né service worker: è la consegna più comoda su telefono. Il motore web viene incorporato
   come gzip+base64 e `fetch` viene avvolto per servire il file system HTTP di ScummVM.
-- Patch del gioco in un file unico + **volumi da 29 MB** (limiti di chat e telefono) con
+- Patch del gioco in un file unico + **volumi sotto il limite di upload** del canale scelto (chat, telefono) con
   checksum e script per ricomporli; la pagina accetta i volumi selezionati tutti insieme.
 - **Pagina leggera** (~120 KB) che scarica e aggiorna da sola motore e patch da un repository
   privato con un token in sola lettura incollato dall'utente (mai nella pagina o nei log), file
-  verificati con lo SHA git, aggiornamenti incrementali: dettagli nella nota del motore §16.
+  verificati con lo SHA git, aggiornamenti incrementali: `references/conoscenza/motore/17-web-pagina-unica-e-pagina.md`.
+  Launcher a tema e salvataggi nel cloud: skill `launcher-sync`.
 - Versioni `patch-N` progressive, mai riusate o spostate; Release private; rilascio completo solo
   con CI verde e asset verificati.
 - Azioni GitHub manuali (Run workflow) per ogni build; repo privato: 2.000 minuti al mese,
   macOS ne consuma 10 volte tanto: lanciala solo quando serve.
+- **Rilascio efficiente** (compressione con cache, pacchetti incrementali, rilascio da una macchina
+  locale con controlli preliminari, artifact brevi, timeout sui passi di pubblicazione, file di
+  provenienza IA e crediti con la dicitura sui diritti del gioco originale):
+  `${CLAUDE_PLUGIN_ROOT}/references/conoscenza/motore/23-rilascio-efficiente.md`.
 
 ## Controlli finali
 Prima del pacchetto: `rstool.py release budget remaster` (peso per cartella, immagini più

@@ -1,0 +1,24 @@
+# Errori da non ripetere
+
+- Dedurre chi parla dal nome della stanza o del file.
+- Applicare un'eccezione di attribuzione anche alle risposte che condividono l'id della domanda.
+- Estrarre il copione da un'edizione diversa da quella dell'utente: le chiavi non combaciano.
+- Normalizzare male i nomi dei file con simboli (`&`): un personaggio senza voce passa inosservato.
+- Passare le battute vicine come contesto nei dialoghi: le battute corte ne copiano parole.
+- Mandare audio tag a modelli che li leggono ad alta voce.
+- Accelerare o rallentare l'audio dopo la generazione invece di impostare la velocità nella voce.
+- Usare sussurri o voci "misteriose" sotto la musica.
+- Fidarsi della misura automatica del riverbero per scegliere una voce.
+- Stimare i crediti con 1 carattere = 1 credito (in pratica ~0,4), o non registrare spesa e rimanenze.
+- Riprovare in automatico una chiamata a pagamento fallita.
+- Generare un capitolo intero prima che l'utente abbia approvato cast e preventivo.
+- Pagare un rifacimento quando esiste una copia gratuita equivalente.
+- Generare ogni variante di una battuta con un numero invece di comporla dai pezzi.
+- Descrivere un effetto sonoro dal nome del file invece che dalla scena.
+- Lasciare la musica allo stesso livello delle voci.
+- Attese delle voci non interrompibili negli script.
+- Correggere contenuto di gioco (testi, ritratti, scene) nel codice del motore invece che nei dati della patch.
+- Correzioni di testo che falliscono in silenzio quando il testo da sostituire non c'è.
+- Commit diretti su `main`, tag riusati o spostati, rilasci dichiarati prima della verifica degli asset.
+- Un hook che segnala come "in sospeso" un ramo nuovo senza commit propri, o che blocca in ciclo.
+- Push di file grandi in un unico blocco (errore HTTP 413).

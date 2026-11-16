@@ -14,7 +14,8 @@ DEFAULT = {
     "schema": 2,
     "phase": "intake",
     "game": {"title": None, "year": None, "developer": None, "publisher": None,
-             "platform": None, "version": None, "languages_original": []},
+             "platform": None, "version": None, "languages_original": [],
+             "codepage": None},   # code page of the game texts (cp850, cp437...); None = per command default
     "engine": {"id": None, "runtime": None, "support": None, "notes": None,
                "base_commit": None, "patchable": True, "smooth_controls": True,
                # True once the Remaster Layer is hooked into this engine (dump, keys, HD, viewport)
@@ -36,7 +37,8 @@ DEFAULT = {
                  "pixel_aspect": {"stretch": None, "reason": None, "decided_by": None},
                  # fill: local methods (LaMa 1x + quilting + recipes); fal_ai: paid outpainting,
                  # asked only after the analysis with the quote (None = not asked yet)
-                 "widescreen": {"enabled": True, "aspect": "16:9", "fill": "local", "fal_ai": None},
+                 "widescreen": {"enabled": True, "aspect": "16:9", "fill": "local", "fal_ai": None,
+                                "closed_static": "extend"},
                  "framerate": {"enabled": True, "target": 60}},
     "ui_theme": {"enabled": True},
     # user: the language of the user (asked in phase 0); translate: None = not decided yet, the
@@ -537,5 +539,48 @@ def summary(data):
     return "\n".join(lines)
 
 
+ROADMAP_EMOJI = {"done": "✅", "running": "🟡", "pending": "⏳", "failed": "❌", "stopped": "⏸️", "deferred": "❓"}
+
+
+def roadmap(data):
+    """docs/roadmap.md of the private game repository: one row per work package (status emoji,
+    progress, note). Regenerate it in the same PR that changes a package; answer "how is it going?"
+    from this table (current work first)."""
+    wp = data.get("work_packages") or []
+    order = {"running": 0, "failed": 1, "stopped": 2, "pending": 3, "deferred": 4, "done": 5}
+    rows = ["# Roadmap", "", "| Voce | Stato | Avanzamento | Nota |", "|---|---|---|---|"]
+    for p in sorted(wp, key=lambda p: order.get(p.get("status"), 9)):
+        prog = p.get("progress") or ""
+        rows.append(f"| {p.get('label') or p['id']} | {ROADMAP_EMOJI.get(p.get('status'), '?')} | {prog} | "
+                    f"{(p.get('note') or '').replace('|', '/')} |")
+    rows += ["", "Legenda: " + " · ".join(f"{e} {k}" for k, e in ROADMAP_EMOJI.items())]
+    return "\n".join(rows) + "\n"
+
+
 def _now():
     return _dt.datetime.now().replace(microsecond=0).isoformat()
+
+
+def install_hooks(repo):
+    """Copy into the private game repository the git pre-commit hook against accidental deletions
+    (.githooks/ + tools/guard_deletions.py, core.hooksPath) and the agent Stop hook that reports pending
+    work (.claude/hooks/, registered in .claude/settings.json), from references/templates/progetto-privato."""
+    import shutil
+    import subprocess
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    tpl = os.path.join(root, "references", "templates", "progetto-privato")
+    files = [(os.path.join(tpl, ".githooks", "pre-commit"), os.path.join(".githooks", "pre-commit")),
+             (os.path.join(root, "tools", "guard_deletions.py"), os.path.join(".githooks", "guard_deletions.py")),
+             (os.path.join(tpl, ".claude", "hooks", "lavoro-in-sospeso.sh"), os.path.join(".claude", "hooks", "lavoro-in-sospeso.sh"))]
+    done = []
+    for src, rel in files:
+        dst = os.path.join(repo, rel)
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        shutil.copy2(src, dst)
+        done.append(rel)
+    settings = os.path.join(repo, ".claude", "settings.json")
+    if not os.path.exists(settings):
+        shutil.copy2(os.path.join(tpl, ".claude", "settings.json"), settings)
+        done.append(os.path.join(".claude", "settings.json"))
+    subprocess.run(["git", "-C", repo, "config", "core.hooksPath", ".githooks"], capture_output=True)
+    return {"installed": done}

@@ -264,13 +264,21 @@ def bar_check(paths, screen_w, screen_h, playfield_h, par=1.0, dark=0.06, share=
             "options": dict(UI_BAR_OPTIONS) if n else None}
 
 
-def inventable(scene):
-    """True when the scene needs invented bands: open-static, scroll-narrow with open sides."""
-    return scene["class"] == "open-static" or (scene["class"] == "scroll-narrow" and scene.get("sides") != "closed")
+CLOSED_MODES = ("extend", "black", "borders")   # closed interiors: real bands (default), black, decorated borders
+
+
+def inventable(scene, closed="extend"):
+    """True when the scene needs generated bands: open-static, scroll-narrow with open sides, and, with
+    closed="extend" (default: walls, floor and ceiling continued with the local techniques), closed
+    interiors too. Black bands only when the user prefers them or generation fails."""
+    if scene["class"] == "open-static" or (scene["class"] == "scroll-narrow" and scene.get("sides") != "closed"):
+        return True
+    return closed == "extend" and scene["class"] in ("closed-static", "scroll-narrow")
 
 
 def count_inventable(plan):
-    return sum(1 for s in plan["scenes"] if inventable(s))
+    """Scenes for the paid estimate: open sides only (closed interiors are continued locally)."""
+    return sum(1 for s in plan["scenes"] if inventable(s, "black"))
 
 
 def border_variant(img: Image.Image, left: int, right: int, darken=0.45):
@@ -438,7 +446,7 @@ def make_extensions(plan_path, hd_dir, out_dir, scale, recipe=None, seeds=(11, 2
         need = max(0, geo["viewport_w"] - s["size"][0])
         lw, rw = need // 2, need - need // 2
         left_px, right_px = lw * scale, rw * scale
-        inventable = globals()["inventable"](s)
+        inventable = globals()["inventable"](s, plan.get("closed_static", "extend"))
         use_recipe = recipe if inventable else None
         previous = [v for v in s.get("variants", []) if os.path.exists(os.path.join(out_dir, v["file"]))]
         s["variants"] = []

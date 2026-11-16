@@ -3,7 +3,7 @@
 
 Run `rstool.py <group> -h` for the commands of a group:
   project, engine, key, assets, style, gfx, font, widescreen, video, review, text, audio, voice, ui,
-  hint, manual, recipe, release, plan
+  hint, manual, recipe, release, plan, usage
 """
 import argparse
 import json
@@ -12,10 +12,35 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from remaster_tools import (assets, audio, audio_midi, audio_sf2, controls, detect, extract, falai, font, font_bitmap, gfx, hints, keys,  # noqa: E402
-                            manual, plan, platforms, project, rawframe, recipe, release, review, style,
-                            regia, text, theme, timing, transcribe, video, voice, voiceref, voiceseg,
-                            widescreen)
+import importlib
+
+_MODULES = ("assets audio audio_midi audio_sf2 controls detect extract falai font font_bitmap gfx hints keys "
+            "manual plan platforms project rawframe recipe release review style regia text theme timing "
+            "transcribe usage video voice voiceref voiceseg widescreen").split()
+
+
+class _Lazy:
+    """Module imported at its first use: `rstool.py project show` does not pay for numpy and PIL."""
+    __slots__ = ("_name", "_mod")
+
+    def __init__(self, name):
+        object.__setattr__(self, "_name", name)
+        object.__setattr__(self, "_mod", None)
+
+    def _load(self):
+        if self._mod is None:
+            object.__setattr__(self, "_mod", importlib.import_module("remaster_tools." + self._name))
+        return self._mod
+
+    def __getattr__(self, k):
+        return getattr(self._load(), k)
+
+    def __setattr__(self, k, v):
+        setattr(self._load(), k, v)
+
+
+for _n in _MODULES:
+    globals()[_n] = _Lazy(_n)
 
 
 def out(obj):
@@ -85,6 +110,22 @@ def cmd_project(a):
         res = project.spend(data, a.args[0], float(a.args[1]), a.unit, a.note)
         project.save(data, wd)
         out(res)
+    elif a.action == "roadmap":
+        md = project.roadmap(need_project(wd))
+        dst = a.args[0] if a.args else os.path.join(wd, "docs", "roadmap.md")
+        os.makedirs(os.path.dirname(os.path.abspath(dst)), exist_ok=True)
+        with open(dst, "w", encoding="utf-8") as f:
+            f.write(md)
+        out({"roadmap": dst})
+    elif a.action == "hooks":
+        out(project.install_hooks(a.args[0] if a.args else wd))
+
+
+def _gate(a):
+    res = usage.gate(a.census, a.batch, tuple(x for x in a.allow.split(",") if x))
+    out(res)
+    if not res["ok"]:
+        sys.exit(1)
 
 
 def _paid(a):
@@ -162,8 +203,10 @@ def main(argv=None):
     g = p.add_subparsers(dest="group", required=True)
 
     s = g.add_parser("project", help="stato del progetto (remaster.json)")
-    s.add_argument("action", choices=["init", "show", "set", "get", "decide", "phase", "missing", "spend"],
-                   help="spend <servizio> <importo> --unit usd|credits --note ...: registra una spesa e controlla il tetto")
+    s.add_argument("action", choices=["init", "show", "set", "get", "decide", "phase", "missing", "spend", "roadmap", "hooks"],
+                   help="spend <servizio> <importo> --unit usd|credits --note ...: registra una spesa e controlla il tetto; "
+                        "roadmap [file]: tabella dei pacchetti con emoji; hooks <repo>: hook contro le cancellazioni "
+                        "e il lavoro in sospeso nel repository privato")
     s.add_argument("args", nargs="*")
     s.add_argument("--force", action="store_true")
     s.add_argument("--unit", choices=["usd", "credits"], default="usd", help="per spend")
@@ -204,7 +247,7 @@ def main(argv=None):
     sg = s.add_subparsers(dest="action", required=True)
     x = sg.add_parser("frame"); x.add_argument("raw")
     x.set_defaults(fn=lambda a: out({"key": rawframe.read_raw(a.raw).key}))
-    x = sg.add_parser("text"); x.add_argument("string"); x.add_argument("--codepage", default="cp850")
+    x = sg.add_parser("text"); x.add_argument("string"); x.add_argument("--codepage", default="auto:cp850")
     x.set_defaults(fn=lambda a: out({"key": keys.text_key(a.string, a.codepage)}))
 
     s = g.add_parser("assets", help="inventario del dump")
@@ -216,7 +259,7 @@ def main(argv=None):
     x.set_defaults(fn=lambda a: out(assets.coverage(a.dump, a.pack, a.lang)))
     x = sg.add_parser("canary", help="pacchetto di prova con marcatori visibili su testi, fondali, sprite (e voci)")
     x.add_argument("dump"); x.add_argument("--out", required=True); x.add_argument("--lang", required=True)
-    x.add_argument("--codepage", default="cp850"); x.add_argument("--scale", type=int, default=3)
+    x.add_argument("--codepage", default="auto:cp850"); x.add_argument("--scale", type=int, default=None, help="default: graphics.scale del progetto, altrimenti 3")
     x.add_argument("--voices", type=int, default=0)
     x.set_defaults(fn=lambda a: out(assets.canary(a.dump, a.out, a.lang, a.codepage, a.scale, a.voices)))
 
@@ -230,7 +273,7 @@ def main(argv=None):
     sg = s.add_subparsers(dest="action", required=True)
     x = sg.add_parser("backends"); x.set_defaults(fn=lambda a: out(gfx.backends()))
     x = sg.add_parser("bg"); x.add_argument("src"); x.add_argument("--out", required=True)
-    x.add_argument("--scale", type=int, default=3); x.add_argument("--recipe"); x.add_argument("--seed", type=int, default=1234)
+    x.add_argument("--scale", type=int, default=None, help="default: graphics.scale del progetto, altrimenti 3"); x.add_argument("--recipe"); x.add_argument("--seed", type=int, default=1234)
     x.add_argument("--model", help="pesi spandrel (.pth/.safetensors, es. APISR RRDB) o nome modello ncnn; "
                                    "default REMASTER_MODEL_BG")
     x.add_argument("--no-ai", action="store_true"); x.add_argument("--format", choices=["png", "jpg"], default="png")
@@ -239,7 +282,7 @@ def main(argv=None):
                                                           a.model, not a.no_resume)))
     x = sg.add_parser("sprites", help="pipeline deterministica: upscaler, sagoma smussata, inchiostro, colori di bordo")
     x.add_argument("dump"); x.add_argument("--out", required=True)
-    x.add_argument("--scale", type=int, default=3); x.add_argument("--recipe"); x.add_argument("--seed", type=int, default=1234)
+    x.add_argument("--scale", type=int, default=None, help="default: graphics.scale del progetto, altrimenti 3"); x.add_argument("--recipe"); x.add_argument("--seed", type=int, default=1234)
     x.add_argument("--model", help="pesi spandrel (es. APISR GRL) o nome modello ncnn; default REMASTER_MODEL_SPR")
     x.add_argument("--no-ink", action="store_true", help="senza la fascia d'inchiostro sul contorno scuro")
     x.add_argument("--format", choices=["png", "jpg"], default="png", help="png (default, con alpha: usala col Layer comune); jpg solo se il motore ricostruisce l'alpha")
@@ -248,8 +291,12 @@ def main(argv=None):
     x.set_defaults(fn=lambda a: out(gfx.batch_sprites(a.dump, a.out, a.scale, a.recipe, a.seed, a.ai, a.tag.encode(),
                                                       a.model, not a.no_ink, a.format)))
     x = sg.add_parser("index"); x.add_argument("dump"); x.add_argument("hd"); x.add_argument("--out", required=True)
-    x.add_argument("--scale", type=int, default=3); x.add_argument("--tag", default="RSPR")
+    x.add_argument("--scale", type=int, default=None, help="default: graphics.scale del progetto, altrimenti 3"); x.add_argument("--tag", default="RSPR")
     x.set_defaults(fn=lambda a: out(rawframe.build_index_from_dump(a.dump, a.hd, a.out, a.scale, a.tag.encode())))
+    x = sg.add_parser("effect-mask", help="maschera di un effetto di scena dalle voci del ciclo di colori originale")
+    x.add_argument("src", help="sfondo originale indicizzato"); x.add_argument("--entries", required=True, help="es. 174-254,12")
+    x.add_argument("--out", required=True); x.add_argument("--scale", type=int, default=None, help="default: graphics.scale del progetto, altrimenti 3"); x.add_argument("--grow", type=int, default=0)
+    x.set_defaults(fn=lambda a: out(gfx.effect_mask(a.src, a.entries, a.out, a.scale, a.grow)))
     x = sg.add_parser("check"); x.add_argument("orig"); x.add_argument("hd")
     x.add_argument("--min-ssim", type=float, default=0.85); x.add_argument("--max-de", type=float, default=6.0)
     x.set_defaults(fn=lambda a: out(gfx.check_dirs(a.orig, a.hd, a.min_ssim, a.max_de)))
@@ -259,13 +306,13 @@ def main(argv=None):
     s = g.add_parser("font", help="atlanti font HD")
     sg = s.add_subparsers(dest="action", required=True)
     x = sg.add_parser("build"); x.add_argument("ttf"); x.add_argument("--name", required=True); x.add_argument("--out", default="remaster/fonts")
-    x.add_argument("--size", type=int, default=36); x.add_argument("--scale", type=int, default=3)
-    x.add_argument("--codepage", default="cp850"); x.add_argument("--outline", type=int, default=0)
+    x.add_argument("--size", type=int, default=36); x.add_argument("--scale", type=int, default=None, help="default: graphics.scale del progetto, altrimenti 3")
+    x.add_argument("--codepage", default="auto:cp850"); x.add_argument("--outline", type=int, default=0)
     x.set_defaults(fn=cmd_font)
     x = sg.add_parser("from-bitmap", help="HD dei font bitmap originali (3x, angoli vivi)")
     x.add_argument("src", help="dump del font: JSON o cartella di PNG indicizzati <hex>.png")
     x.add_argument("--name", required=True); x.add_argument("--out", default="remaster/fonts")
-    x.add_argument("--scale", type=int, default=3); x.add_argument("--codepage", default="cp437")
+    x.add_argument("--scale", type=int, default=None, help="default: graphics.scale del progetto, altrimenti 3"); x.add_argument("--codepage", default="auto:cp437")
     x.add_argument("--extra-edition", help="dump dello stesso font da un'altra edizione dell'utente")
     x.add_argument("--compose-accents", action="store_true",
                    help="costruisce le accentate mancanti e rifà le maiuscole accorciate a piena altezza")
@@ -322,7 +369,7 @@ def main(argv=None):
     x.set_defaults(fn=lambda a: out(widescreen.bar_check(a.captures, a.screen_w, a.screen_h, a.playfield_h, a.par)))
     x = sg.add_parser("extend", help="varianti delle bande: LaMa 1x, LaMa+quilting, ricette, (fal.ai solo se approvato), bordi")
     x.add_argument("plan"); x.add_argument("--hd", required=True); x.add_argument("--out", default="review/widescreen")
-    x.add_argument("--scale", type=int, default=3); x.add_argument("--recipe")
+    x.add_argument("--scale", type=int, default=None, help="default: graphics.scale del progetto, altrimenti 3"); x.add_argument("--recipe")
     x.add_argument("--lama", help="modello LaMa TorchScript (big-lama.pt): bande dipinte a 1x e poi ingrandite")
     x.add_argument("--no-quilt", action="store_true", help="senza la variante LaMa + quilting")
     x.add_argument("--no-sharpen", action="store_true")
@@ -351,7 +398,7 @@ def main(argv=None):
                                       "ricodifica con l'audio originale")
     x.add_argument("src", help="file video letto da ffmpeg, oppure cartella di PNG numerati (dump del motore)")
     x.add_argument("--out", required=True, help=".mkv / .mp4 (H.264) oppure .ogv (Theora)")
-    x.add_argument("--scale", type=int, default=3)
+    x.add_argument("--scale", type=int, default=None, help="default: graphics.scale del progetto, altrimenti 3")
     x.add_argument("--model", help="pesi spandrel o modello ncnn; default REMASTER_MODEL_BG (come i fondali)")
     x.add_argument("--fps", help="obbligatorio per una cartella di PNG (es. 15 o 30000/1001)")
     x.add_argument("--audio", help="file audio separato (cartella di PNG) o sostitutivo")
@@ -374,15 +421,18 @@ def main(argv=None):
     x.set_defaults(fn=lambda a: out(review.diff_dirs(a.before, a.after, a.out, a.threshold)))
     x = sg.add_parser("compare"); x.add_argument("orig"); x.add_argument("hd"); x.add_argument("--out", default="review/compare.html")
     x.set_defaults(fn=cmd_review_compare)
+    x = sg.add_parser("choose", help="pagina di scelta tra varianti (immagini, audio, testi): messaggio pronto da incollare")
+    x.add_argument("spec"); x.add_argument("--out", default="review/scelte.html"); x.add_argument("--title")
+    x.set_defaults(fn=lambda a: out(review.choice_page(a.spec, a.out, a.title)))
 
     s = g.add_parser("text", help="copione, correzioni, traduzioni")
     sg = s.add_subparsers(dest="action", required=True)
     x = sg.add_parser("catalog"); x.add_argument("dump"); x.add_argument("--lang", required=True); x.add_argument("--out", default="text/catalog.tsv")
-    x.add_argument("--codepage", default="cp850")
+    x.add_argument("--codepage", default="auto:cp850")
     x.set_defaults(fn=lambda a: out(text.catalog(a.dump, a.lang, a.out, a.codepage)))
     x = sg.add_parser("export"); x.add_argument("catalog"); x.add_argument("--out", required=True); x.add_argument("--source-if-empty", action="store_true")
     x.set_defaults(fn=lambda a: out(text.export_lang(a.catalog, a.out, a.source_if_empty)))
-    x = sg.add_parser("check"); x.add_argument("catalog"); x.add_argument("--font", required=True); x.add_argument("--codepage", default="cp850")
+    x = sg.add_parser("check"); x.add_argument("catalog"); x.add_argument("--font", required=True); x.add_argument("--codepage", default="auto:cp850")
     x.set_defaults(fn=lambda a: out(text.check(a.catalog, a.font, a.codepage)))
     x = sg.add_parser("glyphs"); x.add_argument("files", nargs="+")
     x.set_defaults(fn=lambda a: out(text.glyphs(a.files)))
@@ -462,6 +512,21 @@ def main(argv=None):
     x.add_argument("--model", choices=["deepfilternet"], help="modello locale di pulizia della voce, se installato")
     x.set_defaults(fn=lambda a: out(audio.restore_speech_batch(a.dir, a.out, a.model)))
 
+    s = g.add_parser("usage", help="cosa usa davvero il gioco (prima di ogni elaborazione o spesa)")
+    sg = s.add_subparsers(dest="cmd", required=True)
+    x = sg.add_parser("scan", help="usati / solo in righe commentate (versione extended) / mai usati, doppioni, "
+                      "candidati extended e rami con flag mai impostati")
+    x.add_argument("scripts", help="cartella degli script del gioco")
+    x.add_argument("--assets", help="cartella dei file da censire"); x.add_argument("--list", help="elenco .csv/.tsv (name, kind)")
+    x.add_argument("--syntax", help="profilo JSON della sintassi dei commenti (vedi remaster_tools/usage.py)")
+    x.add_argument("--loaded", help="log del motore o del driver: i nomi citati sono verificati")
+    x.add_argument("--out", default="analysis/usage.csv"); x.add_argument("--candidates", default="analysis/extended-candidates.tsv")
+    x.set_defaults(fn=lambda a: out(usage.census(a.scripts, a.assets, a.list, a.syntax, a.loaded, a.out, a.candidates)))
+    x = sg.add_parser("gate", help="controllo di un lotto (voci, effetti, immagini) prima di spendere")
+    x.add_argument("batch"); x.add_argument("--census", default="analysis/usage.csv")
+    x.add_argument("--allow", default="used", help="stati ammessi, es. used,commented con la versione extended")
+    x.set_defaults(fn=lambda a: _gate(a))
+
     s = g.add_parser("voice", help="doppiaggio ElevenLabs")
     sg = s.add_subparsers(dest="action", required=True)
     x = sg.add_parser("script"); x.add_argument("catalog"); x.add_argument("--lang", required=True); x.add_argument("--out", required=True)
@@ -492,8 +557,13 @@ def main(argv=None):
     x.add_argument("source", help="text.jsonl del dump o catalogo .tsv")
     x.add_argument("--dedupe", action=argparse.BooleanOptionalAction, default=True, help="ogni testo una volta (default)")
     x.add_argument("--expand", type=float, default=1.0, help="lunghezza della lingua di arrivo (it su en ≈ 1.12)")
-    x.add_argument("--retake", type=float, default=1.15); x.add_argument("--codepage", default="cp850")
+    x.add_argument("--retake", type=float, default=1.15); x.add_argument("--codepage", default="auto:cp850")
     x.set_defaults(fn=lambda a: out(voice.estimate(a.source, a.dedupe, a.expand, a.retake, a.codepage)))
+    x = sg.add_parser("speaker-audit", help="chi parla davvero (ritratto mostrato, genere/età della voce, copie per "
+                      "ogni personaggio giocabile) prima di un lotto")
+    x.add_argument("script"); x.add_argument("--cast", required=True); x.add_argument("--voice-dir")
+    x.add_argument("--players", default="", help="personaggi giocabili, separati da virgola (per players=*)")
+    x.set_defaults(fn=lambda a: out(voice.speaker_audit(a.script, a.cast, a.voice_dir, a.players.split(","))))
     x = sg.add_parser("transcribe", help="trascrizione locale e gratuita delle battute (faster-whisper o whisper.cpp)")
     x.add_argument("dir"); x.add_argument("--lang", required=True); x.add_argument("--out", default="qa/trascrizioni.json")
     x.add_argument("--model", default="small", help="faster-whisper: tiny/base/small/medium; whisper.cpp: file ggml")
@@ -621,7 +691,23 @@ def main(argv=None):
     x.set_defaults(fn=cmd_plan)
 
     a = p.parse_args(argv)
+    _project_defaults(a)
     return a.fn(a)
+
+
+def _project_defaults(a):
+    """Defaults that belong to the game, read from remaster.json: scale, codepage, credits per character."""
+    need_cp = isinstance(getattr(a, "codepage", None), str) and a.codepage.startswith("auto:")
+    if getattr(a, "scale", 0) is not None and not need_cp and a.group != "voice":
+        return
+    data = project.load(getattr(a, "workdir", ".")) or {}
+    if getattr(a, "scale", 0) is None:
+        a.scale = int((data.get("graphics") or {}).get("scale") or 3)
+    if need_cp:
+        a.codepage = (data.get("game") or {}).get("codepage") or a.codepage[5:]
+    cpc = (data.get("voice") or {}).get("credits_per_char")
+    if cpc:
+        voice.CREDITS_PER_CHAR = float(cpc)
 
 
 def cmd_compare(a):

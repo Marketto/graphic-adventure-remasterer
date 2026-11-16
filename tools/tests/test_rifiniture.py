@@ -19,6 +19,7 @@ sys.path.insert(0, HERE)
 from remaster_tools import (assets, audio, bands, controls, falai, hints, manual, platforms,  # noqa: E402
                             project, theme, timing, widescreen)
 from test_pipeline import dump, RSTOOL  # noqa: E402,F401  (fixture with invented scenes)
+import _cli  # noqa: E402
 
 need_ffmpeg = pytest.mark.skipif(not shutil.which("ffmpeg"), reason="ffmpeg assente")
 
@@ -392,11 +393,11 @@ def test_project_asks_fal_only_after_the_analysis(tmp_path):
 
 def test_cli_new_commands(tmp_path):
     def run(*args):
-        return json.loads(subprocess.run([sys.executable, RSTOOL, "--workdir", str(tmp_path), *args],
+        return json.loads(_cli.run(["--workdir", str(tmp_path), *args],
                                          capture_output=True, text=True, check=True).stdout)
     assert run("widescreen", "aspect", "--platform", "dos", "--w", "320", "--h", "200")["stretch"] == 1.2
     assert run("engine", "reference", "--platform", "atari-st")["emulators"][0]["name"] == "Hatari"
     assert run("widescreen", "fal-estimate", "--scenes", "10")["max_usd"] == 1.0
-    r = subprocess.run([sys.executable, RSTOOL, "--workdir", str(tmp_path), "widescreen", "extend", "x.json",
+    r = _cli.run(["--workdir", str(tmp_path), "widescreen", "extend", "x.json",
                         "--hd", "hd", "--fal"], capture_output=True, text=True)
     assert r.returncode != 0 and "remaster.json" in r.stderr

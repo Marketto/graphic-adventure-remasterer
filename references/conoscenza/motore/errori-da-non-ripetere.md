@@ -1,0 +1,23 @@
+# Errori da non ripetere
+
+- Scrivere nel motore correzioni di contenuto (stanze, battute, ritratti) invece di un meccanismo generico con i dati nella patch.
+- Correggere a mano gli hunk del `.patch`, o rigenerarlo con `git diff` senza `add -A`: si perdono i file nuovi o la patch non si applica più.
+- Misurare le soglie dei gesti in pixel dello schermo invece che in pixel di gioco.
+- Considerare solo il rilascio quando pressione e rilascio arrivano nello stesso frame.
+- Chiamare `warpMouse` tra eventi in coda: cancella le pressioni simulate.
+- Ridisegnare le tessere guardando solo i pixel 8 bit e non gli id degli sprite.
+- Ricomporre tutta la scena per ogni testo in movimento o per ogni fotogramma di scorrimento.
+- Eseguire lo scorrimento dell'originale a ogni fotogramma (salti di 32 px) invece di distribuirlo nel tempo del passo.
+- Usare un tempo fisso per passo: l'originale dipende dal carico di disegno e va misurato in DOSBox.
+- Limitare il mouse a x=0/639 sopra le bande: le zone di bordo non vengono mai colpite.
+- Inventare regole d'ordine di disegno ad hoc invece di ricavare quella dell'originale.
+- Tenere un marcatore nello stesso campo di bit dei dati: collide con un flag valido.
+- Verificare gli aiuti solo impostando i flag a mano: non rivela i flag che il gioco non riesce a memorizzare.
+- Scrivere condizioni di aiuto non monotone (oggetti che si consumano).
+- Prendere la miniatura del salvataggio dall'overlay del menu invece che dallo schermo di gioco.
+- Supporre che un cambio di personaggio abbia sempre un inventario, o che ricaricare lo stesso personaggio non serva.
+- Ingrandire una cache di font bitmap senza metadati.
+- Usare i soli font bitmap per un menu che sul telefono viene scalato.
+- Mettere un token, o qualunque dato derivato dal gioco, in pagine, rami o Release pubblici.
+- Dichiarare un test superato senza averlo eseguito, o una versione rilasciata prima della CI verde e degli asset verificati.
+- Spostare o riutilizzare un tag già pubblicato.

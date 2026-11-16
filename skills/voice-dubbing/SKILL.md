@@ -1,12 +1,12 @@
 ---
 name: voice-dubbing
-description: Doppia un'avventura d'epoca con voci sintetiche ElevenLabs — censimento di chi parla (dallo script, mai dal nome della stanza), cast fisso con provini su battute vere, regia per battuta ricavata dal contesto (`voice direct`), modello che recita i tag per i protagonisti, tempi e pause, generazione per capitolo con stima dei crediti, verifica dopo la generazione. Usala quando l'utente vuole il doppiaggio nel remaster.
+description: Doppiaggio con ElevenLabs: chi parla davvero, cast fisso con provini, regia per battuta, stima dei crediti per parte, generazione e verifica. Usala quando l'utente vuole il doppiaggio nel remaster.
 ---
 
 # Doppiaggio (ElevenLabs)
 
-Regole nate sul progetto di riferimento (`${CLAUDE_PLUGIN_ROOT}/references/conoscenza/voci-testi-audio-flusso.md`): valgono per
-ogni gioco. Prerequisiti: `voice.license_confirmed = true` (piano con uso commerciale se il
+Regole comuni: `${CLAUDE_PLUGIN_ROOT}/references/regole-comuni.md`. Tecniche: cartella
+`${CLAUDE_PLUGIN_ROOT}/references/conoscenza/voci-audio/` (`01a`-`01e`). Prerequisiti: `voice.license_confirmed = true` (piano con uso commerciale se il
 remaster si distribuisce), catalogo testi corretti della lingua.
 
 Accesso: connettore ElevenLabs in chat (`creative_list_voices`, `creative_design_voice`,
@@ -35,8 +35,8 @@ segreti d'ambiente), così le impostazioni del cast arrivano davvero.
 - Mono 44,1 kHz, -18 LUFS, silenzi tolti a inizio e fine (livelli del mix: skill `audio-remaster`).
 
 ## 1. Censimento: chi parla (prima di ogni capitolo)
-Il personaggio **non si deduce mai dal nome della stanza o del file** (nel progetto di
-riferimento le battute di una stanza chiamata come un personaggio erano di una comparsa).
+Il personaggio **non si deduce mai dal nome della stanza o del file** (le battute di una stanza
+chiamata come un personaggio possono essere di una comparsa).
 **L'attribuzione dagli script statici è una prima stima**: dove l'attore è un numero riassegnato
 da scena a scena o sta in una variabile, la mappa attore → nome per stanza sbaglia in parte
 (antagonisti finiti sotto nomi generici). La **conferma** viene dal driver di test, che con il
@@ -58,6 +58,13 @@ un capitolo, confronta le due attribuzioni e risolvi le differenze.
    somiglia a nessuno.
 3. **Revisione indipendente**: un secondo agente, che non ha preparato il lotto, rilegge
    attribuzioni e indicazioni di regia rispetto alla scena.
+4. **Audit prima di ogni lotto**: `rstool.py voice speaker-audit voice/script-<lang>.tsv --cast
+   voice/cast.json --voice-dir remaster/voice/<lang> --players A,B,C`. Colonne `shown` (ritratto o
+   nome mostrato) e `players` (`*` = zona usabile da chiunque giochi) dall'estrattore. Segnala ritratto
+   diverso da chi parla (si corregge con `text/dialogue.tsv`), voce di genere o età incoerente, copie
+   mancanti `<chiave>_<personaggio>` per le zone fuori dalle condizioni sul personaggio. Pronuncia di
+   nomi e sigle: provino a 2 grafie su una battuta vera. Chi finge un'altra persona la imita con la
+   propria voce, in modo palesemente finto (`01e-chi-parla-davvero.md`).
 4. All'utente arrivano **solo i casi dubbi**, con l'audio originale da confrontare.
 5. Escludi o componi a pezzi (§5b): frasi con valori variabili (`%nome` e simili), messaggi per i tester, testi senza
    lettere. Stessa chiave detta da due personaggi → segnalala.
@@ -75,9 +82,8 @@ stesso personaggio, oggetti parlanti, personaggi in più capitoli → stessa voc
   o più voci**, proponi una **battuta addizionale** solo per quelle, di registro diverso (es. una
   battuta di pericolo dopo una ironica), con il costo stimato; mai più battute a priori.
 - **Altezza**: si sceglie una voce che sta già nel registro giusto e si controlla con la regia
-  (tag che non alzano il tono). **Niente correzione di tono a posteriori**: sul banco di prova
-  sia i vocoder tipo WORLD sia rubberband a -2 semitoni con formanti preservate sono risultati
-  metallici all'ascolto; l'esito si giudica a orecchio, non solo con le misure.
+  (tag che non alzano il tono). **Niente correzione di tono a posteriori**: vocoder e pitch-shift,
+  anche con le formanti preservate, tendono a suonare metallici; si giudica a orecchio.
 - **Personaggio riconoscibile di un film, una serie o un cartone** (`source_work.characters`) con
   `imitate_voice` true: le candidate si scelgono misurando il riferimento (§2b); con false o
   null si fa il casting normale dalla scheda.
@@ -90,86 +96,7 @@ stesso personaggio, oggetti parlanti, personaggi in più capitoli → stessa voc
 - Gag volute (accenti, parlate) vanno recitate, non corrette (vedi `localization`).
 
 ## 2b. Voce simile all'opera d'origine (solo personaggi con `imitate_voice` true)
-Vale solo se il doppiaggio è scelto e l'utente ha detto sì per quel personaggio
-(`source_work.characters` in `remaster.json`, vedi `style-bible` §1b). Riferimento: nella lingua
-originale l'interprete, nelle altre il doppiatore dell'edizione dell'epoca del gioco.
-**Paletti fissi** (nessuna eccezione, neanche se l'utente la chiede per comodità):
-- **nessuna clonazione**, né istantanea né professionale, da quel materiale;
-- i frammenti **non si caricano mai** su ElevenLabs o su altri servizi (niente trascrizione,
-  speech-to-speech, isolamento della voce in cloud): restano in locale, nella cartella di lavoro
-  privata, e **si cancellano dopo la misura** (`--delete-after`);
-- nessun nome di persona reale nel nome della voce, in `cast.json` o nei crediti come se fosse
-  la sua voce; mai presentare la voce come quella della persona ("voce ispirata al
-  personaggio", non "voce di <nome>");
-- per la distribuzione pubblica vale la nota sulla somiglianza in
-  `references/legal-distribution.md`.
-Procedura:
-1. **Materiale di riferimento** (lo cerchi tu): trailer, spot e clip ufficiali dello stesso
-   periodo dell'opera, nella lingua o nelle lingue target; fonti ufficiali prima (canali dello
-   studio o del distributore, edizioni home video). Annota le fonti (link, intervalli) solo nel
-   progetto privato.
-   - **Requisiti**: `ffmpeg`; per le piattaforme video `yt-dlp` recente con un runtime JS
-     (`--js-runtimes node` più il pacchetto `yt-dlp-ejs`): senza, i metadati arrivano ma gli
-     stream rispondono 403. Scarica solo l'audio (`-x`).
-   - **Gli ambienti cloud vengono spesso bloccati** dalle piattaforme video (403, poi 429 e la
-     verifica "non sono un bot"). **Al massimo 2 tentativi per piattaforma**, senza raffiche: il
-     blocco peggiora. Poi prova le altre fonti consentite (un'altra piattaforma video, archivi
-     pubblici, il sito del distributore) e infine chiedi all'utente di caricare lui l'audio
-     nella cartella privata di lavoro: anche registrato dal telefono mentre il video suona (va
-     bene per altezza e ritmo, meno per il timbro: dillo), oppure scaricato sul suo computer con
-     un comando pronto da copiare, per esempio
-     `yt-dlp -x --audio-format wav --js-runtimes node -o "rif-%(id)s.%(ext)s" "<link>"`
-     (prima `pip install -U yt-dlp yt-dlp-ejs` e Node.js). In alternativa tutta la misura gira
-     sul suo computer.
-   - **Mai** cookie del browser, account o credenziali personali dell'utente per aggirare il
-     blocco, neanche se li offre: si cambia fonte o si chiede il file.
-   - **Verifica il doppiatore** dell'edizione dell'epoca con almeno una fonte (database del
-     doppiaggio, crediti dell'edizione); senza fonte scrivi "da verificare" e non procedere con
-     quel riferimento come se fosse certo. Si annota solo nel progetto privato
-     (`source_work.characters`, con le fonti).
-2. **Tratti del personaggio**: 3-6 pezzi puliti di 2-8 s del solo personaggio (niente musica,
-   effetti o altre voci sopra). Con file lunghi (trailer, clip con più voci) non tagliare a mano:
-   `rstool.py voice segments <audio...> --lang it --out voice/ref/segmenti.tsv --speakers 2`
-   trascrive in locale (faster-whisper, `--model small` o `medium`) e raggruppa i parlanti con
-   impronte vocali locali (resemblyzer se installato, con `setuptools<81`; altrimenti impronte
-   semplici, più deboli: `--prints simple`). Il TSV ha id, file, inizio, fine, gruppo, sicurezza
-   dell'attribuzione, testo. Con un numero noto di parlanti usa `--speakers N`: le impronte
-   separano poco e la soglia (`--threshold`) va tarata. **Ascolta** 2-3 tratti per gruppo per
-   capire qual è il personaggio e scarta quelli con musica sopra o a bassa sicurezza. Per un
-   solo tratto di un file resta `--start`/`--end`.
-3. **Misura** (solo numeri):
-   `rstool.py voice reference <frammenti...> --out voice/ref/<personaggio>-<lingua>.json --gender male --age old --delete-after`
-   oppure, dai tratti del TSV senza tagliare i file,
-   `rstool.py voice reference --segments voice/ref/segmenti.tsv --group G1 --out voice/ref/<personaggio>-<lingua>.json --delete-after`
-   (`--select 3,5-7` per scegliere le righe). → altezza media e variabilità (semitoni),
-   brillantezza, pendenza e forma media dello spettro (12 MFCC fino a 4 kHz), ruvidità
-   (rapporto armoniche/rumore), velocità d'eloquio, quota e durata delle pause, dinamica. Con
-   `--segments` il JSON registra le fonti (file, intervalli, gruppo, sicurezza, mai il testo)
-   per rifare o controllare la misura dopo aver cancellato l'audio. Genere ed età dichiarati
-   servono al controllo dell'altezza (errori d'ottava).
-4. **Candidati**: voci **esistenti** della libreria ElevenLabs coerenti con età, genere e lingua
-   (connettore `creative_list_voices` o API della Voice Library), con le loro anteprime; salvale
-   come `voices.json` (`voice_id`, `name`, `file` o `preview_url`, `gender` e `age` o le
-   `labels` della libreria) o in una cartella. Misurale una volta sola, le misure si riusano tra
-   personaggi e sessioni (le voci già misurate non si rimisurano):
-   `rstool.py voice measure voices.json --out voice/ref/misure.json`
-   poi
-   `rstool.py voice match voice/ref/<...>.json --measured voice/ref/misure.json --top 5 --out voice/ref/<...>-shortlist.json`
-   (oppure `--candidates voices.json` per misurare al volo). Ordina per distanza pesata (pesi
-   in `tools/remaster_tools/voiceref.py`: altezza e timbro contano di più perché i parametri non
-   li cambiano; velocità e pause di meno perché si correggono con `speed` e con la regia) e
-   propone le impostazioni di partenza (`speed` dal rapporto delle velocità, stabilità più bassa
-   e stile più alto se il riferimento è più mosso, note su timbro e pause). **Leggi gli avvisi**:
-   anteprime con musica o senza pause (pesate meno su pause e ruvidità: ascoltale), altezza fuori
-   dall'intervallo plausibile per genere ed età (possibile errore d'ottava o etichetta sbagliata),
-   genere o età dichiarati diversi (`--strict` le esclude), meno di 5 candidate dell'età giusta
-   (cercane altre prima di scegliere).
-5. **Raffina** sulle 2-3 migliori: stability, similarity, style, speed (§0 per i limiti) e
-   **toni interpretativi** dal modo di recitare nei riferimenti (ritmo, ironia, pause, attacchi),
-   annotati nella scheda del personaggio come guida per la regia per battuta (§3), mai citando la persona.
-6. **Provini** come al §2: 2-3 voci con una sola battuta vera (una addizionale solo per le voci
-   in dubbio), sceglie l'utente; solo voci della
-   libreria, nessuna voce progettata "a somiglianza" con Voice Design partendo dal materiale.
+Leggi `${CLAUDE_PLUGIN_ROOT}/references/skill-dettagli/voice-dubbing-voce-opera-d-origine.md` solo per i personaggi con `imitate_voice` true.
 
 ## 3. Regia
 - **Per battuta, non per personaggio**: il tono si ricava dal testo e dal contesto (scena,
@@ -216,8 +143,8 @@ fonetica, parole tutte maiuscole (la sintesi le compita); punteggiatura pensata 
 - Stima: caratteri del testo recitato **con i tag** × ~0,43 crediti (misurato: 45.000
   caratteri ≈ 19.200 crediti), più i provini (una battuta di ~100 caratteri × 2 prese
   per voce candidata ≈ 250-500 crediti a voce con un modello che recita i tag; le battute
-  addizionali si stimano a parte, solo per le voci in dubbio). Contala sui **testi unici** (le clip originali ripetono spesso la stessa frase: sul
-  banco di prova +15% di clip rispetto ai testi) e sulla **lunghezza nella lingua di arrivo**
+  addizionali si stimano a parte, solo per le voci in dubbio). Contala sui **testi unici** (le clip originali ripetono spesso la stessa frase: spesso
+  il 10-20% di clip in più rispetto ai testi) e sulla **lunghezza nella lingua di arrivo**
   (italiano ≈ +10-15% sull'inglese): `rstool.py voice estimate <dump>/text.jsonl --expand 1.12`
   (deduplica di default, `--no-dedupe` per contare ogni clip). Confronta con i crediti rimasti
   (modalità `verifica`, gratuita) e mostra il conto.
@@ -227,62 +154,22 @@ fonetica, parole tutte maiuscole (la sintesi le compita); punteggiatura pensata 
 - Tieni gli MP3 generati (`voice/originali/`) per poter rifare l'adattamento senza crediti.
 
 ## 5a. Stima per parte e doppiaggio parziale
-Il doppiaggio non è "tutto o niente": quando i crediti non bastano per l'intero gioco si propone
-di doppiare **solo una o più parti** (capitoli, atti, dischi, percorsi), in ordine di gioco.
-
-- **Trovare le parti** (fase di analisi, prima della stima), dalla fonte più affidabile:
-  1. struttura degli script e delle stanze: cartelle o prefissi per capitolo, file di script
-     caricati a blocchi, gruppi di stanze raggiungibili solo dopo un certo punto;
-  2. salti di capitolo nel codice: istruzioni che cambiano capitolo/disco, variabili di
-     avanzamento, richieste di cambio disco;
-  3. titoli di parte mostrati nel gioco (schermate "Parte N", intertitoli, nomi dei salvataggi);
-  4. guida agli indizi o soluzione divisa in parti (manuale, guida ufficiale): utile per i nomi,
-     da verificare sugli script;
-  5. percorsi alternativi (personaggi giocabili diversi, rami esclusivi): ogni percorso è una parte.
-  Senza fonti certe le parti restano ignote: non inventarle, il piano spezza per lotti e lo dice.
-- **Nei conti dell'analisi**: `"voice": {"parts": [{"id": "1", "label": "<titolo neutro>",
-  "chars": <caratteri unici>, "lines": <battute>}, ...]}` in ordine di gioco. Una battuta ripetuta
-  in più parti si conta solo nella prima in cui compare (lì si genera; le parti dopo la riusano).
-  Il dettaglio riga → parte (chiave del testo e id della parte) resta nei dati privati del gioco e
-  serve per comporre i lotti.
-- **Stima**: `rstool.py plan table <conti>` mostra una riga per parte ("Doppiaggio parte 2/4")
-  con i crediti della parte, i cumulati e, se `voice.credits_available` è nel progetto (crediti
-  rimasti, letti con la modalità `verifica` gratuita), "✅ nei crediti" o "⏸️ oltre i crediti":
-  stanno le prime parti in ordine di gioco finché i cumulati restano nei crediti (la prima sempre
-  per prima, una parte economica dopo non scavalca una costosa prima).
-- **Domanda all'utente** quando i cumulati superano i crediti, con il costo di ciascuna opzione:
-  1. piano superiore del servizio (quanto costa in più, quanti crediti dà) → tutto il gioco;
-  2. modello più economico per le comparse (battute dei personaggi minori), i protagonisti con il
-     modello pieno: ricalcola e di' se così sta tutto;
-  3. solo alcune parti: elenca le parti con crediti e cumulati, proponi quelle che stanno;
-  4. rimandare il doppiaggio (si può aggiungere una parte dopo, con i crediti del mese dopo).
-- **Scelta registrata**: `rstool.py project set voice.credits_available <n>` e
-  `rstool.py project set voice.scope '{"mode": "parti", "parts": ["1", "2"]}'` (oppure
-  `{"mode": "tutto"}`), e una riga in `decisions`. I pacchetti delle parti escluse non vengono
-  generati: `plan packages --register` li segna `deferred`; quando l'utente le aggiunge allo
-  scope tornano `pending`.
-- **In gioco**: le righe senza voce nuova ricadono sul comportamento originale (clip originale o
-  solo sottotitolo, vedi `engine/scummvm-remaster-layer/INTEGRAZIONE.md`, "Doppiaggio parziale").
-  Nei crediti del remaster e nelle note di rilascio scrivi quali parti sono doppiate.
-
-- **Registro delle spese**: per ogni esecuzione id del run, caratteri, crediti spesi, crediti
-  rimasti sul totale del mese. Prima di rifare una battuta cerca una correzione gratuita (un file
-  esistente equivalente); i rifacimenti si fanno con la lista `solo` delle battute indicate.
-- Lotti via GitHub Action (`workflow_dispatch`) con modalità `verifica` (gratis), `genera`,
-  `adatta` (solo tagli, pause e volume, senza chiave) e `controlla` (ritrascrive); limite
-  `max_caratteri` per esecuzione, `concurrency` per evitare due generazioni insieme, risultato in
-  un ramo privato per lotto con `rapporto.md` (crediti prima e dopo). Entra negli asset solo ciò
-  che l'utente ha ascoltato e approvato.
+Leggi `${CLAUDE_PLUGIN_ROOT}/references/skill-dettagli/voice-dubbing-stima-per-parte.md` quando i crediti non bastano per tutto il gioco o l'utente sceglie le parti.
 
 ## 5b. Battute con valori variabili
 "Ho ancora N monete": genera una volta la parte fissa (con i tag), poi solo il numero, in cifre, con
 il resto della frase come contesto per l'intonazione; componi in locale e salva con la chiave del
-testo che contiene il numero (il motore la cerca per prima). Caso reale: 390 caratteri invece di
-5.956, 131 crediti invece di ~2.600.
+testo che contiene il numero (il motore la cerca per prima). In un caso reale la spesa è scesa di
+circa 20 volte.
 
 ## 5c. Stesso testo, personaggi diversi
-La chiave è il CRC del testo: "Grazie..." detto da due personaggi ha un solo file. Segnalalo nel
-rapporto; se serve, il motore cerca prima `<chiave>_<personaggio>` e poi `<chiave>`.
+La chiave è il CRC del testo: "Grazie..." detto da due personaggi ha un solo file. Il motore cerca
+prima `<chiave>_<personaggio>` e poi `<chiave>`: è lo stesso meccanismo delle copie per chi gioca
+(§1, punto 4).
+
+## 5d. Versi e canto
+Grida con parole, canti e cori di un personaggio sono battute sue (voce del cast e audio tag
+d'azione), non effetti: il modello degli effetti non segue sillabe precise (skill `audio-remaster`).
 
 ## 6. Verifica dopo la generazione
 `rstool.py voice check voice/script-<lang>.tsv remaster/voice/<lang>`: file mancanti, durate
@@ -300,17 +187,7 @@ rivelato la voce sbagliata).
 Scrivi `docs/<capitolo>-rapporto-voci.md` (battuta, voce, durata, esito).
 
 ## 6b. Sincronia labiale
-Nei giochi parlati in cui ogni clip ha i suoi dati di movimento della bocca (blocchi di
-controllo accanto al campione; nel dump `voice-index.json` → `"lipsync": true`) le voci nuove
-**perdono la sincronia originale**: la durata e le sillabe cambiano. Opzioni, da proporre con il
-preventivo del doppiaggio (pacchetto `lipsync` del piano):
-1. **dati di sincronia generati dall'audio nuovo**: inviluppo dell'ampiezza o fonemi
-   (riconoscimento vocale locale con i tempi delle parole) convertiti nel formato del motore e
-   salvati accanto alla voce, `voice/<lang>/<textKey>.lip.json` (`{"fps": 60, "frames": [indici
-   della bocca]}`, letto dal codice del motore);
-2. **ripiego**: bocca guidata dall'ampiezza in tempo reale (aperta sopra una soglia), senza dati;
-3. bocca ferma o animazione originale in ciclo, se il gioco lo regge.
-Prova la scelta su un capitolo col driver di test prima di estenderla.
+Leggi `${CLAUDE_PLUGIN_ROOT}/references/skill-dettagli/voice-dubbing-sincronia-labiale.md` solo nei giochi con dati di movimento della bocca.
 
 ## 7. In gioco
 Opzioni del Layer: `remaster_voices` (on/off), volume "Parlato" separato, sottotitoli sempre

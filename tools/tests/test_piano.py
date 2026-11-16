@@ -13,6 +13,7 @@ sys.path.insert(0, os.path.dirname(HERE))
 RSTOOL = os.path.join(os.path.dirname(HERE), "rstool.py")
 
 from remaster_tools import plan, project  # noqa: E402
+import _cli  # noqa: E402
 
 COUNTS = {"backgrounds": 120, "bg_pixels": 120 * 64000, "sprite_frames": 1500,
           "text_lines": 3200, "text_chars": 140000, "voice_lines": 2600, "voice_chars": 95000,
@@ -134,7 +135,7 @@ def test_language_default_and_phase0_questions(tmp_path):
 
 def test_cli_plan(tmp_path):
     def run(*args):
-        r = subprocess.run([sys.executable, RSTOOL, "--workdir", str(tmp_path), *args],
+        r = _cli.run(["--workdir", str(tmp_path), *args],
                            capture_output=True, text=True)
         assert r.returncode == 0, r.stderr
         return r.stdout
@@ -190,8 +191,9 @@ def test_plan_from_project_import_aspect_bar_hook_restore_lipsync():
     assert by["engine-layer"]["depends"] == ["engine-hook"]
     assert by["voice-restore"]["units"] == 3000
     assert by["lipsync"]["requires"] == "voice"
-    # only open sides are invented: 34 open-static + 2 scroll-narrow with open sides
-    assert by["ws-fal"]["quote"]["scenes"] == 36 and by["ws-local"]["units"] == 36
+    # paid bands only for open sides (34 open-static + 2 scroll-narrow with open sides); closed interiors
+    # are continued locally by default (real bands, not black), so the local package counts them too
+    assert by["ws-fal"]["quote"]["scenes"] == 36 and by["ws-local"]["units"] == 110
     # an old plan without the split counts every scroll-narrow as open
     old = dict(counts, scenes_by_class={"scroll-narrow": 6, "open-static": 34})
     assert {i["id"]: i for i in plan.estimate(old)["items"]}["ws-fal"]["quote"]["scenes"] == 40

@@ -1,6 +1,6 @@
 ---
 name: style-bible
-description: Ricava da solo lo stile artistico di un'avventura grafica d'epoca (palette, tratto, luce, inquadrature, autori), le sue ispirazioni (film, fumetti, serie, illustratori) e i riferimenti visivi dell'anno di uscita (attori, costumi, fotografia), e produce la style bible e le ricette di prompt per il remaster HD. Usala prima di generare qualunque asset.
+description: Ricava stile artistico, ispirazioni e riferimenti d'epoca del gioco e produce la style bible e le ricette di prompt. Usala prima di generare qualunque asset.
 ---
 
 # Style bible

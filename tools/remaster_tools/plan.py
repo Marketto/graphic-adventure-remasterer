@@ -256,11 +256,14 @@ def estimate(counts, coeffs=None, project=None):
       c["tok_fonts_ui"], splittable=False)
 
     ws_on = ((project.get("graphics") or {}).get("widescreen") or {}).get("enabled", True) is not False
+    cmode = ((project.get("graphics") or {}).get("widescreen") or {}).get("closed_static", "extend")
     inv, closed = _scenes(counts) if ws_on else (0, 0)
+    # closed interiors: real bands continued locally (default "extend"), black or borders only on request
+    linv, lborder = (inv + closed, 0) if cmode == "extend" else (inv, closed)
     if inv or closed:
-        E("ws-local", "↔️", "16:9 con metodi locali (bande inventate + bordi)", "widescreen-planner",
-          inv, "scene da inventare", c["tok_per_ws_scene"], c["tok_base"] + closed * c["tok_per_ws_border"],
-          cpu_s=inv * c["ws_local_s_per_scene"] + closed * c["ws_border_s_per_scene"],
+        E("ws-local", "↔️", "16:9 con metodi locali (bande inventate, interni continuati)", "widescreen-planner",
+          linv, "scene da estendere", c["tok_per_ws_scene"], c["tok_base"] + lborder * c["tok_per_ws_border"],
+          cpu_s=linv * c["ws_local_s_per_scene"] + lborder * c["ws_border_s_per_scene"],
           depends=["bg"] if nbg else [])
     if inv:
         worst = inv * c["fal_attempts"]
