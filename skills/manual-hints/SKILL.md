@@ -1,9 +1,11 @@
 ---
 name: manual-hints
-description: Inserisce nel remaster il manuale di gioco (dalla copia dell'utente, ripulito, tradotto, leggibile dal menu e come pagina HTML nello stile del gioco) e gli aiuti in gioco (tasto H, obiettivi in ordine con condizioni monotone, indizio e soluzione a richiesta). Usala quando l'utente vuole manuale e aiuti, cioè di default in ogni remaster.
+description: Manuale di gioco (ripulito, tradotto, nel menu e come pagina HTML) e aiuti in gioco col tasto H. Usala in ogni remaster, salvo rinuncia dell'utente.
 ---
 
 # Manuale e aiuti in gioco
+
+Regole trasversali (uso prima del lavoro, spese, motore/contenuto, scelte, repository): `${CLAUDE_PLUGIN_ROOT}/references/regole-comuni.md`.
 
 Entrambi sono **dati della patch** letti da meccanismi generici del motore (regola "motore e
 contenuto separati", skill `engine-integration` §1d): nessun testo del manuale o degli aiuti
@@ -46,7 +48,7 @@ altri asset derivati (`${CLAUDE_PLUGIN_ROOT}/references/legal-distribution.md`);
 
 ## 2. Aiuti in gioco (tasto H)
 Formato, condizioni ed esempi: `tools/remaster_tools/hints.py` e la nota
-`${CLAUDE_PLUGIN_ROOT}/references/conoscenza/motore-e-test.md` §12.
+`${CLAUDE_PLUGIN_ROOT}/references/conoscenza/motore/13-sistema-di-aiuti-in-gioco.md`.
 1. **Obiettivi** in ordine di gioco, per parte, ricavati dalla soluzione verificata
    (`qa/walkthrough.txt`) e dagli script. Se l'utente ha una **guida agli indizi a domande
    progressive** (libretto ufficiale: domanda → indizio → soluzione), è la fonte migliore della

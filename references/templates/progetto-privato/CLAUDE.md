@@ -8,6 +8,14 @@ Creato con graphic-adventure-remasterer: le regole generali sono nelle sue skill
 - **Chiusura del lavoro**: ogni lavoro completato si chiude con la skill `chiusura-lavoro`
   (documentazione, commit, push, PR verso `main`; mai commit diretti su `main`). L'hook Stop
   `.claude/hooks/lavoro-in-sospeso.sh` segnala modifiche non committate o non inviate.
+- **Cancellazioni**: prima di ogni commit `git status` per i file cancellati non voluti; l'hook
+  `.githooks/pre-commit` (`rstool.py project hooks .`) blocca le cancellazioni grandi o di massa.
+  Se la cancellazione è voluta: dirlo all'utente e ripetere con `ALLOW_DELETIONS=1` (mai `--no-verify`).
+- **Roadmap** `docs/roadmap.md` (`rstool.py project roadmap`), aggiornata nella stessa PR; a "come va?"
+  si risponde con una tabella (voce, stato, avanzamento, tempo stimato).
+- **Prima l'uso**: prima di generare o correggere un media, `rstool.py usage scan/gate` (usato >
+  usabile > mai usato) e, per le voci, `voice speaker-audit` (chi parla davvero).
+- **Scelte dell'utente** tra varianti: `rstool.py review choose` (pagina locale, messaggio da incollare).
 - **Dati del gioco** e tutto ciò che ne deriva (asset, sprite, testi, voci, script) restano
   privati: niente Pages, artifact pubblici, gist, Release di repo pubblici. Il sito pubblico
   contiene solo il motore e la pagina di importazione.

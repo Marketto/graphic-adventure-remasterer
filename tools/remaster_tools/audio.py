@@ -6,6 +6,8 @@ import re
 import shutil
 import subprocess
 
+from .audio_midi import _vlq  # one parser for MIDI variable-length quantities
+
 MUSIC_EXT = {".mid": "midi", ".midi": "midi", ".xmi": "xmidi", ".mus": "mus",
              ".mod": "tracker", ".s3m": "tracker", ".xm": "tracker", ".it": "tracker",
              ".wav": "pcm", ".voc": "creative-voc", ".sfx": "raw-pcm", ".raw": "raw-pcm",
@@ -487,16 +489,6 @@ def restore_speech_batch(src_dir, out_dir, model=None, ext=".flac"):
 
 
 # ------------------------------------------------------------------ MIDI from engine blocks
-def _vlq(b, i):
-    v = 0
-    while True:
-        c = b[i]
-        i += 1
-        v = (v << 7) | (c & 0x7F)
-        if not c & 0x80:
-            return v, i
-
-
 def midi_stats(path):
     """Duration (seconds, tempo changes included), note-ons, tracks and markers of a standard MIDI
     file, with a small parser (no dependency)."""

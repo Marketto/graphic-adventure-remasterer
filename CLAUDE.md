@@ -24,7 +24,7 @@ rimasterizzare avventure grafiche 2D. Lingua di lavoro: italiano.
 
 ## Mappa
 - `skills/remaster-orchestrator/` — il flusso completo; le altre skill sono le fasi.
-- `references/conoscenza/` — tecniche del banco di prova (motore, grafica, voci/testi/audio/flusso).
+- `references/conoscenza/` — esperienza pratica in file brevi per argomento (indice in `README.md`); `references/regole-comuni.md` — regole trasversali; `references/skill-dettagli/` — parti delle skill lette su richiesta.
 - `references/asset-contract.md` — formati e chiavi degli asset (RAC v1).
 - `engine/scummvm-remaster-layer/` — patch per ScummVM e guida di integrazione.
 - `tools/` — `rstool.py` (pipeline), `ip_guard.py` (controllo del repository pubblico), test.

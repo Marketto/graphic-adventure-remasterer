@@ -114,7 +114,7 @@ def classify_scene(img, screen_w, screen_h, geo, name="", room_name="", playfiel
         sides = "open" if score > 0.3 else "closed"
         extra["sides"] = sides
         return ("scroll-narrow", 0.7, f"fondale {w}px tra schermo {screen_w} e viewport {geo['viewport_w']}; "
-                f"lati {'aperti: da estendere' if sides == 'open' else 'chiusi: bande o bordi'} "
+                f"lati {'aperti: da estendere' if sides == 'open' else 'chiusi: pareti da continuare'} "
                 f"(punteggio {score:.2f})", extra)
     full_insert = bool(playfield_h and playfield_h < screen_h and h >= screen_h)
     if full_insert:
@@ -264,13 +264,21 @@ def bar_check(paths, screen_w, screen_h, playfield_h, par=1.0, dark=0.06, share=
             "options": dict(UI_BAR_OPTIONS) if n else None}
 
 
-def inventable(scene):
-    """True when the scene needs invented bands: open-static, scroll-narrow with open sides."""
-    return scene["class"] == "open-static" or (scene["class"] == "scroll-narrow" and scene.get("sides") != "closed")
+CLOSED_MODES = ("extend", "black", "borders")   # closed interiors: real bands (default), black, decorated borders
+
+
+def inventable(scene, closed="extend"):
+    """True when the scene needs generated bands: open-static, scroll-narrow with open sides, and, with
+    closed="extend" (default: walls, floor and ceiling continued with the local techniques), closed
+    interiors too. Black bands only when the user prefers them or generation fails."""
+    if scene["class"] == "open-static" or (scene["class"] == "scroll-narrow" and scene.get("sides") != "closed"):
+        return True
+    return closed == "extend" and scene["class"] in ("closed-static", "scroll-narrow")
 
 
 def count_inventable(plan):
-    return sum(1 for s in plan["scenes"] if inventable(s))
+    """Scenes for the paid estimate: open sides only (closed interiors are continued locally)."""
+    return sum(1 for s in plan["scenes"] if inventable(s, "black"))
 
 
 def border_variant(img: Image.Image, left: int, right: int, darken=0.45):
@@ -405,7 +413,8 @@ def check_variant(img, left_px, right_px):
 
 
 def make_extensions(plan_path, hd_dir, out_dir, scale, recipe=None, seeds=(11, 22, 33), lama=None,
-                    quilting=True, sharpen=True, paid_fill=None, recipes=None, only=None, model=None):
+                    quilting=True, sharpen=True, paid_fill=None, recipes=None, only=None, model=None,
+                    closed_static=None):
     """Variants per scene, with the local methods of the reference project first:
       v-lama     LaMa at 1x + upscaler                     (if `lama`)
       v-quilt    LaMa + image quilting from the original   (if `lama` and quilting)
@@ -422,6 +431,9 @@ def make_extensions(plan_path, hd_dir, out_dir, scale, recipe=None, seeds=(11, 2
     with open(plan_path, encoding="utf-8") as f:
         plan = json.load(f)
     geo = plan["geometry"]
+    closed = closed_static or plan.get("closed_static") or "extend"
+    if closed not in CLOSED_MODES:
+        raise ValueError(f"closed_static «{closed}» non valido: {', '.join(CLOSED_MODES)}")
     os.makedirs(out_dir, exist_ok=True)
     recipes = recipes or {}
     for s in plan["scenes"]:
@@ -438,7 +450,8 @@ def make_extensions(plan_path, hd_dir, out_dir, scale, recipe=None, seeds=(11, 2
         need = max(0, geo["viewport_w"] - s["size"][0])
         lw, rw = need // 2, need - need // 2
         left_px, right_px = lw * scale, rw * scale
-        inventable = globals()["inventable"](s)
+        inventable = globals()["inventable"](s, closed)
+        paid_ok = globals()["inventable"](s, "black")      # the paid quote covers open sides only
         use_recipe = recipe if inventable else None
         previous = [v for v in s.get("variants", []) if os.path.exists(os.path.join(out_dir, v["file"]))]
         s["variants"] = []
@@ -466,7 +479,7 @@ def make_extensions(plan_path, hd_dir, out_dir, scale, recipe=None, seeds=(11, 2
             kind = r.pop("kind")
             save(f"v-{kind}", extend_inpaint(orig, img, lw, rw, scale, _recipe_fill(kind, **r), upscale=up),
                  f"recipe-{kind}")
-        if inventable and paid_fill is not None:
+        if inventable and paid_ok and paid_fill is not None:
             k = 1  # every paid attempt kept under its own name: v-fal1, v-fal2
             while os.path.exists(os.path.join(out_dir, f"{s['scene']}.v-fal{k}.png")):
                 k += 1

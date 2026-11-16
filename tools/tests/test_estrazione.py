@@ -17,6 +17,7 @@ sys.path.insert(0, os.path.dirname(HERE))
 RSTOOL = os.path.join(os.path.dirname(HERE), "rstool.py")
 
 from remaster_tools import assets, audio, detect, extract, manual, platforms, style, voice, widescreen  # noqa: E402
+import _cli  # noqa: E402
 
 
 def _png_dump(root):
@@ -85,7 +86,7 @@ def test_dump_contract_and_adapter(tmp_path):
                       "p = argparse.ArgumentParser(); p.add_argument('--game'); p.add_argument('--out')\n"
                       "a = p.parse_args(); os.makedirs(os.path.join(a.out, 'bg'), exist_ok=True)\n"
                       "Image.new('RGB', (320, 200), (90, 30, 30)).save(os.path.join(a.out, 'bg', 'r1.png'))\n")
-    r = subprocess.run([sys.executable, RSTOOL, "engine", "extract", "--adapter", str(script),
+    r = _cli.run(["engine", "extract", "--adapter", str(script),
                         "--game", str(tmp_path), "--out", str(tmp_path / "d2")], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
     out = json.loads(r.stdout)

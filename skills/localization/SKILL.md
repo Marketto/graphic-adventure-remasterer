@@ -1,9 +1,11 @@
 ---
 name: localization
-description: Gestisce testi e lingue di un'avventura d'epoca da rimasterizzare — verifica le lingue esistenti, estrae il copione, corregge refusi e accenti, traduce nelle lingue richieste mantenendo tono, giochi di parole e vincoli di spazio, e prepara i glifi per i font HD. Usala quando l'utente chiede lingue particolari o una correzione dei testi.
+description: Lingue e testi: lingue esistenti, copione, refusi e accenti, traduzione con tono e vincoli di spazio, glifi per i font HD. Usala per lingue o correzioni dei testi.
 ---
 
 # Localizzazione
+
+Regole trasversali (uso prima del lavoro, spese, motore/contenuto, scelte, repository): `${CLAUDE_PLUGIN_ROOT}/references/regole-comuni.md`.
 
 ## 1. Lingue disponibili
 - Ufficiali: tabelle di rilevamento del motore (es. flag `GF_LANG_*` in ScummVM), cartelle
@@ -50,7 +52,7 @@ evidenti, nella colonna `text` del catalogo. Correggi anche:
 - non cambiare i codici del motore (`/` a capo forzato, segnaposto `%nome` e simili).
 Una correzione il cui testo "vecchio" non si trova va **segnalata**, mai saltata in silenzio.
 Il copione si estrae dall'**edizione dell'utente**: un'altra edizione ha frasi diverse e quindi
-chiavi diverse. Nel progetto di riferimento le correzioni sono state circa un migliaio: preparale come elenco leggibile (`correzioni.txt`:
+chiavi diverse. Le correzioni possono essere un migliaio: preparale come elenco leggibile (`correzioni.txt`:
 vecchio → nuovo) perché l'utente possa scorrerle. Poi
 `rstool.py text export text/catalog-<lang>.tsv --out remaster/text/<lang>.tsv` (con
 `--source-if-empty` per la lingua originale, così le righe non corrette restano uguali).

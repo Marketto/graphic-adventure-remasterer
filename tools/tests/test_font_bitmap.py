@@ -12,6 +12,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
 
 from remaster_tools import font, font_bitmap as fb  # noqa: E402
+import _cli  # noqa: E402
 
 RSTOOL = os.path.join(os.path.dirname(HERE), "rstool.py")
 
@@ -147,17 +148,17 @@ def test_coverage_cli(tmp_path):
     out = str(tmp_path / "fonts")
     texts = tmp_path / "it.tsv"
     texts.write_text("k1\tEè DÈ\nk2\tDeß\n", encoding="utf-8")   # ß non c'è
-    p = subprocess.run([sys.executable, RSTOOL, "font", "from-bitmap", src, "--name", "dlg",
+    p = _cli.run(["font", "from-bitmap", src, "--name", "dlg",
                         "--out", out, "--compose-accents", "--texts", str(texts)],
                        capture_output=True, text=True)
     assert p.returncode == 0, p.stderr
     assert json.loads(p.stdout)["missing"] == ["ß"]
-    p = subprocess.run([sys.executable, RSTOOL, "font", "coverage", out, "--texts", str(texts)],
+    p = _cli.run(["font", "coverage", out, "--texts", str(texts)],
                        capture_output=True, text=True)
     assert p.returncode == 1
     assert json.loads(p.stdout)["missing"]["dlg"] == "ß"
     texts.write_text("k1\tEè DÈ\n", encoding="utf-8")
-    p = subprocess.run([sys.executable, RSTOOL, "font", "coverage", out, "--texts", str(texts)],
+    p = _cli.run(["font", "coverage", out, "--texts", str(texts)],
                        capture_output=True, text=True)
     assert p.returncode == 0 and json.loads(p.stdout)["ok"]
 

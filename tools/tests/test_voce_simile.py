@@ -13,6 +13,7 @@ sys.path.insert(0, os.path.dirname(HERE))
 RSTOOL = os.path.join(os.path.dirname(HERE), "rstool.py")
 
 from remaster_tools import project, voiceref  # noqa: E402
+import _cli  # noqa: E402
 
 SR = voiceref.SR
 
@@ -116,7 +117,7 @@ def test_cli_reference_and_match(tmp_path):
     d.mkdir()
     write_wav(d / "x.wav", speech(125))
     write_wav(d / "y.wav", speech(200))
-    run = lambda *a: json.loads(subprocess.run([sys.executable, RSTOOL, *a], capture_output=True, text=True,
+    run = lambda *a: json.loads(_cli.run([*a], capture_output=True, text=True,
                                                check=True).stdout)
     r = run("voice", "reference", str(tmp_path / "r.wav"), "--out", str(tmp_path / "ref.json"), "--start", "0.5")
     assert r["fragments"] == 1

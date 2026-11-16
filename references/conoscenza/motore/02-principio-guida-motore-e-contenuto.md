@@ -1,0 +1,9 @@
+# Principio guida: motore e contenuto separati
+
+- **Regola**: il motore non contiene mai correzioni o varianti del contenuto. Sono contenuto i testi, chi parla in una battuta (ritratto o fotogramma), le scene, l'ordine delle stanze, gli oggetti e le eccezioni per una stanza o una battuta. Il motore fornisce solo un **meccanismo generico** che legge le correzioni dai file della patch dati (es. `text/<lingua>.txt`, `text/dialoghi.txt`, `loc/deviazioni.txt`, `hint/<lingua>.txt`).
+- **Perché**: le correzioni scritte nel codice (scene tagliate rimesse con un `if` sulla stanza, ritratti cambiati per una battuta) si accumulano. Sono difficili da rivedere, impossibili da cambiare senza ricompilare e mescolano codice GPL e dati privati.
+- **Cosa resta nel motore**: le correzioni di crash e bug, le routine ricostruite dall'eseguibile originale (tabelle delle tracce CD, effetti di palette), le regole generali di disegno (ordine a parità di Z, scala prospettica), l'input e il rendering.
+- **Come si fa**: se il meccanismo manca, lo si aggiunge in forma generica, con chiave e formato documentati, e il dato va nella patch. Ogni meccanismo ha un'opzione per spegnerlo, così il comportamento originale resta raggiungibile.
+- **Chiave stabile per i testi**: un CRC32 del testo originale normalizzato (senza spazi, a capo e caratteri di controllo). Serve a correggere testi, ritratti e voci senza dipendere da indici interni. Più tabelle condividono la stessa chiave.
+- **Deviazioni tra stanze**: una riga `parte da a invece_di opzione=<nome>` agganciata nel cambio di stanza. Rimette scene che un'edizione localizzata aveva tagliato, senza scrivere nomi di stanze nel codice.
+- **Debito noto**: un'eccezione di contenuto ancora nel motore va elencata nella documentazione, con la proposta di conversione in file dati.

@@ -1,9 +1,11 @@
 ---
 name: engine-compat
-description: Identifica il motore di un'avventura grafica d'epoca e verifica se è supportato da ScummVM o da altri interpreti open source (es. AGS), con livello di supporto, versioni, problemi noti e lavori esistenti riutilizzabili (fork, patch amatoriali, traduzioni, pacchetti HD). Usala nella fase di analisi del remaster.
+description: Identifica il motore del gioco e il suo supporto in ScummVM, AGS o altri interpreti open source, con problemi noti e lavori esistenti riusabili. Usala nella fase di analisi.
 ---
 
 # Compatibilità del motore e lavoro esistente
+
+Regole trasversali (uso prima del lavoro, spese, motore/contenuto, scelte, repository): `${CLAUDE_PLUGIN_ROOT}/references/regole-comuni.md`.
 
 La suite non contiene elenchi di giochi o di motori: ogni informazione su un titolo si cerca
 al momento, sul web e nei file dell'utente, e resta nella cartella privata del progetto.
@@ -26,7 +28,7 @@ al momento, sul web e nei file dell'utente, e resta nella cartella privata del p
 - **Motore non ancora agganciato al Layer**: per l'analisi si estrae senza Layer con gli
   strumenti open source di estrazione di quel motore, tramite un adattatore nel repository
   privato del gioco: `rstool.py engine extract --adapter <script> --game <cartella> --out
-  analysis/dump` (contratto e regole in `references/conoscenza/motore-e-test.md` §0). Registra
+  analysis/dump` (contratto e regole in `references/conoscenza/motore/01-estrazione-senza-layer-motore-non.md`). Registra
   `engine.layer_hooked` false: il piano aggiunge il pacchetto `engine-hook`.
 
 ## 2. Livello di supporto (verificalo sempre online: cambia nel tempo)
@@ -37,7 +39,7 @@ al momento, sul web e nei file dell'utente, e resta nella cartella privata del p
 - Altri interpreti open source: cerca "<titolo> open source engine reimplementation".
 
 Classifica in: **A** supportato e completabile → si lavora sul fork; **B** supportato in parte
-→ prima lo si rende completabile (vedi `${CLAUDE_PLUGIN_ROOT}/references/conoscenza/motore-e-test.md`);
+→ prima lo si rende completabile (vedi `${CLAUDE_PLUGIN_ROOT}/references/conoscenza/README.md`, cartella `motore/`);
 **C** non supportato → serve un nuovo interprete (settimane-mesi, vedi §2b). L'emulatore o la VM
 della piattaforma originale (`rstool.py engine reference --platform <piattaforma>`: DOSBox, VM
 Windows d'epoca, Wine, emulatori Amiga/Atari/Mac...) serve solo come riferimento per tempi,

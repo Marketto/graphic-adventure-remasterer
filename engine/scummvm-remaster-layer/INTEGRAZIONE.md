@@ -180,4 +180,4 @@ Il Layer offre meccanismi generici; disposizione e immagini stanno nei file dell
   (vero per i motori che tengono in memoria tutto il fondale).
 - Il testo HD del Layer comune è semplice (niente condensazione automatica): per motori con
   fumetti complessi serve la cattura delle stringhe per superficie descritta in
-  `references/conoscenza/motore-e-test.md` §4.
+  `references/conoscenza/motore/05-testo-hd.md`.

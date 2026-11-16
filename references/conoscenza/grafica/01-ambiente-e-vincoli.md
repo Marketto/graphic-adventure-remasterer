@@ -1,0 +1,7 @@
+# Ambiente e vincoli
+
+- **Solo calcolo locale per il grosso del lavoro.** Il lavoro gira su CPU a 2 core con 7 GB di RAM e rete limitata a GitHub e ai registri di pacchetti. Sono quindi esclusi i modelli di diffusione da usare in locale: i pesi non si scaricano e su CPU sono troppo lenti. I servizi a pagamento si usano solo per le parti "inventate" (le bande 16:9).
+- **Il gioco resta alla risoluzione originale.** Il motore compone l'immagine HD sopra il frame a 8 bit. Un pixel prende lo sfondo HD solo se nel frame originale coincide con lo sfondo. In questo modo maschere, priorità e dissolvenze restano quelle originali e la grafica HD non può introdurre errori di logica.
+- **Palette.** Per ogni indice di colore il motore confronta la palette di riferimento con quella corrente. I casi sono: uguale, dissolvenza (si applica un fattore), vista in grigio, oppure diversa (si torna alla bassa risoluzione). I cicli di palette, come l'acqua animata, spostano il pixel HD della differenza di colore, con un alone morbido.
+- **Il resto del frame (cioè tutto ciò che non ha un asset HD) passa per xBR 3x sugli indici**, con Scale3x come alternativa.
+- **Ridisegno a tessere 16x16.** Una tessera si ricompone se cambiano i pixel a 8 bit oppure gli id degli sprite. Il secondo criterio serve perché due fotogrammi diversi possono avere gli stessi pixel in una tessera ma immagini HD diverse: senza di esso, in una testa che si gira il collo restava quello del fotogramma precedente.

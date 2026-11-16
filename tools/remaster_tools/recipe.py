@@ -23,8 +23,11 @@ RSTOOL = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))
 
 
 def _sha256(path):
+    h = hashlib.sha256()                    # in blocks: packs can hold large files
     with open(path, "rb") as f:
-        return hashlib.sha256(f.read()).hexdigest()
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 def _sub(v, ctx):

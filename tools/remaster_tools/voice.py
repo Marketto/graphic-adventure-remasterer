@@ -204,7 +204,7 @@ def reencode(script_path, cast_path, out_dir, lufs=None):
 
 
 DEFAULT_MODEL = "eleven_v4"
-CREDITS_PER_CHAR = 0.43      # measured on a real dubbing (performance tags included)
+CREDITS_PER_CHAR = 0.43      # estimate with performance tags; override with voice.credits_per_char in remaster.json
 FILTERS = {
     "robot": "afftfilt=real='hypot(re,im)*0.9':imag='0':win_size=1024:overlap=0.75,aecho=0.8:0.6:12:0.4,highpass=f=150",
     "telefono": "highpass=f=320,lowpass=f=3300,acompressor=threshold=0.1:ratio=4",
@@ -305,7 +305,7 @@ def check_transcripts(script_path, transcripts_path):
     return {"lines": len(rows), "flagged": flagged}
 
 
-def estimate(path, dedupe=True, expand=1.0, retake=1.15, codepage="cp850", protagonist=""):
+def estimate(path, dedupe=True, expand=1.0, retake=1.15, codepage="cp850", protagonist="", cpc=None):
     """Free estimate of the ElevenLabs credits from the dump (`text.jsonl`) or the catalog (.tsv).
 
     dedupe: count every spoken TEXT once (the original clips often repeat the same line: the
@@ -335,8 +335,62 @@ def estimate(path, dedupe=True, expand=1.0, retake=1.15, codepage="cp850", prota
         spk = r.get("speaker") or protagonist or "NARRATORE"
         per[spk] = per.get(spk, 0) + len(t)
     target = chars * expand
-    credits = target * CREDITS_PER_CHAR * retake
+    cpc = cpc or CREDITS_PER_CHAR
+    credits = target * cpc * retake
     return {"rows_spoken": clips, "texts_unique": len(seen), "chars_source": chars, "expand": expand,
-            "chars_target": round(target), "credits_per_char": CREDITS_PER_CHAR, "retake": retake,
+            "chars_target": round(target), "credits_per_char": cpc, "retake": retake,
             "credits": round(credits), "speakers": len(per),
             "note": "stima gratuita; il preventivo vero si fa con un lotto di prova"}
+
+
+AGES = ("child", "young", "adult", "old")
+
+
+def speaker_audit(script_path, cast_path, voice_dir=None, players=None):
+    """Who really speaks, before any batch. Optional script columns, filled by the extraction:
+    `shown` = character whose portrait/name the dialogue shows, `players` = playable characters who can
+    reach the line ("*" = any, or "A|B"). cast.json entries may carry `gender`/`age` of the character and
+    `voice_gender`/`voice_age` of the chosen voice. Reports: speaker different from the portrait shown,
+    voice of another gender or age band, speakers without a cast entry, and lines reachable by several
+    playable characters that need one copy each (<key>_<player>, missing files listed if voice_dir)."""
+    with open(script_path, encoding="utf-8") as f:
+        rows = list(csv.DictReader(f, delimiter="\t"))
+    with open(cast_path, encoding="utf-8") as f:
+        cast = json.load(f)
+    if isinstance(cast, list):              # [{"name": ..., ...}]
+        cast = {c.get("name"): c for c in cast if isinstance(c, dict)}
+    chars = cast.get("characters", cast) if isinstance(cast, dict) else {}
+    players = [p.strip() for p in (players or []) if p and p.strip()]
+    portrait, mismatch, uncast, copies, missing, warnings = [], [], set(), [], [], []
+    for r in rows:
+        spk = (r.get("speaker") or "").strip() or "NARRATORE"
+        key = r.get("key") or ""
+        shown = (r.get("shown") or "").strip()
+        if shown and shown != spk:
+            portrait.append({"key": key, "speaker": spk, "shown": shown, "text": r.get("text", "")[:80]})
+        c = chars.get(spk)
+        if c is None:
+            uncast.add(spk)
+        elif isinstance(c, dict):
+            g, vg = c.get("gender"), c.get("voice_gender")
+            a, va = c.get("age"), c.get("voice_age")
+            if g and vg and g != vg:
+                mismatch.append({"speaker": spk, "problem": f"genere {g} con voce {vg}"})
+            if a in AGES and va in AGES and abs(AGES.index(a) - AGES.index(va)) > 1:
+                mismatch.append({"speaker": spk, "problem": f"età {a} con voce {va}"})
+        who = (r.get("players") or "").strip()
+        if who == "*" and not players:
+            warnings.append("battute con players=* ma nessun --players: copie non calcolate")
+        reach = players if who == "*" else [p.strip() for p in who.split("|") if p.strip()]
+        if len(reach) > 1 and spk in reach:
+            for p in reach:
+                if p == spk:
+                    continue
+                copies.append(f"{key}_{p}")
+                if voice_dir and not os.path.exists(os.path.join(voice_dir, f"{key}_{p}.ogg")):
+                    missing.append(f"{key}_{p}")
+    mismatch = [dict(t) for t in {tuple(m.items()) for m in mismatch}]
+    return {"lines": len(rows), "portrait_differs": portrait, "voice_mismatch": mismatch,
+            "speakers_without_cast": sorted(uncast), "copies_needed": len(copies),
+            "copies_missing": missing if voice_dir else None, "warnings": sorted(set(warnings)),
+            "ok": not (portrait or mismatch or uncast or missing)}

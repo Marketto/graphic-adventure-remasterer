@@ -1,0 +1,10 @@
+# Sprite
+
+- **Estrazione:** il motore salva ogni fotogramma decodificato mentre un driver di test visita automaticamente stanze e zone. La chiave è il CRC32 di larghezza, altezza e pixel a 8 bit, così il motore ritrova lo sprite HD senza conoscere i file del gioco. I fotogrammi mancanti si coprono con altri giri di esplorazione automatica.
+- **Upscaling sul solo riquadro utile** con APISR GRL.
+- **Contorno smussato.** L'upscaler conserva gli scalini dei contorni neri di 1 px. La sagoma si ridefinisce come livello 0,5 della maschera originale sfocata (gaussiana σ=0,65 px a 1x, lo stesso campo usato dal motore per l'alpha). Dove il pixel di bordo originale è scuro, si dipinge lungo il bordo smussato una fascia di inchiostro spessa quanto il contorno originale (circa 1,05), con antialiasing. Linee interne e colori restano quelli dell'upscaler.
+- **Alpha.** I JPEG non hanno alpha, quindi il motore la ricostruisce dalla sagoma originale: bilineare più smoothstep 0,3-0,7, con bordi estesi. Nel pacchetto, i colori fuori dalla sagoma si riempiono allargando i colori di bordo (box blur a raggi 2, 4, 8, 16). Senza questo passo il JPEG crea frange scure.
+- **Sprite sovrapposti.** Il buffer degli id ha due livelli (sprite in cima e sprite sotto). Il bordo semitrasparente di una testa si fonde con l'HD del corpo sotto, invece che con il pixel originale ingrandito.
+- **Prospettiva.** Con una scala diversa da 100, lo sprite HD si ricampiona bilineare nella posizione esatta, invece di saltare o ripetere righe come faceva l'originale.
+- **Se un colore del fotogramma non si mappa sulla palette corrente, si usa l'originale.** Uno sprite che peggiora si toglie dall'indice e il motore torna da solo all'originale.
+- **Resa "cinematografica" (poi abbandonata).** Era calcolata solo dalla sagoma, quindi stabile tra fotogrammi: inchiostro più spesso, ombra cel-shading dal lato opposto alla luce, luce di bordo, contorno esterno. È stata approvata a forza 0.8 con contorno 1.4, ma causava ombre e macchie scure. È stata sostituita da APISR GRL con il solo contorno smussato.

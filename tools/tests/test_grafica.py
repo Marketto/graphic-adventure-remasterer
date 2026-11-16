@@ -17,6 +17,7 @@ sys.path.insert(0, HERE)
 
 from remaster_tools import gfx, rawframe, scalers, video, widescreen  # noqa: E402
 from test_pipeline import dump, RSTOOL  # noqa: E402,F401  (fixture with invented scenes)
+import _cli  # noqa: E402
 
 need_ffmpeg = pytest.mark.skipif(not (shutil.which("ffmpeg") and shutil.which("ffprobe")), reason="ffmpeg assente")
 
@@ -300,7 +301,7 @@ def test_video_cli(tmp_path):
     make_clip(clip, size="16x12")
 
     def run(*args, ok=True):
-        r = subprocess.run([sys.executable, RSTOOL, *args], capture_output=True, text=True)
+        r = _cli.run([*args], capture_output=True, text=True)
         assert (r.returncode == 0) == ok, r.stderr
         return r
     assert json.loads(run("video", "probe", str(clip)).stdout)["video"]["height"] == 12

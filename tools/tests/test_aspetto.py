@@ -12,6 +12,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
 
 from remaster_tools import plan, platforms, project  # noqa: E402
+import _cli  # noqa: E402
 
 RSTOOL = os.path.join(os.path.dirname(HERE), "rstool.py")
 
@@ -109,7 +110,7 @@ def test_record_and_questions(tmp_path):
     data = project.init("Prova", wd)
     data = project.load(wd)
     ev = scenes(str(tmp_path / "e"), 1.2)
-    r = subprocess.run([sys.executable, RSTOOL, "--workdir", wd, "widescreen", "aspect-auto", "--platform", "dos",
+    r = _cli.run(["--workdir", wd, "widescreen", "aspect-auto", "--platform", "dos",
                         "--w", "320", "--h", "200", "--year", "1993", "--evidence", ev, "--record"],
                        capture_output=True, text=True, check=True)
     assert json.loads(r.stdout)["decided_by"] == "auto"
